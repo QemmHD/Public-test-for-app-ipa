@@ -26,10 +26,16 @@ jobs:
           npx cap add ios
           npx cap sync ios
 
+      - name: Install CocoaPods dependencies
+        run: |
+          cd ios/App
+          pod install
+
       - name: Build unsigned IPA
         run: |
           cd ios/App
           xcodebuild \
+            -workspace App.xcworkspace \
             -scheme App \
             -sdk iphonesimulator \
             -configuration Release \
