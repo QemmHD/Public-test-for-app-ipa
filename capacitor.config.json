@@ -1,0 +1,10 @@
+{
+  "appId": "com.shiftlog.app",
+  "appName": "ShiftLog",
+  "webDir": "www",
+  "ios": {
+    "backgroundColor": "#0a0a0f",
+    "contentInset": "automatic",
+    "limitsNavigationsToAppBoundDomains": true
+  }
+}

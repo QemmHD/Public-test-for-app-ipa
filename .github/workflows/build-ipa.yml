@@ -1,0 +1,56 @@
+name: Build ShiftLog IPA
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Add iOS platform
+        run: |
+          npx cap add ios
+          npx cap sync ios
+
+      - name: Build unsigned IPA
+        run: |
+          cd ios/App
+          xcodebuild \
+            -scheme App \
+            -sdk iphonesimulator \
+            -configuration Release \
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            ONLY_ACTIVE_ARCH=NO \
+            build
+
+      - name: Package IPA
+        run: |
+          cd ios/App
+          mkdir -p Payload
+          cp -r build/Build/Products/Release-iphonesimulator/App.app Payload/
+          zip -r ShiftLog.ipa Payload
+          mv ShiftLog.ipa ../../ShiftLog.ipa
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ShiftLog-IPA
+          path: ShiftLog.ipa
+          retention-days: 90

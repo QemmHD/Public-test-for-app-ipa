@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ShiftLog">
+<meta name="theme-color" content="#0a0a0f">
+<title>ShiftLog</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  :root{
+    --bg:#0a0a0f;
+    --surface:#0f0f1a;
+    --border:#1e1e2e;
+    --green:#00e5a0;
+    --red:#ff4545;
+    --yellow:#ffb800;
+    --pink:#ff6b8a;
+    --text:#e8e8f0;
+    --muted:#666;
+    --dim:#444;
+  }
+  html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Courier New','Lucida Console',monospace;overflow-x:hidden;}
+  button{cursor:pointer;font-family:inherit;}
+  input{font-family:inherit;}
+  
+  #app{max-width:480px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;}
+
+  /* HEADER */
+  #header{display:flex;align-items:center;justify-content:space-between;padding:20px 20px 14px;border-bottom:1px solid var(--border);flex-shrink:0;}
+  #logo{display:flex;align-items:center;gap:8px;}
+  #logo-icon{font-size:20px;}
+  #logo-text{font-size:18px;font-weight:bold;letter-spacing:4px;color:var(--green);}
+  #live-clock{font-size:13px;color:var(--muted);letter-spacing:2px;}
+
+  /* TABS */
+  #tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0;}
+  .tab{flex:1;background:none;border:none;border-bottom:2px solid transparent;color:var(--dim);padding:12px 4px;font-size:11px;letter-spacing:1.5px;font-weight:bold;transition:color .2s,border-color .2s;}
+  .tab.active{color:var(--green);border-bottom-color:var(--green);}
+
+  /* CONTENT */
+  #content{flex:1;overflow-y:auto;padding:20px 16px 40px;}
+  .pane{display:none;}
+  .pane.active{display:block;}
+
+  /* TIMER CARD */
+  #timer-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:28px 20px;text-align:center;margin-bottom:16px;position:relative;overflow:hidden;}
+  #timer-label{font-size:10px;letter-spacing:3px;color:var(--dim);margin-bottom:8px;}
+  #timer-display{font-size:52px;font-weight:bold;letter-spacing:4px;color:var(--green);text-shadow:0 0 30px rgba(0,229,160,.3);line-height:1;margin-bottom:8px;font-variant-numeric:tabular-nums;}
+  #timer-sub{font-size:11px;color:var(--muted);letter-spacing:1px;min-height:16px;}
+  #pulse-dot{position:absolute;top:16px;right:16px;width:8px;height:8px;border-radius:50%;background:#222;transition:background .3s,box-shadow .3s;}
+  #pulse-dot.active{background:var(--green);box-shadow:0 0 0 4px rgba(0,229,160,.2);animation:pulse 2s infinite;}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 4px rgba(0,229,160,.2);}50%{box-shadow:0 0 0 8px rgba(0,229,160,.05);}}
+
+  /* NOTE INPUT */
+  #note-wrap{margin-bottom:12px;}
+  #clock-note{width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:#ccc;padding:10px 14px;font-size:13px;outline:none;}
+
+  /* CLOCK BUTTON */
+  #clock-btn{width:100%;padding:18px;border-radius:10px;border:none;font-size:15px;font-weight:bold;letter-spacing:4px;transition:transform .1s,box-shadow .2s;margin-bottom:20px;}
+  #clock-btn.in{background:var(--green);color:#000;box-shadow:0 4px 24px rgba(0,229,160,.25);}
+  #clock-btn.out{background:var(--red);color:#fff;box-shadow:0 4px 24px rgba(255,69,69,.25);}
+  #clock-btn:active{transform:scale(.98);}
+
+  /* STATS ROW */
+  .stats-row{display:flex;gap:8px;margin-bottom:20px;}
+  .stat-card{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 8px;text-align:center;}
+  .stat-val{font-size:15px;font-weight:bold;color:var(--text);letter-spacing:1px;}
+  .stat-label{font-size:9px;color:var(--dim);letter-spacing:1.5px;margin-top:4px;}
+
+  /* SECTION TITLE */
+  .section-title{font-size:10px;letter-spacing:3px;color:var(--dim);margin-bottom:10px;margin-top:4px;}
+
+  /* SHIFT ROW */
+  .shift-row{display:flex;justify-content:space-between;align-items:flex-start;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:8px;}
+  .shift-left{flex:1;}
+  .shift-date{font-size:11px;color:var(--muted);letter-spacing:1px;margin-bottom:4px;}
+  .shift-times{display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap;}
+  .shift-in{font-size:12px;color:var(--green);font-weight:bold;}
+  .shift-arrow{font-size:11px;color:#333;}
+  .shift-out{font-size:12px;color:var(--pink);font-weight:bold;}
+  .shift-active-label{color:var(--yellow);}
+  .shift-note{font-size:11px;color:#555;cursor:pointer;font-style:italic;}
+  .shift-note:hover{color:#888;}
+  .note-edit{background:#1a1a2e;border:1px solid var(--green);border-radius:4px;color:#ccc;padding:4px 8px;font-size:11px;width:100%;outline:none;}
+  .shift-right{display:flex;flex-direction:column;align-items:flex-end;gap:6px;margin-left:10px;}
+  .shift-dur{font-size:14px;font-weight:bold;color:var(--text);letter-spacing:1px;}
+  .del-btn{background:none;border:none;color:#2a2a3a;font-size:13px;padding:2px 4px;transition:color .2s;}
+  .del-btn:hover{color:var(--red);}
+
+  /* CALENDAR */
+  #cal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+  .cal-nav{background:var(--surface);border:1px solid var(--border);color:var(--green);border-radius:6px;width:36px;height:36px;font-size:20px;display:flex;align-items:center;justify-content:center;}
+  #cal-month-title{font-size:14px;font-weight:bold;letter-spacing:2px;color:var(--text);}
+  #cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:12px;}
+  .cal-day-name{text-align:center;font-size:10px;color:var(--dim);letter-spacing:1px;padding:4px 0;}
+  .cal-day{background:var(--surface);border:1px solid #1a1a2a;border-radius:6px;color:#555;font-size:12px;padding:8px 2px 5px;display:flex;flex-direction:column;align-items:center;transition:background .15s;min-height:38px;}
+  .cal-day.worked{background:rgba(0,229,160,.08);border-color:rgba(0,229,160,.25);color:var(--green);}
+  .cal-day.active-shift{background:rgba(255,184,0,.1);border-color:rgba(255,184,0,.35);color:var(--yellow);}
+  .cal-day.today{border-color:#555;color:var(--text);}
+  .cal-day.selected{background:rgba(0,229,160,.18);border-color:var(--green);}
+  .cal-dot{width:4px;height:4px;border-radius:50%;background:currentColor;margin-top:2px;}
+  #cal-legend{display:flex;gap:16px;margin-bottom:16px;justify-content:center;}
+  .legend-item{display:flex;align-items:center;gap:6px;font-size:10px;color:#555;letter-spacing:1px;}
+  .legend-dot{width:8px;height:8px;border-radius:50%;display:inline-block;}
+  #day-detail{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:20px;display:none;}
+  #day-detail-title{font-size:11px;letter-spacing:2px;color:var(--green);margin-bottom:10px;}
+
+  /* HISTORY */
+  #clear-btn{width:100%;background:none;border:1px solid #2a1a1a;color:var(--red);padding:12px;border-radius:8px;font-size:11px;letter-spacing:2px;margin-top:12px;}
+
+  /* TOAST */
+  #toast{position:fixed;top:16px;left:50%;transform:translateX(-50%) translateY(-80px);padding:10px 24px;border-radius:6px;color:#000;font-weight:bold;font-size:13px;letter-spacing:1px;z-index:9999;box-shadow:0 4px 24px rgba(0,0,0,.5);transition:transform .3s cubic-bezier(.34,1.56,.64,1);pointer-events:none;}
+  #toast.show{transform:translateX(-50%) translateY(0);}
+
+  /* EMPTY */
+  .empty{color:var(--dim);font-size:13px;text-align:center;padding:20px 0;}
+
+  /* scrollbar */
+  ::-webkit-scrollbar{width:4px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+  ::-webkit-scrollbar-thumb{background:#222;border-radius:2px;}
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div id="header">
+    <div id="logo">
+      <span id="logo-icon">⏱</span>
+      <span id="logo-text">SHIFTLOG</span>
+    </div>
+    <div id="live-clock">--:--</div>
+  </div>
+
+  <div id="tabs">
+    <button class="tab active" data-tab="clock">⏲ CLOCK</button>
+    <button class="tab" data-tab="calendar">📅 CALENDAR</button>
+    <button class="tab" data-tab="history">📋 HISTORY</button>
+  </div>
+
+  <div id="content">
+
+    <!-- CLOCK PANE -->
+    <div class="pane active" id="pane-clock">
+      <div id="timer-card">
+        <div id="pulse-dot"></div>
+        <div id="timer-label">OFF DUTY</div>
+        <div id="timer-display">00:00:00</div>
+        <div id="timer-sub"></div>
+      </div>
+      <div id="note-wrap">
+        <input id="clock-note" type="text" placeholder="Note (optional)..." maxlength="80">
+      </div>
+      <button id="clock-btn" class="in">CLOCK IN</button>
+      <div class="stats-row" id="stats-row">
+        <div class="stat-card">
+          <div class="stat-val" id="stat-week">0h 0m</div>
+          <div class="stat-label">THIS WEEK</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val" id="stat-month">0h 0m</div>
+          <div class="stat-label">THIS MONTH</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val" id="stat-days">0</div>
+          <div class="stat-label">DAYS WORKED</div>
+        </div>
+      </div>
+      <div class="section-title">RECENT SHIFTS</div>
+      <div id="recent-list"></div>
+    </div>
+
+    <!-- CALENDAR PANE -->
+    <div class="pane" id="pane-calendar">
+      <div id="cal-header">
+        <button class="cal-nav" id="cal-prev">‹</button>
+        <div id="cal-month-title"></div>
+        <button class="cal-nav" id="cal-next">›</button>
+      </div>
+      <div id="cal-grid"></div>
+      <div id="cal-legend">
+        <span class="legend-item"><span class="legend-dot" style="background:var(--green)"></span> Worked</span>
+        <span class="legend-item"><span class="legend-dot" style="background:var(--yellow)"></span> Active</span>
+        <span class="legend-item"><span class="legend-dot" style="border:1px solid #888;background:transparent"></span> Today</span>
+      </div>
+      <div id="day-detail">
+        <div id="day-detail-title"></div>
+        <div id="day-detail-list"></div>
+      </div>
+      <div class="section-title">MONTH SUMMARY</div>
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-val" id="cal-stat-hours">0h 0m</div>
+          <div class="stat-label">TOTAL HOURS</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val" id="cal-stat-days">0</div>
+          <div class="stat-label">DAYS WORKED</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val" id="cal-stat-shifts">0</div>
+          <div class="stat-label">SHIFTS</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- HISTORY PANE -->
+    <div class="pane" id="pane-history">
+      <div class="section-title" id="hist-title">ALL SHIFTS</div>
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-val" id="hist-total-hours">0h 0m</div>
+          <div class="stat-label">LIFETIME HOURS</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val" id="hist-total-days">0</div>
+          <div class="stat-label">DAYS WORKED</div>
+        </div>
+      </div>
+      <div id="history-list"></div>
+      <button id="clear-btn">CLEAR ALL DATA</button>
+    </div>
+
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const STORAGE_KEY = "shiftlog_v1";
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const DAY_NAMES = ["Su","Mo","Tu","We","Th","Fr","Sa"];
+
+// ── STATE ────────────────────────────────────────────────────────────────────
+let shifts = [];
+let activeShift = null; // { id, start }
+let calYear = new Date().getFullYear();
+let calMonth = new Date().getMonth();
+let selectedDay = null;
+let timerInterval = null;
+
+// ── STORAGE ──────────────────────────────────────────────────────────────────
+function load() {
+  try { shifts = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); }
+  catch { shifts = []; }
+  activeShift = shifts.find(s => !s.end) || null;
+  if (activeShift) activeShift = { id: activeShift.id, start: activeShift.start };
+}
+function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(shifts)); }
+
+// ── UTILS ─────────────────────────────────────────────────────────────────────
+function fmtDur(ms) {
+  if (!ms || ms < 0) return "0h 0m";
+  const m = Math.floor(ms / 60000);
+  return `${Math.floor(m/60)}h ${m%60}m`;
+}
+function fmtTime(iso) {
+  if (!iso) return "--:--";
+  return new Date(iso).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+}
+function fmtDate(iso) {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString([],{weekday:"short",month:"short",day:"numeric"});
+}
+function toDateKey(iso) {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+function todayKey() { return toDateKey(new Date().toISOString()); }
+function calKey(d) { return `${calYear}-${String(calMonth+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`; }
+
+function workedDays() {
+  return new Set(shifts.filter(s=>s.end).map(s=>toDateKey(s.start)));
+}
+function shiftsOnDay(key) {
+  return shifts.filter(s => toDateKey(s.start) === key);
+}
+
+// ── TOAST ─────────────────────────────────────────────────────────────────────
+function toast(msg, type="success") {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.style.background = type === "warn" ? "#ff6b35" : "#00e5a0";
+  el.classList.add("show");
+  setTimeout(() => el.classList.remove("show"), 2500);
+}
+
+// ── CLOCK IN / OUT ────────────────────────────────────────────────────────────
+function clockIn() {
+  const note = document.getElementById("clock-note").value.trim();
+  const id = Date.now().toString();
+  const start = new Date().toISOString();
+  shifts.push({ id, start, end: null, note });
+  activeShift = { id, start };
+  document.getElementById("clock-note").value = "";
+  save();
+  startTimer();
+  toast("Clocked in!");
+  renderAll();
+}
+function clockOut() {
+  const end = new Date().toISOString();
+  shifts = shifts.map(s => s.id === activeShift.id ? {...s, end} : s);
+  activeShift = null;
+  save();
+  stopTimer();
+  toast("Clocked out!");
+  renderAll();
+}
+function deleteShift(id) {
+  if (activeShift && activeShift.id === id) { activeShift = null; stopTimer(); }
+  shifts = shifts.filter(s => s.id !== id);
+  save();
+  renderAll();
+  toast("Shift deleted", "warn");
+}
+function updateNote(id, note) {
+  shifts = shifts.map(s => s.id === id ? {...s, note} : s);
+  save();
+}
+
+// ── TIMER ─────────────────────────────────────────────────────────────────────
+function startTimer() {
+  if (timerInterval) clearInterval(timerInterval);
+  timerInterval = setInterval(tickTimer, 1000);
+  tickTimer();
+}
+function stopTimer() {
+  if (timerInterval) clearInterval(timerInterval);
+  timerInterval = null;
+  document.getElementById("timer-display").textContent = "00:00:00";
+  document.getElementById("timer-label").textContent = "OFF DUTY";
+  document.getElementById("timer-sub").textContent = "";
+  document.getElementById("pulse-dot").classList.remove("active");
+  document.getElementById("clock-btn").className = "in";
+  document.getElementById("clock-btn").textContent = "CLOCK IN";
+  document.getElementById("note-wrap").style.display = "";
+}
+function tickTimer() {
+  if (!activeShift) return;
+  const ms = Date.now() - new Date(activeShift.start).getTime();
+  const s = Math.floor(ms / 1000);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  document.getElementById("timer-display").textContent =
+    `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}`;
+  document.getElementById("timer-label").textContent = "ON THE CLOCK";
+  document.getElementById("timer-sub").textContent = `Since ${fmtTime(activeShift.start)} · ${fmtDate(activeShift.start)}`;
+  document.getElementById("pulse-dot").classList.add("active");
+  document.getElementById("clock-btn").className = "out";
+  document.getElementById("clock-btn").textContent = "CLOCK OUT";
+  document.getElementById("note-wrap").style.display = "none";
+}
+
+// Live wall clock
+setInterval(() => {
+  const now = new Date();
+  document.getElementById("live-clock").textContent =
+    now.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+}, 1000);
+
+// ── SHIFT ROW HTML ─────────────────────────────────────────────────────────────
+function shiftRowHTML(s) {
+  const dur = s.end ? new Date(s.end) - new Date(s.start) : null;
+  const noteHTML = s.note
+    ? `<span class="shift-note" data-id="${s.id}">"${s.note}"</span>`
+    : `<span class="shift-note" data-id="${s.id}" style="opacity:.4">tap to add note</span>`;
+  const outHTML = s.end
+    ? `<span class="shift-out">OUT ${fmtTime(s.end)}</span>`
+    : `<span class="shift-out"><span class="shift-active-label">ACTIVE</span></span>`;
+  return `
+  <div class="shift-row" data-id="${s.id}">
+    <div class="shift-left">
+      <div class="shift-date">${fmtDate(s.start)}</div>
+      <div class="shift-times">
+        <span class="shift-in">IN ${fmtTime(s.start)}</span>
+        <span class="shift-arrow">→</span>
+        ${outHTML}
+      </div>
+      <div class="shift-note-wrap">${noteHTML}</div>
+    </div>
+    <div class="shift-right">
+      <div class="shift-dur">${dur ? fmtDur(dur) : "—"}</div>
+      <button class="del-btn" data-del="${s.id}">✕</button>
+    </div>
+  </div>`;
+}
+
+function bindShiftRows(container) {
+  container.querySelectorAll(".del-btn").forEach(btn => {
+    btn.onclick = () => deleteShift(btn.dataset.del);
+  });
+  container.querySelectorAll(".shift-note").forEach(el => {
+    el.onclick = () => {
+      const id = el.dataset.id;
+      const shift = shifts.find(s => s.id === id);
+      if (!shift) return;
+      const input = document.createElement("input");
+      input.className = "note-edit";
+      input.value = shift.note || "";
+      input.maxLength = 80;
+      el.parentNode.replaceChild(input, el);
+      input.focus();
+      input.onblur = () => {
+        updateNote(id, input.value.trim());
+        // re-render the wrap
+        const wrap = input.parentNode;
+        const note = input.value.trim();
+        const newEl = document.createElement("span");
+        newEl.className = "shift-note";
+        newEl.dataset.id = id;
+        if (note) newEl.textContent = `"${note}"`;
+        else { newEl.textContent = "tap to add note"; newEl.style.opacity = ".4"; }
+        newEl.onclick = () => newEl.click && bindNoteClick(newEl);
+        wrap.replaceChild(newEl, input);
+        // re-bind
+        newEl.onclick = () => {
+          const i2 = document.createElement("input");
+          i2.className = "note-edit"; i2.value = shifts.find(s=>s.id===id)?.note||""; i2.maxLength=80;
+          newEl.parentNode.replaceChild(i2, newEl);
+          i2.focus();
+          i2.onblur = () => { updateNote(id, i2.value.trim()); renderAll(); };
+          i2.onkeydown = e => { if(e.key==="Enter") i2.blur(); };
+        };
+      };
+      input.onkeydown = e => { if(e.key === "Enter") input.blur(); };
+    };
+  });
+}
+
+// ── RENDER ─────────────────────────────────────────────────────────────────────
+function renderAll() {
+  renderClock();
+  renderCalendar();
+  renderHistory();
+}
+
+function renderClock() {
+  // Stats
+  const now = new Date();
+  const day = now.getDay();
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - ((day+6)%7));
+  monday.setHours(0,0,0,0);
+
+  const weekMs = shifts.filter(s=>s.end && new Date(s.start)>=monday)
+    .reduce((a,s)=>a+(new Date(s.end)-new Date(s.start)),0);
+  const monthMs = shifts.filter(s=>s.end && new Date(s.start).getMonth()===now.getMonth() && new Date(s.start).getFullYear()===now.getFullYear())
+    .reduce((a,s)=>a+(new Date(s.end)-new Date(s.start)),0);
+  const daysThisMonth = new Set(
+    shifts.filter(s=>s.end && new Date(s.start).getMonth()===now.getMonth() && new Date(s.start).getFullYear()===now.getFullYear())
+    .map(s=>toDateKey(s.start))
+  ).size;
+
+  document.getElementById("stat-week").textContent = fmtDur(weekMs);
+  document.getElementById("stat-month").textContent = fmtDur(monthMs);
+  document.getElementById("stat-days").textContent = daysThisMonth;
+
+  // Recent
+  const list = document.getElementById("recent-list");
+  const recent = [...shifts].reverse().slice(0, 5);
+  if (recent.length === 0) {
+    list.innerHTML = `<div class="empty">No shifts logged yet.</div>`;
+  } else {
+    list.innerHTML = recent.map(shiftRowHTML).join("");
+    bindShiftRows(list);
+  }
+}
+
+function renderCalendar() {
+  document.getElementById("cal-month-title").textContent = `${MONTHS[calMonth]} ${calYear}`;
+
+  const worked = workedDays();
+  const activeDay = activeShift ? toDateKey(activeShift.start) : null;
+  const today = todayKey();
+  const daysInMonth = new Date(calYear, calMonth+1, 0).getDate();
+  const firstDay = new Date(calYear, calMonth, 1).getDay();
+
+  let html = DAY_NAMES.map(d=>`<div class="cal-day-name">${d}</div>`).join("");
+  for (let i=0; i<firstDay; i++) html += `<div></div>`;
+  for (let d=1; d<=daysInMonth; d++) {
+    const key = calKey(d);
+    let cls = "cal-day";
+    if (worked.has(key)) cls += " worked";
+    if (activeDay === key) cls += " active-shift";
+    if (key === today) cls += " today";
+    if (key === selectedDay) cls += " selected";
+    const dot = (worked.has(key) || activeDay===key) ? `<div class="cal-dot"></div>` : "";
+    html += `<button class="${cls}" data-key="${key}">${d}${dot}</button>`;
+  }
+  document.getElementById("cal-grid").innerHTML = html;
+  document.querySelectorAll(".cal-day").forEach(btn => {
+    btn.onclick = () => {
+      const key = btn.dataset.key;
+      selectedDay = selectedDay === key ? null : key;
+      renderCalendar();
+    };
+  });
+
+  // Selected day detail
+  const detail = document.getElementById("day-detail");
+  if (selectedDay) {
+    detail.style.display = "block";
+    document.getElementById("day-detail-title").textContent = fmtDate(selectedDay+"T12:00:00");
+    const dayShifts = shiftsOnDay(selectedDay);
+    const listEl = document.getElementById("day-detail-list");
+    if (dayShifts.length === 0) {
+      listEl.innerHTML = `<div class="empty">No shifts on this day.</div>`;
+    } else {
+      listEl.innerHTML = dayShifts.map(shiftRowHTML).join("");
+      bindShiftRows(listEl);
+    }
+  } else {
+    detail.style.display = "none";
+  }
+
+  // Month stats
+  const calShifts = shifts.filter(s=>s.end && new Date(s.start).getMonth()===calMonth && new Date(s.start).getFullYear()===calYear);
+  const calMs = calShifts.reduce((a,s)=>a+(new Date(s.end)-new Date(s.start)),0);
+  const calDays = new Set(calShifts.map(s=>toDateKey(s.start))).size;
+  document.getElementById("cal-stat-hours").textContent = fmtDur(calMs);
+  document.getElementById("cal-stat-days").textContent = calDays;
+  document.getElementById("cal-stat-shifts").textContent = calShifts.length;
+}
+
+function renderHistory() {
+  const totalMs = shifts.filter(s=>s.end).reduce((a,s)=>a+(new Date(s.end)-new Date(s.start)),0);
+  const totalDays = workedDays().size;
+  document.getElementById("hist-total-hours").textContent = fmtDur(totalMs);
+  document.getElementById("hist-total-days").textContent = totalDays;
+  document.getElementById("hist-title").textContent = `ALL SHIFTS — ${shifts.length} TOTAL`;
+
+  const list = document.getElementById("history-list");
+  if (shifts.length === 0) {
+    list.innerHTML = `<div class="empty">No shifts yet. Clock in to start tracking.</div>`;
+  } else {
+    list.innerHTML = [...shifts].reverse().map(shiftRowHTML).join("");
+    bindShiftRows(list);
+  }
+}
+
+// ── TABS ─────────────────────────────────────────────────────────────────────
+document.querySelectorAll(".tab").forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
+    document.querySelectorAll(".pane").forEach(p=>p.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById("pane-"+btn.dataset.tab).classList.add("active");
+    if (btn.dataset.tab === "calendar") renderCalendar();
+    if (btn.dataset.tab === "history") renderHistory();
+  };
+});
+
+// ── CLOCK BUTTON ─────────────────────────────────────────────────────────────
+document.getElementById("clock-btn").onclick = () => {
+  if (activeShift) clockOut(); else clockIn();
+};
+
+// ── CALENDAR NAV ─────────────────────────────────────────────────────────────
+document.getElementById("cal-prev").onclick = () => {
+  if (calMonth === 0) { calMonth = 11; calYear--; } else calMonth--;
+  selectedDay = null;
+  renderCalendar();
+};
+document.getElementById("cal-next").onclick = () => {
+  if (calMonth === 11) { calMonth = 0; calYear++; } else calMonth++;
+  selectedDay = null;
+  renderCalendar();
+};
+
+// ── CLEAR ALL ─────────────────────────────────────────────────────────────────
+document.getElementById("clear-btn").onclick = () => {
+  if (confirm("Delete ALL shift history? This cannot be undone.")) {
+    shifts = []; activeShift = null; save(); stopTimer(); renderAll();
+    toast("All data cleared", "warn");
+  }
+};
+
+// ── INIT ─────────────────────────────────────────────────────────────────────
+load();
+if (activeShift) startTimer();
+renderAll();
+
+// set live clock immediately
+document.getElementById("live-clock").textContent =
+  new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+</script>
+</body>
+</html>
