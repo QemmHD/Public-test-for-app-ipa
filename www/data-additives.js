@@ -364,6 +364,99 @@ window.CB_DATA = (function () {
       studies: [
         { title: "Re-evaluation of propyl gallate (E310)", source: "EFSA Journal", year: 2014 }
       ]
+    },
+    {
+      id: "erythritol", names: ["erythritol", "e968"], enumber: "E968",
+      category: "Sugar alcohol", risk: "caution",
+      summary: "Zero-calorie sweetener linked in 2023 research to cardiovascular events.",
+      whatIs: "Erythritol is a sugar alcohol used to sweeten 'keto', 'sugar-free' and low-calorie products.",
+      whyFlagged: "A 2023 study associated higher blood erythritol with increased risk of heart attack and stroke and showed it can promote clotting; more research is ongoing.",
+      healthRisk: "Possible cardiovascular/clotting effects (emerging); can cause bloating and diarrhea in larger amounts.",
+      studies: [
+        { title: "The artificial sweetener erythritol and cardiovascular event risk", source: "Nature Medicine (Witkowski et al.)", year: 2023 }
+      ]
+    },
+    {
+      id: "monodiglycerides", names: ["mono and diglycerides", "monoglycerides", "diglycerides", "mono- and diglycerides", "e471"], enumber: "E471",
+      category: "Emulsifier", risk: "limit",
+      summary: "Common emulsifier that can hide a source of artificial trans fat.",
+      whatIs: "Mono- and diglycerides keep oil and water mixed in bread, peanut butter, margarine and ice cream.",
+      whyFlagged: "Because they're classified as emulsifiers (not fats), products can contain small amounts of trans fat from them without it showing on the label.",
+      healthRisk: "Possible hidden trans fat; marker of processed food.",
+      studies: [
+        { title: "Re-evaluation of mono- and diglycerides of fatty acids (E471)", source: "EFSA Journal", year: 2017 }
+      ]
+    },
+    {
+      id: "calciumpropionate", names: ["calcium propionate", "e282", "propionate"], enumber: "E282",
+      category: "Preservative", risk: "limit",
+      summary: "Mold-inhibiting bread preservative with some behavioral questions.",
+      whatIs: "Calcium propionate stops mold and bacteria in breads and baked goods.",
+      whyFlagged: "Generally considered safe, but small studies have linked it to irritability/sleep issues in some children.",
+      healthRisk: "Possible behavioral effects in sensitive children (limited evidence).",
+      studies: [
+        { title: "Behavioural effects of calcium propionate in children", source: "Journal of Paediatrics and Child Health (Dengate)", year: 2002 }
+      ]
+    },
+    {
+      id: "sulfites", names: ["sulfur dioxide", "sulphur dioxide", "sodium sulfite", "sodium bisulfite", "sodium metabisulfite", "potassium metabisulfite", "sulfites", "sulphites", "e220", "e223"], enumber: "E220",
+      category: "Preservative", risk: "caution",
+      summary: "Preservative in wine and dried fruit that triggers asthma in some people.",
+      whatIs: "Sulfites preserve color and prevent spoilage in dried fruit, wine, juices and some processed potatoes.",
+      whyFlagged: "Can cause asthma attacks and allergic-type reactions in sensitive people; the FDA requires labeling above 10 ppm.",
+      healthRisk: "Asthma/breathing reactions in sulfite-sensitive individuals.",
+      studies: [
+        { title: "Sulfite sensitivity and asthma", source: "Journal of Allergy and Clinical Immunology", year: 1986 }
+      ]
+    },
+    {
+      id: "sodiumphosphate", names: ["sodium phosphate", "disodium phosphate", "trisodium phosphate", "phosphate", "e339"], enumber: "E339",
+      category: "Additive (phosphate)", risk: "limit",
+      summary: "Phosphate additive; high intake is a concern for kidney/heart health.",
+      whatIs: "Sodium phosphates are used to adjust texture, leaven, and retain moisture in processed cheese, meats and baked goods.",
+      whyFlagged: "Diets high in added phosphates are linked to cardiovascular and kidney concerns, especially for people with kidney disease.",
+      healthRisk: "High added-phosphate intake associated with vascular and kidney effects.",
+      studies: [
+        { title: "Phosphate additives in food and health", source: "Deutsches Ärzteblatt International", year: 2012 }
+      ]
+    },
+    {
+      id: "edta", names: ["disodium edta", "calcium disodium edta", "edta", "e385"], enumber: "E385",
+      category: "Preservative (chelator)", risk: "limit",
+      summary: "Preservative that binds metals; fine in small amounts.",
+      whatIs: "EDTA preserves color and flavor in dressings, sauces, canned goods and soda by binding trace metals.",
+      whyFlagged: "Safe at the small amounts used in food, but a marker of heavily processed products; high doses can affect mineral absorption.",
+      healthRisk: "Low risk at food levels; possible mineral binding at high intake.",
+      studies: [
+        { title: "Safety of calcium disodium EDTA as a food additive", source: "EFSA Journal", year: 2018 }
+      ]
+    },
+    {
+      id: "soylecithin", names: ["soy lecithin", "soya lecithin", "lecithin", "e322"], enumber: "E322",
+      category: "Emulsifier", risk: "ok",
+      summary: "Common, generally safe emulsifier (often from soy or sunflower).",
+      whatIs: "Lecithin keeps ingredients blended in chocolate, dressings and baked goods; usually derived from soy or sunflower.",
+      whyFlagged: "Widely regarded as safe. Note: soy-derived lecithin is a concern only for those avoiding soy/allergic.",
+      healthRisk: "No significant concerns for most people.",
+      studies: []
+    },
+    {
+      id: "xanthangum", names: ["xanthan gum", "e415"], enumber: "E415",
+      category: "Thickener", risk: "ok",
+      summary: "Fermented thickener; safe for most, gas in large amounts.",
+      whatIs: "Xanthan gum thickens and stabilizes dressings, gluten-free baked goods and sauces.",
+      whyFlagged: "Generally recognized as safe; very large amounts can cause bloating or act as a laxative.",
+      healthRisk: "Minimal; digestive upset only at high intake.",
+      studies: []
+    },
+    {
+      id: "citricacid", names: ["citric acid", "e330"], enumber: "E330",
+      category: "Acidulant", risk: "ok",
+      summary: "Common sour/preservative acid; safe, though usually manufactured.",
+      whatIs: "Citric acid adds tartness and preserves freshness in drinks, candy and canned foods. Most commercial citric acid is made by fermentation, not from citrus.",
+      whyFlagged: "Generally safe; a rare manufactured-citric-acid sensitivity has been reported in isolated cases.",
+      healthRisk: "No significant concerns for most people.",
+      studies: []
     }
   ];
 
