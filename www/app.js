@@ -7,13 +7,17 @@
   var ZXING_URL = "https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js";
   var TESS_URL = "https://unpkg.com/tesseract.js@5.1.0/dist/tesseract.min.js";
 
+  var WIKI = "https://en.wikipedia.org/api/rest_v1/page/summary/";
+
   var state = {
     view: "home", prev: "home",
     product: null, ingDetail: null, ingTab: "what",
     history: [], profile: {}, pending: null,
+    research: { term: "", loading: false, data: null, error: false },
     busy: false, statusMsg: ""
   };
   var app;
+  var researchCache = {};
 
   /* ------------------------------------------------------------- storage */
   function loadLocal() {
@@ -310,6 +314,47 @@
       .then(function (r) { return { text: (r.data && r.data.text) || "", confidence: (r.data && r.data.confidence) || 0 }; });
   }
 
+  /* ---------------------------------------- research unknown ingredients */
+  function researchIngredient(term) {
+    var bad = /^(and|or|contains|less than|of|the|other|color added|natural|artificial)$/i;
+    var clean = String(term || "").trim();
+    if (!clean || clean.length < 3 || bad.test(clean)) return Promise.resolve(null);
+    var t = encodeURIComponent(clean.replace(/\s+/g, "_"));
+    return fetch(WIKI + t, { headers: { "Accept": "application/json" } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        if (!j || j.type === "disambiguation" || !j.extract) return null;
+        return { extract: j.extract, description: j.description || "",
+          url: (j.content_urls && j.content_urls.desktop && j.content_urls.desktop.page) || "" };
+      })
+      .catch(function () { return null; });
+  }
+  function doResearch(term) {
+    if (researchCache.hasOwnProperty(term)) {
+      var cached = researchCache[term];
+      state.research = { term: term, loading: false, data: cached, error: !cached };
+      render(); return;
+    }
+    state.research = { term: term, loading: true, data: null, error: false };
+    render();
+    researchIngredient(term).then(function (d) {
+      researchCache[term] = d || null;
+      state.research = { term: term, loading: false, data: d, error: !d };
+      render();
+    });
+  }
+  function researchBlock(d) {
+    var r = state.research;
+    if (!r || r.term !== d.title) return "";
+    if (r.loading) return '<div class="research"><div class="spinner small"></div><div class="rh">Researching “' + esc(d.title) + '” online…</div></div>';
+    if (r.error || !r.data) return '<div class="research"><div class="rh">🔎 No public summary found for “' + esc(d.title) + '” yet.</div></div>';
+    return '<div class="research"><div class="rh">🔎 Researched · Wikipedia</div>' +
+      (r.data.description ? '<div class="rdesc">' + esc(r.data.description) + '</div>' : "") +
+      '<p>' + esc(r.data.extract) + '</p>' +
+      (r.data.url ? '<a class="rlink" href="' + esc(r.data.url) + '" target="_blank" rel="noopener">Read more on Wikipedia ›</a>' : "") +
+      '</div>';
+  }
+
   /* ------------------------------------------------------------ UI */
   function setStatus(msg) { state.statusMsg = msg; var el = document.getElementById("status"); if (el) el.textContent = msg; }
   function busy(on, msg) { state.busy = on; setStatus(msg || ""); render(); }
@@ -429,6 +474,8 @@
         return '<button class="tab' + (state.ingTab === t[0] ? " on" : "") + '" data-tab="' + t[0] + '">' + t[1] + '</button>';
       }).join("") + '</div>' +
       '<div class="tab-body">' + body + '</div>' +
+      '<button class="ghost-btn research-btn" data-research="' + esc(d.title) + '">🔎 Research this ingredient online</button>' +
+      researchBlock(d) +
       '<div class="disclaimer">Educational summary, not medical advice.</div></div>';
   }
 
@@ -497,8 +544,9 @@
 
   /* --------------------------------------------------------- events */
   function onClick(e) {
-    var t = e.target.closest("[data-act],[data-nav],[data-open],[data-ingidx],[data-tab],[data-toggle]");
+    var t = e.target.closest("[data-act],[data-nav],[data-open],[data-ingidx],[data-tab],[data-toggle],[data-research]");
     if (!t) return;
+    if (t.dataset.research != null) { doResearch(t.dataset.research); return; }
     if (t.dataset.nav) { go(t.dataset.nav); return; }
     if (t.dataset.open) {
       var p = state.history.filter(function (h) { return h.id === t.dataset.open; })[0];
@@ -506,7 +554,14 @@
     }
     if (t.dataset.ingidx != null) {
       var item = state.product && state.product.classified[+t.dataset.ingidx];
-      if (item) { state.ingDetail = ingredientDetail(item); state.ingTab = "what"; go("ingredient"); } return;
+      if (item) {
+        state.ingDetail = ingredientDetail(item);
+        state.ingTab = "what";
+        state.research = { term: "", loading: false, data: null, error: false };
+        go("ingredient");
+        if (item.status === "unknown") doResearch(state.ingDetail.title);
+      }
+      return;
     }
     if (t.dataset.tab) { state.ingTab = t.dataset.tab; render(); return; }
     if (t.dataset.toggle) { var k = t.dataset.toggle; state.profile[k] = !state.profile[k]; saveProfile(); render(); return; }
