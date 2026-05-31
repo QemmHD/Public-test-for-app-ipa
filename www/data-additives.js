@@ -490,6 +490,366 @@ var CB_DATA = (function () {
       studies: [
         { title: "McCann et al. — food additives and hyperactivity (Southampton study)", source: "The Lancet", year: 2007 }
       ]
+    },
+    {
+      id: "guargum", names: ["guar gum", "guaran", "e412"], enumber: "E412",
+      category: "Thickener (soluble fiber)", risk: "ok",
+      summary: "Natural soluble fiber from the guar bean used to thicken and stabilize.",
+      whatIs: "Guar gum is ground endosperm of the guar bean (a legume). It thickens and stabilizes sauces, dairy, gluten-free baked goods and ice cream.",
+      whyFlagged: "Considered safe and is itself a soluble fiber. Very large amounts can cause bloating, gas or loose stools, and powdered supplements have rarely caused esophageal blockage.",
+      healthRisk: "At food-use levels it is benign and may modestly aid blood sugar and cholesterol; digestive upset only at high doses.",
+      studies: [{ title: "Re-evaluation of guar gum (E 412) as a food additive", source: "EFSA Journal", year: 2017 }]
+    },
+    {
+      id: "locustbeangum", names: ["locust bean gum", "carob bean gum", "carob gum", "e410"], enumber: "E410",
+      category: "Thickener (soluble fiber)", risk: "ok",
+      summary: "Natural gum from carob seeds; common, well-tolerated stabilizer.",
+      whatIs: "Locust bean gum is extracted from the seeds of the carob tree and used to thicken and stabilize dairy, ice cream and plant milks.",
+      whyFlagged: "Regarded as safe; a soluble fiber. Only flagged as a marker of processed food, and rare digestive upset at very high intake.",
+      healthRisk: "Benign at food levels. EFSA found no safety concern at reported uses.",
+      studies: [{ title: "Re-evaluation of locust bean gum (E 410) as a food additive", source: "EFSA Journal", year: 2017 }]
+    },
+    {
+      id: "gellangum", names: ["gellan gum", "e418"], enumber: "E418",
+      category: "Thickener / gelling agent", risk: "ok",
+      summary: "Fermentation-derived gum used to suspend and gel; well-tolerated.",
+      whatIs: "Gellan gum is made by bacterial fermentation and is used to suspend particles in plant milks and to gel jellies and desserts.",
+      whyFlagged: "Considered safe; mainly a marker of processed/formulated products. Large amounts may be mildly laxative.",
+      healthRisk: "Benign at normal use levels; no established toxicity.",
+      studies: [{ title: "Re-evaluation of gellan gum (E 418) as a food additive", source: "EFSA Journal", year: 2018 }]
+    },
+    {
+      id: "pectin", names: ["pectin", "amidated pectin", "e440"], enumber: "E440",
+      category: "Gelling agent (soluble fiber)", risk: "ok",
+      summary: "Natural fruit fiber used to set jams and thicken foods.",
+      whatIs: "Pectin is a soluble fiber found naturally in apples and citrus peel, extracted to gel jams, jellies and fillings.",
+      whyFlagged: "Safe and natural; itself a beneficial soluble fiber. Not a health concern.",
+      healthRisk: "Benign; may modestly support cholesterol and blood-sugar control as a fiber.",
+      studies: [{ title: "Re-evaluation of pectins (E 440) as food additives", source: "EFSA Journal", year: 2017 }]
+    },
+    {
+      id: "gumarabic", names: ["gum arabic", "acacia gum", "gum acacia", "e414"], enumber: "E414",
+      category: "Stabilizer (soluble fiber)", risk: "ok",
+      summary: "Natural acacia tree sap used to emulsify and stabilize; a prebiotic fiber.",
+      whatIs: "Gum arabic is the dried sap of acacia trees, used to stabilize soft drinks, emulsify flavors and glaze candy.",
+      whyFlagged: "Long history of safe use and acts as a prebiotic soluble fiber. Not a concern.",
+      healthRisk: "Benign; generally well tolerated, mild gas at very high intake.",
+      studies: [{ title: "Re-evaluation of acacia gum (E 414) as a food additive", source: "EFSA Journal", year: 2017 }]
+    },
+    {
+      id: "sodiumcitrate", names: ["sodium citrate", "trisodium citrate", "monosodium citrate", "e331"], enumber: "E331",
+      category: "Acidity regulator / emulsifying salt", risk: "ok",
+      summary: "Citric-acid salt used to control acidity and emulsify cheese; benign.",
+      whatIs: "Sodium citrate is the sodium salt of citric acid, used to buffer acidity, give a tart flavor, and keep melted cheese smooth.",
+      whyFlagged: "Recognized as safe. Adds a small amount of sodium; otherwise not a concern.",
+      healthRisk: "Benign at food levels; relevant only as a minor sodium source.",
+      studies: [{ title: "Re-evaluation of citric acid and its salts (E 330–333) as food additives", source: "EFSA Journal", year: 2022 }]
+    },
+    {
+      id: "potassiumsorbate", names: ["potassium sorbate", "e202"], enumber: "E202",
+      category: "Preservative", risk: "limit",
+      summary: "Widely used mold/yeast preservative; low toxicity but a processing marker.",
+      whatIs: "Potassium sorbate is the potassium salt of sorbic acid, used to stop mold and yeast in cheese, wine, baked goods and dips.",
+      whyFlagged: "One of the gentler preservatives, but still a synthetic additive; rare skin/contact irritation and a marker of processed food.",
+      healthRisk: "Generally recognized as safe; occasional mild allergic or irritant reactions.",
+      studies: [{ title: "Re-evaluation of sorbic acid and salts (E 200, 202, 203) as food additives", source: "EFSA Journal", year: 2015 }]
+    },
+    {
+      id: "sodiumerythorbate", names: ["sodium erythorbate", "erythorbic acid", "e316", "e315"], enumber: "E316",
+      category: "Antioxidant", risk: "ok",
+      summary: "Vitamin-C-related antioxidant used to preserve color in cured meats.",
+      whatIs: "Sodium erythorbate is a stereoisomer of vitamin C used to fix color and prevent oxidation in cured and processed meats.",
+      whyFlagged: "Low toxicity itself; mainly a signal that the product is cured/processed meat (the bigger concern).",
+      healthRisk: "Benign as an additive; the cured-meat matrix it accompanies is the real consideration.",
+      studies: [{ title: "Re-evaluation of erythorbic acid and salts (E 315, 316) as food additives", source: "EFSA Journal", year: 2016 }]
+    },
+    {
+      id: "ascorbicacid", names: ["ascorbic acid", "l-ascorbic acid", "vitamin c", "e300"], enumber: "E300",
+      category: "Antioxidant (vitamin C)", risk: "ok",
+      summary: "Vitamin C used as a natural antioxidant; beneficial.",
+      whatIs: "Ascorbic acid is vitamin C, added to preserve color and freshness and to fortify foods.",
+      whyFlagged: "Not a concern — it is an essential nutrient and antioxidant.",
+      healthRisk: "Benign and beneficial at food levels.",
+      studies: [{ title: "Scientific opinion on the re-evaluation of ascorbic acid (E 300)", source: "EFSA Journal", year: 2015 }]
+    },
+    {
+      id: "tocopherols", names: ["tocopherols", "mixed tocopherols", "alpha-tocopherol", "vitamin e", "e306", "e307", "e308", "e309"], enumber: "E306",
+      category: "Antioxidant (vitamin E)", risk: "ok",
+      summary: "Vitamin-E antioxidants used to keep oils from going rancid; beneficial.",
+      whatIs: "Tocopherols are forms of vitamin E used as natural antioxidants to protect fats and oils from oxidation.",
+      whyFlagged: "Not a concern — a natural, nutrient antioxidant, often used in place of BHA/BHT.",
+      healthRisk: "Benign and beneficial at food levels.",
+      studies: [{ title: "Re-evaluation of tocopherols (E 306–309) as food additives", source: "EFSA Journal", year: 2015 }]
+    },
+    {
+      id: "lacticacid", names: ["lactic acid", "e270"], enumber: "E270",
+      category: "Acidity regulator", risk: "ok",
+      summary: "Natural acid (also made by fermentation) used to adjust tartness; benign.",
+      whatIs: "Lactic acid occurs naturally in fermented foods like yogurt and sourdough and is added to regulate acidity and act as a mild preservative.",
+      whyFlagged: "Recognized as safe; not a health concern.",
+      healthRisk: "Benign at food levels.",
+      studies: [{ title: "Re-evaluation of lactic acid (E 270) as a food additive", source: "EFSA Journal", year: 2019 }]
+    },
+    {
+      id: "malicacid", names: ["malic acid", "dl-malic acid", "e296"], enumber: "E296",
+      category: "Acidity regulator", risk: "ok",
+      summary: "Tart fruit acid (found in apples) used as a flavor/acidity agent; benign.",
+      whatIs: "Malic acid gives apples and grapes their sourness and is added to candy, drinks and baked goods for tartness.",
+      whyFlagged: "Recognized as safe; not a health concern.",
+      healthRisk: "Benign at food levels.",
+      studies: [{ title: "Re-evaluation of malic acid (E 296) as a food additive", source: "EFSA Journal", year: 2018 }]
+    },
+    {
+      id: "ssl", names: ["sodium stearoyl lactylate", "sodium stearoyl-2-lactylate", "ssl", "e481", "calcium stearoyl lactylate", "e482"], enumber: "E481",
+      category: "Emulsifier / dough conditioner", risk: "limit",
+      summary: "Synthetic emulsifier and dough strengthener; a marker of processed bread.",
+      whatIs: "Sodium stearoyl lactylate is a synthetic emulsifier used to strengthen dough and improve texture and volume in commercial bread and baked goods.",
+      whyFlagged: "Considered safe at use levels but is a processing aid typical of ultra-processed baked goods.",
+      healthRisk: "No established toxicity at food levels; mainly an ultra-processing marker.",
+      studies: [{ title: "Re-evaluation of stearoyl lactylates (E 481, 482) as food additives", source: "EFSA Journal", year: 2013 }]
+    },
+    {
+      id: "datem", names: ["datem", "diacetyl tartaric acid esters of mono- and diglycerides", "e472e"], enumber: "E472e",
+      category: "Emulsifier / dough conditioner", risk: "limit",
+      summary: "Synthetic dough emulsifier common in commercial bread; processing marker.",
+      whatIs: "DATEM is a synthetic emulsifier made from glycerides and tartaric acid, used to condition dough and improve loaf volume.",
+      whyFlagged: "Approved and considered safe, but an emulsifier typical of ultra-processed bakery products; some animal data on emulsifiers and gut health is debated.",
+      healthRisk: "No established human toxicity at food levels; ultra-processing marker.",
+      studies: [{ title: "Re-evaluation of mono- and diglyceride esters (E 472a–f) as food additives", source: "EFSA Journal", year: 2017 }]
+    },
+    {
+      id: "calciumcarbonate", names: ["calcium carbonate", "e170", "chalk"], enumber: "E170",
+      category: "Mineral / firming / color", risk: "ok",
+      summary: "Common mineral used as a firming agent, anti-caking aid and calcium source.",
+      whatIs: "Calcium carbonate (chalk/limestone) is used to firm foods, reduce acidity, whiten and fortify with calcium.",
+      whyFlagged: "Recognized as safe and a source of dietary calcium; not a concern.",
+      healthRisk: "Benign at food levels; very high supplemental intake can cause constipation.",
+      studies: [{ title: "Re-evaluation of calcium carbonate (E 170) as a food additive", source: "EFSA Journal", year: 2011 }]
+    },
+    {
+      id: "silicondioxidefood", names: ["silicon dioxide", "silica", "amorphous silica", "e551"], enumber: "E551",
+      category: "Anti-caking agent", risk: "limit",
+      summary: "Anti-caking agent that keeps powders free-flowing; not a silicone.",
+      whatIs: "Food-grade silicon dioxide (amorphous silica) is added to salt, spices, powdered mixes and supplements to prevent clumping. It is a mineral, NOT a silicone polymer.",
+      whyFlagged: "Long used and largely inert, but EFSA could not fully rule out a nanoparticle fraction and called for tighter specifications, so it is treated cautiously.",
+      healthRisk: "Low concern at dietary levels; uncertainty centers on nano-sized particles, not the bulk mineral.",
+      studies: [{ title: "Re-evaluation of silicon dioxide (E 551) as a food additive", source: "EFSA Journal", year: 2018 }]
+    },
+    {
+      id: "annatto", names: ["annatto", "annatto extract", "bixin", "norbixin", "e160b"], enumber: "E160b",
+      category: "Natural color", risk: "limit",
+      summary: "Natural yellow-orange color from achiote seeds; rare allergen.",
+      whatIs: "Annatto is a natural color from the seeds of the achiote tree, used to give cheese, butter and snacks a yellow-orange hue.",
+      whyFlagged: "Natural and generally safe, but a recognized (if uncommon) trigger of hives and other allergic reactions in sensitive people.",
+      healthRisk: "Benign for most; rare allergic/intolerance reactions.",
+      studies: [{ title: "Scientific opinion on annatto extracts (E 160b) as food additives", source: "EFSA Journal", year: 2016 }]
+    },
+    {
+      id: "betacarotene", names: ["beta-carotene", "beta carotene", "carotene", "e160a"], enumber: "E160a",
+      category: "Natural color (provitamin A)", risk: "ok",
+      summary: "Orange plant pigment and vitamin-A precursor; benign as a food color.",
+      whatIs: "Beta-carotene is the orange pigment of carrots, used to color foods and as a source of vitamin A.",
+      whyFlagged: "Safe as a food color. High-dose supplements (not food coloring) raised lung-cancer risk in smokers — not relevant to coloring amounts.",
+      healthRisk: "Benign at food-coloring levels.",
+      studies: [{ title: "Re-evaluation of carotenes (E 160a) as food additives", source: "EFSA Journal", year: 2012 }]
+    },
+    {
+      id: "paprikaextract", names: ["paprika extract", "paprika oleoresin", "capsanthin", "e160c"], enumber: "E160c",
+      category: "Natural color", risk: "ok",
+      summary: "Natural red color from paprika peppers; benign.",
+      whatIs: "Paprika extract (oleoresin) is a natural red-orange color from paprika peppers, used in snacks, sauces and meats.",
+      whyFlagged: "Natural and recognized as safe; not a concern.",
+      healthRisk: "Benign at food levels.",
+      studies: [{ title: "Re-evaluation of paprika extract (E 160c) as a food additive", source: "EFSA Journal", year: 2015 }]
+    },
+    {
+      id: "stevia", names: ["stevia", "steviol glycosides", "rebaudioside a", "reb a", "e960"], enumber: "E960",
+      category: "Natural sweetener", risk: "ok",
+      summary: "Plant-derived zero-calorie sweetener; approved and well-tolerated.",
+      whatIs: "Steviol glycosides are intensely sweet compounds extracted from the stevia leaf, used as a calorie-free sweetener.",
+      whyFlagged: "Approved by EFSA and FDA with an established safe intake; some people dislike the aftertaste. Not a notable health concern.",
+      healthRisk: "Benign within the acceptable daily intake; no calories or blood-sugar impact.",
+      studies: [{ title: "Scientific opinion on the safety of steviol glycosides (E 960)", source: "EFSA Journal", year: 2010 }]
+    },
+    {
+      id: "monkfruit", names: ["monk fruit", "monk fruit extract", "luo han guo", "mogroside"], enumber: "",
+      category: "Natural sweetener", risk: "ok",
+      summary: "Calorie-free sweetener from monk fruit; recognized as safe.",
+      whatIs: "Monk fruit extract (mogrosides) is an intense, calorie-free sweetener from the luo han guo fruit.",
+      whyFlagged: "FDA-recognized as safe (GRAS); no notable health concerns at use levels.",
+      healthRisk: "Benign; no calories or blood-sugar impact.",
+      studies: [{ title: "GRAS notices for Siraitia grosvenorii (monk fruit) extract", source: "U.S. FDA GRAS", year: 2010 }]
+    },
+    {
+      id: "sorbitol", names: ["sorbitol", "e420"], enumber: "E420",
+      category: "Sugar alcohol (polyol)", risk: "limit",
+      summary: "Low-calorie sugar alcohol; laxative effect in larger amounts.",
+      whatIs: "Sorbitol is a sugar alcohol used as a sweetener and humectant in sugar-free gum, candy and diet foods.",
+      whyFlagged: "Poorly absorbed, so excess causes gas, bloating and a laxative effect; EU foods with >10% must warn it 'may cause laxative effects.'",
+      healthRisk: "Digestive upset/diarrhea at higher intake; otherwise low concern and tooth-friendly.",
+      studies: [{ title: "Statement on the safety of sorbitol (E 420)", source: "EFSA Journal", year: 2019 }]
+    },
+    {
+      id: "xylitol", names: ["xylitol", "e967"], enumber: "E967",
+      category: "Sugar alcohol (polyol)", risk: "limit",
+      summary: "Tooth-friendly sugar alcohol; laxative in excess and toxic to dogs.",
+      whatIs: "Xylitol is a sugar alcohol used in sugar-free gum, mints and dental products; it does not feed cavity bacteria.",
+      whyFlagged: "Safe for people but causes gas/laxative effects in excess, and is highly toxic to dogs even in small amounts.",
+      healthRisk: "Digestive upset at high intake for humans; keep away from pets.",
+      studies: [{ title: "Re-evaluation of xylitol (E 967) as a food additive", source: "EFSA Journal", year: 2018 }]
+    },
+    {
+      id: "maltitol", names: ["maltitol", "maltitol syrup", "e965"], enumber: "E965",
+      category: "Sugar alcohol (polyol)", risk: "limit",
+      summary: "Sugar alcohol sweetener; raises blood sugar more than other polyols and is laxative in excess.",
+      whatIs: "Maltitol is a sugar alcohol used in 'sugar-free' chocolate and candy for a sugar-like taste and texture.",
+      whyFlagged: "Has a higher glycemic impact than most polyols and causes gas/laxative effects in excess.",
+      healthRisk: "Digestive upset at higher intake; modest blood-sugar rise.",
+      studies: [{ title: "Re-evaluation of maltitol (E 965) as a food additive", source: "EFSA Journal", year: 2018 }]
+    },
+    {
+      id: "mannitol", names: ["mannitol", "e421"], enumber: "E421",
+      category: "Sugar alcohol (polyol)", risk: "limit",
+      summary: "Sugar alcohol sweetener/anti-caking agent; laxative in excess.",
+      whatIs: "Mannitol is a sugar alcohol used as a sweetener and to dust chewing gum; also used medically.",
+      whyFlagged: "Poorly absorbed, with a pronounced laxative effect at higher intake; EU laxative warning applies.",
+      healthRisk: "Digestive upset/diarrhea at higher intake; otherwise low concern.",
+      studies: [{ title: "Re-evaluation of mannitol (E 421) as a food additive", source: "EFSA Journal", year: 2018 }]
+    },
+    {
+      id: "dextrose", names: ["dextrose", "glucose", "anhydrous dextrose", "dextrose monohydrate"], enumber: "",
+      category: "Added sugar", risk: "limit",
+      summary: "Pure glucose used as an added sugar and bulking agent.",
+      whatIs: "Dextrose is glucose derived from corn or other starch, used to sweeten, brown and bulk processed foods.",
+      whyFlagged: "A free/added sugar that raises blood glucose quickly and adds empty calories.",
+      healthRisk: "Counts as added sugar; excess intake drives the usual metabolic and dental risks.",
+      studies: [{ title: "Dietary sugars and body weight (systematic review)", source: "BMJ", year: 2013 }]
+    },
+    {
+      id: "invertsugar", names: ["invert sugar", "invert syrup", "inverted sugar syrup"], enumber: "",
+      category: "Added sugar", risk: "limit",
+      summary: "Glucose-fructose syrup made from sucrose; an added sugar.",
+      whatIs: "Invert sugar is sucrose split into glucose and fructose, giving a smooth, very sweet syrup used in candy and baked goods.",
+      whyFlagged: "A free/added sugar nutritionally similar to table sugar and high-fructose syrups.",
+      healthRisk: "Counts as added sugar; excess intake drives metabolic and dental risks.",
+      studies: [{ title: "Added sugar intake and cardiovascular disease mortality", source: "JAMA Internal Medicine", year: 2014 }]
+    },
+    {
+      id: "palmoil", names: ["palm oil", "palm fruit oil", "palm olein", "refined palm oil"], enumber: "",
+      category: "Tropical oil (saturated fat)", risk: "limit",
+      summary: "High-saturated-fat tropical oil; also raises sustainability concerns.",
+      whatIs: "Palm oil is a cheap, semi-solid oil from the oil-palm fruit, used widely in spreads, snacks and baked goods.",
+      whyFlagged: "High in saturated fat, and refined palm oil contains process contaminants (3-MCPD, glycidyl esters); also linked to deforestation.",
+      healthRisk: "High saturated-fat intake affects LDL cholesterol; refining contaminants are an additional concern.",
+      studies: [{ title: "Process contaminants (glycidyl/3-MCPD esters) in vegetable oils", source: "EFSA Journal", year: 2016 }]
+    },
+    {
+      id: "interesterifiedfat", names: ["interesterified fat", "interesterified oil", "interesterified vegetable oil", "fully hydrogenated"], enumber: "",
+      category: "Modified fat", risk: "caution",
+      summary: "Chemically rearranged fat that replaced trans fat; metabolic effects still debated.",
+      whatIs: "Interesterification rearranges fatty acids on the glycerol backbone to make solid, shelf-stable fats without trans fat — common in shortenings and spreads after trans-fat bans.",
+      whyFlagged: "A newer industrial fat; some studies suggest unfavorable effects on blood sugar and cholesterol, and long-term human data is limited.",
+      healthRisk: "Possible adverse metabolic effects; a marker of ultra-processed fat. Evidence is still emerging.",
+      studies: [{ title: "Health effects of interesterified fats (review)", source: "Nutrition Reviews", year: 2016 }]
+    },
+    {
+      id: "disodiuminosinate", names: ["disodium inosinate", "inosinate", "e631"], enumber: "E631",
+      category: "Flavor enhancer", risk: "limit",
+      summary: "Umami booster usually paired with MSG; a high-purine compound.",
+      whatIs: "Disodium inosinate is a flavor enhancer, almost always used together with MSG/glutamate to intensify savory taste in snacks and instant foods.",
+      whyFlagged: "Its presence signals added glutamate and ultra-processing; being a purine, it is best limited by people with gout.",
+      healthRisk: "Low direct toxicity; gout sufferers should moderate purines, and it marks processed savory foods.",
+      studies: [{ title: "Re-evaluation of inosinic acid and salts (E 630–633) as food additives", source: "EFSA Journal", year: 2021 }]
+    },
+    {
+      id: "disodiumguanylate", names: ["disodium guanylate", "guanylate", "e627"], enumber: "E627",
+      category: "Flavor enhancer", risk: "limit",
+      summary: "Umami booster paired with MSG; high-purine, processing marker.",
+      whatIs: "Disodium guanylate is a flavor enhancer used with MSG/glutamate to deepen savory flavor in chips, seasonings and instant noodles.",
+      whyFlagged: "Indicates added glutamate and ultra-processing; a purine, so worth limiting for those prone to gout.",
+      healthRisk: "Low direct toxicity; gout caution and processed-food marker.",
+      studies: [{ title: "Re-evaluation of guanylic acid and salts (E 626–629) as food additives", source: "EFSA Journal", year: 2021 }]
+    },
+    {
+      id: "yeastextract", names: ["yeast extract", "autolyzed yeast", "autolyzed yeast extract", "hydrolyzed yeast"], enumber: "",
+      category: "Flavor enhancer (natural glutamate)", risk: "limit",
+      summary: "Savory flavoring naturally rich in glutamate — a label-friendly MSG source.",
+      whatIs: "Yeast extract is made by breaking down yeast cells, releasing natural glutamates that add savory/umami flavor without declaring 'MSG.'",
+      whyFlagged: "Often used as a 'clean label' way to add free glutamate; a marker of processed savory foods rather than a toxin.",
+      healthRisk: "Generally safe; relevant mainly to those who react to free glutamate, and as a sodium/processing marker.",
+      studies: [{ title: "Safety of glutamates as food additives (re-evaluation)", source: "EFSA Journal", year: 2017 }]
+    },
+    {
+      id: "naturalflavors", names: ["natural flavors", "natural flavor", "natural flavoring", "natural flavour", "natural flavours"], enumber: "",
+      category: "Undisclosed flavoring", risk: "limit",
+      summary: "Catch-all flavor term that can hide many undisclosed compounds.",
+      whatIs: "'Natural flavors' are flavoring extracts of plant or animal origin; the term can legally cover dozens of undisclosed component chemicals and solvents.",
+      whyFlagged: "Lack of transparency — the exact contents are proprietary, so allergen and additive detail is hidden, and it is a hallmark of processed food.",
+      healthRisk: "Usually safe, but the opacity makes it hard to assess for sensitivities; mainly a transparency/processing concern.",
+      studies: [{ title: "Code of Federal Regulations 21 CFR 101.22 (flavor labeling)", source: "U.S. FDA", year: 2023 }]
+    },
+    {
+      id: "sodiumaluminumphosphate", names: ["sodium aluminum phosphate", "sodium aluminium phosphate", "salp", "e541"], enumber: "E541",
+      category: "Leavening agent (aluminum)", risk: "limit",
+      summary: "Aluminum-based leavening acid in some baked goods; limit aluminum intake.",
+      whatIs: "Sodium aluminum phosphate is a leavening acid used in some self-rising flours, baking powders and processed cheese.",
+      whyFlagged: "Contributes to dietary aluminum, which authorities advise limiting; EFSA set a tolerable weekly intake that frequent consumers can approach.",
+      healthRisk: "Aluminum accumulation concern with high intake; a processing marker.",
+      studies: [{ title: "Safety of aluminium from dietary intake", source: "EFSA Journal", year: 2008 }]
+    },
+    {
+      id: "dextrin", names: ["dextrin", "white dextrin", "yellow dextrin", "e1400"], enumber: "E1400",
+      category: "Modified starch", risk: "limit",
+      summary: "Lightly processed starch used as a thickener/binder; a refined carb.",
+      whatIs: "Dextrins are starches broken into shorter chains by heat or acid, used to thicken, bind and coat processed foods.",
+      whyFlagged: "Safe but a refined, rapidly digested carbohydrate and a marker of processed food (distinct from beneficial resistant dextrin fiber).",
+      healthRisk: "Low direct toxicity; nutritionally an empty refined carb.",
+      studies: [{ title: "Safety of modified starches as food additives", source: "EFSA Journal", year: 2017 }]
+    },
+    {
+      id: "inulin", names: ["inulin", "chicory root fiber", "chicory inulin", "oligofructose"], enumber: "",
+      category: "Prebiotic fiber", risk: "ok",
+      summary: "Plant-derived soluble fiber added to boost fiber; can cause gas in excess.",
+      whatIs: "Inulin is a soluble prebiotic fiber from chicory root and other plants, added to boost fiber and lightly sweeten.",
+      whyFlagged: "Beneficial as a fiber/prebiotic; only flagged because large amounts cause bloating and gas in sensitive people.",
+      healthRisk: "Benign and generally beneficial; digestive upset at high intake.",
+      studies: [{ title: "Health benefits of inulin and oligofructose (review)", source: "Journal of Nutrition", year: 2007 }]
+    },
+    {
+      id: "glycerol", names: ["glycerol", "glycerin", "glycerine", "e422"], enumber: "E422",
+      category: "Humectant", risk: "ok",
+      summary: "Sweet-tasting humectant that keeps foods moist; benign at food levels.",
+      whatIs: "Glycerol (glycerin) is a sugar alcohol-like humectant used to retain moisture in bars, frostings and soft candies.",
+      whyFlagged: "Recognized as safe; only very large amounts can have a mild laxative effect.",
+      healthRisk: "Benign at food levels; provides some calories.",
+      studies: [{ title: "Re-evaluation of glycerol (E 422) as a food additive", source: "EFSA Journal", year: 2017 }]
+    },
+    {
+      id: "agar", names: ["agar", "agar-agar", "agar agar", "e406"], enumber: "E406",
+      category: "Gelling agent (seaweed)", risk: "ok",
+      summary: "Seaweed-derived gelling fiber; vegetarian gelatin alternative.",
+      whatIs: "Agar is a gelling agent extracted from red seaweed, used to set desserts and as a plant-based alternative to gelatin.",
+      whyFlagged: "Safe and a source of fiber; not a concern. Powder taken dry can swell, so it is consumed hydrated.",
+      healthRisk: "Benign at food levels; mildly laxative in large amounts.",
+      studies: [{ title: "Re-evaluation of agar (E 406) as a food additive", source: "EFSA Journal", year: 2016 }]
+    },
+    {
+      id: "alginate", names: ["sodium alginate", "alginic acid", "potassium alginate", "calcium alginate", "e401", "e400"], enumber: "E401",
+      category: "Thickener / gelling agent (seaweed)", risk: "ok",
+      summary: "Seaweed-derived thickener used to gel and stabilize; benign.",
+      whatIs: "Alginates are extracted from brown seaweed and used to thicken, gel and stabilize sauces, fillings and reformed foods.",
+      whyFlagged: "Recognized as safe and a soluble fiber; only a marker of processed/formulated foods.",
+      healthRisk: "Benign at food levels.",
+      studies: [{ title: "Re-evaluation of alginic acid and salts (E 400–404) as food additives", source: "EFSA Journal", year: 2017 }]
+    },
+    {
+      id: "potassiumchloride", names: ["potassium chloride", "e508"], enumber: "E508",
+      category: "Salt substitute / mineral", risk: "ok",
+      summary: "Used to replace sodium and as a firming agent; benign for most.",
+      whatIs: "Potassium chloride is a mineral salt used to cut sodium (as a salt substitute) and to firm and stabilize foods.",
+      whyFlagged: "Generally beneficial for lowering sodium; a slightly bitter taste, and people with kidney disease or on certain medications should watch potassium.",
+      healthRisk: "Benign for most; caution with impaired kidney function or potassium-affecting drugs.",
+      studies: [{ title: "Re-evaluation of potassium chloride (E 508) as a food additive", source: "EFSA Journal", year: 2019 }]
     }
   ];
 
@@ -903,6 +1263,57 @@ var CB_DATA = (function () {
   ];
   for (var c3 = 0; c3 < extraClean3.length; c3++) {
     if (cleanIngredients.indexOf(extraClean3[c3]) === -1) cleanIngredients.push(extraClean3[c3]);
+  }
+
+  // Fourth pass: even more common whole foods, pantry staples and prepared basics.
+  const extraClean4 = [
+    // produce
+    "asparagus", "green beans", "broccolini", "cauliflower", "broccoli", "zucchini",
+    "yellow squash", "spaghetti squash", "delicata squash", "beets", "beet", "celery root",
+    "kohlrabi", "daikon", "jicama", "plantain", "plantains", "taro", "yam", "yams",
+    "sweet potato", "sweet potatoes", "cucumber", "cucumbers", "mango", "mangoes",
+    "pineapple", "cherries", "cherry", "grapes", "green grapes", "red grapes", "cranberries",
+    "elderberry", "gooseberry", "mulberry", "boysenberry", "blackberry", "cantaloupe melon",
+    "honeycrisp apple", "granny smith apple", "gala apple", "fuji apple", "bartlett pear",
+    "navel orange", "blood orange", "cara cara orange", "meyer lemon", "key lime",
+    "rhubarb", "chayote", "tomatillo", "okra pods", "snap beans",
+    // grains / starches
+    "couscous", "israeli couscous", "wild rice", "jasmine rice", "basmati rice", "arborio rice",
+    "black rice", "red rice", "steel cut oats", "cracked wheat", "wheat berries", "kamut",
+    "semolina", "durum wheat", "corn meal", "yellow cornmeal", "hominy", "masa harina",
+    "rice noodles", "soba noodles", "udon noodles", "whole wheat pasta", "semolina pasta",
+    // protein
+    "lamb", "lamb chop", "ground lamb", "goat meat", "rabbit", "quail", "cornish hen",
+    "turkey", "ground turkey breast", "deli turkey", "pork shoulder", "pork belly", "ham hock",
+    "sardines", "anchovies", "shrimp", "prawns", "crawfish", "sea bass", "grouper", "swordfish",
+    "arctic char", "branzino", "smoked salmon", "canned tuna", "canned salmon",
+    "egg substitute", "liquid eggs", "duck egg", "quail egg",
+    // dairy / alternatives
+    "cottage cheese", "cream cheese", "sour cream", "heavy cream", "whipping cream",
+    "monterey jack", "colby cheese", "pepper jack", "muenster", "havarti", "manchego",
+    "parmesan", "parmigiano reggiano", "romano cheese", "asiago", "blue cheese", "cheddar",
+    "almond milk", "soy milk", "oat milk", "coconut milk", "cashew milk", "goat milk",
+    "skim milk", "whole milk", "2% milk", "kefir milk",
+    // legumes / nuts / seeds
+    "lima beans", "butter beans", "cranberry beans", "lupini beans", "tepary beans",
+    "yellow split peas", "green split peas", "whole green peas", "roasted chickpeas",
+    "macadamia nuts", "brazil nuts", "pine nuts", "hazelnuts", "pistachios", "chestnuts",
+    "tahini", "sesame seeds", "hemp seeds", "watermelon seeds", "nigella seeds",
+    "peanut butter", "almond butter", "cashew butter",
+    // oils / fats / condiments / pantry
+    "sesame oil", "peanut oil", "rice bran oil", "macadamia oil", "hemp oil",
+    "almond flour", "coconut flour", "cassava flour", "chickpea flour", "tapioca flour",
+    "baking soda", "baking powder", "cream of tartar", "active dry yeast", "instant yeast",
+    "vegetable broth", "chicken stock", "bone broth", "miso paste", "coconut aminos",
+    "rice wine vinegar", "malt vinegar", "balsamic glaze", "tomato paste", "tahini paste",
+    "dijon", "stone ground mustard", "horseradish", "sriracha", "hot sauce", "chili paste",
+    "maple syrup", "molasses", "vanilla bean paste", "cocoa powder", "dark chocolate",
+    "shredded coconut", "coconut cream", "dried oregano", "dried thyme", "dried rosemary",
+    "ground cumin", "ground coriander", "smoked paprika", "garlic salt", "onion salt",
+    "everything bagel seasoning", "old bay", "herbes de provence", "za'atar"
+  ];
+  for (var c4 = 0; c4 < extraClean4.length; c4++) {
+    if (cleanIngredients.indexOf(extraClean4[c4]) === -1) cleanIngredients.push(extraClean4[c4]);
   }
 
   // More added-sugar synonyms seen on U.S. labels.

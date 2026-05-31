@@ -403,7 +403,10 @@ window.CB_DATA_COSMETICS = (function () {
       "ethylhexyl salicylate", "octyl salicylate", "propyl gallate", "genistein",
       "octinoxate", "ethylhexyl methoxycinnamate", "benzophenone-3", "benzophenone-8",
       "padimate o", "ensulizole", "sulisobenzone", "bisphenol a", "bisphenol s",
-      "triphenyl phosphate", "daidzein", "kaempferol", "octyl methoxycinnamate"
+      "triphenyl phosphate", "daidzein", "kaempferol", "octyl methoxycinnamate",
+      "benzophenone-5", "benzophenone-6", "benzophenone-12", "4-hydroxybenzophenone",
+      "octyl dimethyl paba", "padimate a", "enzacamene", "isoamyl p-methoxycinnamate",
+      "butyl methoxydibenzoylmethane", "2-ethylhexyl salicylate", "menthyl anthranilate"
     ],
     formaldehydeReleaser: [
       "imidazolidinyl urea", "diazolidinyl urea", "sodium hydroxymethylglycinate",
@@ -411,7 +414,9 @@ window.CB_DATA_COSMETICS = (function () {
       "methenamine", "hexamethylenetetramine", "glyoxal", "benzylhemiformal",
       "5-bromo-5-nitro-1,3-dioxane", "tris(hydroxymethyl) nitromethane",
       "dmdm hydantoin", "quaternium-15", "imidazolidinyl urea", "diazolidinyl urea",
-      "sodium hydroxymethylglycinate", "methylene glycol", "formalin", "paraformaldehyde"
+      "sodium hydroxymethylglycinate", "methylene glycol", "formalin", "paraformaldehyde",
+      "1,3-dimethylol-5,5-dimethylhydantoin", "ddmp", "dimethyloldimethyl hydantoin",
+      "trimethylol nitromethane", "methanal", "oxymethylene"
     ],
     sulfate: [
       "ammonium lauryl sulfate", "ammonium laureth sulfate", "sodium myreth sulfate",
@@ -420,7 +425,10 @@ window.CB_DATA_COSMETICS = (function () {
       "sodium c14-16 olefin sulfonate", "sodium xylenesulfonate", "ammonium xylenesulfonate",
       "sodium dodecylbenzenesulfonate", "linear alkylbenzene sulfonate", "sodium alpha-olefin sulfonate",
       "tea-dodecylbenzenesulfonate", "ammonium c12-15 pareth sulfate", "sodium c12-15 pareth sulfate",
-      "sodium decyl sulfate", "sodium octyl sulfate"
+      "sodium decyl sulfate", "sodium octyl sulfate",
+      "potassium lauryl sulfate", "diethanolamine lauryl sulfate", "sodium lauryl ether sulfate",
+      "sodium laureth-2 sulfate", "sodium laureth-3 sulfate", "ammonium lauryl ether sulfate",
+      "tea-lauryl sulfate", "potassium cetyl sulfate", "sodium tridecyl sulfate"
     ],
     fragranceAllergen: [
       "limonene", "linalool", "citronellol", "geraniol", "eugenol", "coumarin",
@@ -433,7 +441,12 @@ window.CB_DATA_COSMETICS = (function () {
       "benzyl alcohol", "amylcinnamyl alcohol", "benzaldehyde", "isoeugenol", "methyl heptine carbonate",
       "acetylhexamethyl tetralin", "hydroxyisohexyl 3-cyclohexene carboxaldehyde", "hexamethylindanopyran",
       "3-propylidenephthalide", "salicylaldehyde", "dihydrocoumarin", "terpinolene",
-      "carvone", "menthol", "vanillin", "cananga odorata", "rose ketone-4"
+      "carvone", "menthol", "vanillin", "cananga odorata", "rose ketone-4",
+      "acetyl cedrene", "alpha-damascone", "beta-damascone", "delta-damascone", "damascenone",
+      "amyl salicylate", "methyl salicylate", "anethole", "trans-anethole", "camphor",
+      "eucalyptol", "linalyl acetate", "geranyl acetate", "isoeugenyl acetate", "methyl cinnamate",
+      "myroxylon pereirae", "myroxylon pereirae resin", "santalol", "alpha-terpineol", "terpineol",
+      "trimethylbenzenepropanol", "isobutyl quinoline", "neral", "geranial"
     ],
     sensitizer: [
       "methyldibromo glutaronitrile", "iodopropynyl butylcarbamate", "chlorphenesin",
@@ -476,7 +489,11 @@ window.CB_DATA_COSMETICS = (function () {
       "peg-150 distearate", "peg-12 dimethicone", "peg-8", "peg-32", "peg-75 lanolin",
       "ceteareth-20", "ceteareth-25", "ceteareth-12", "steareth-2", "steareth-20", "steareth-21",
       "laureth-4", "laureth-7", "laureth-23", "oleth-10", "oleth-20", "trideceth-6",
-      "ppg-15 stearyl ether", "polysorbate 20", "polysorbate 60", "polysorbate 80"
+      "ppg-15 stearyl ether", "polysorbate 20", "polysorbate 60", "polysorbate 80",
+      "peg-6", "peg-20", "peg-30", "peg-60", "peg-90", "peg-6 caprylic/capric glycerides",
+      "peg-60 hydrogenated castor oil", "peg-40 sorbitan peroleate", "ceteareth-30", "ceteareth-6",
+      "laureth-2", "laureth-9", "laureth-12", "oleth-5", "steareth-10", "steareth-100",
+      "trideceth-9", "trideceth-12", "ppg-26-buteth-26", "ppg-12-buteth-16", "isoceteth-20"
     ],
     microplastic: [
       "polyethylene", "polypropylene", "nylon-12", "nylon-6", "acrylates copolymer",
