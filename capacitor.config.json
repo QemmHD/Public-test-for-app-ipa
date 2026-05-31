@@ -1,6 +1,6 @@
 {
-  "appId": "com.shiftlog.app",
-  "appName": "ShiftLog",
+  "appId": "com.launchtest.app",
+  "appName": "LaunchTest",
   "webDir": "www",
   "ios": {
     "backgroundColor": "#0a0a0f",
