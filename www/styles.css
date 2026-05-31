@@ -146,6 +146,14 @@ html, body {
 .study-title { font-weight: 600; font-size: 14px; line-height: 1.4; }
 .study-src { color: var(--mut); font-size: 13px; margin-top: 3px; }
 .disclaimer { color: var(--mut); font-size: 12px; text-align: center; margin-top: 22px; }
+.research-btn { margin-top: 16px; }
+.research { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 15px 16px; margin-top: 12px; }
+.research .rh { font-size: 13px; font-weight: 800; color: var(--accent); display: flex; align-items: center; gap: 8px; }
+.research .rdesc { color: var(--mut); font-size: 13px; margin-top: 6px; font-style: italic; }
+.research p { font-size: 14.5px; line-height: 1.6; color: #e6e6ee; margin-top: 10px; }
+.research .rlink { display: inline-block; margin-top: 10px; color: var(--accent); font-weight: 600; font-size: 14px; text-decoration: none; }
+.spinner.small { width: 20px; height: 20px; border-width: 3px; display: inline-block; vertical-align: middle; margin-right: 8px; }
+.research .rh .spinner.small { margin: 0; }
 
 /* photo add */
 .photo-card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 24px 18px; text-align: center; }
