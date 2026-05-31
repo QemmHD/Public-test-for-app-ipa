@@ -1,4 +1,4 @@
-name: Build LaunchTest IPA
+name: Build NutriCheck IPA
 
 on:
   push:
@@ -28,6 +28,18 @@ jobs:
         run: |
           npx cap add ios
           npx cap sync ios
+
+      # The barcode scanner uses the camera via getUserMedia, and the
+      # "Add by photo" flow opens the camera. iOS requires a usage-description
+      # string in Info.plist or the app crashes when requesting the camera.
+      - name: Add camera permission to Info.plist
+        run: |
+          PLIST=ios/App/App/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string 'NutriCheck uses the camera to scan barcodes and read ingredient labels.'" "$PLIST" \
+            || /usr/libexec/PlistBuddy -c "Set :NSCameraUsageDescription 'NutriCheck uses the camera to scan barcodes and read ingredient labels.'" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryUsageDescription string 'NutriCheck can read ingredient labels from your photos.'" "$PLIST" \
+            || /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryUsageDescription 'NutriCheck can read ingredient labels from your photos.'" "$PLIST"
+          echo "== Info.plist camera keys ==" && /usr/libexec/PlistBuddy -c "Print :NSCameraUsageDescription" "$PLIST"
 
       - name: Install CocoaPods dependencies
         run: |
@@ -68,14 +80,14 @@ jobs:
           # Sanity check: confirm the binary is an arm64 device Mach-O.
           echo "== Mach-O architecture =="
           lipo -info "Payload/App.app/App" || file "Payload/App.app/App"
-          zip -qr LaunchTest.ipa Payload
-          mv LaunchTest.ipa ../../LaunchTest.ipa
+          zip -qr NutriCheck.ipa Payload
+          mv NutriCheck.ipa ../../NutriCheck.ipa
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: LaunchTest-IPA
-          path: LaunchTest.ipa
+          name: NutriCheck-IPA
+          path: NutriCheck.ipa
           retention-days: 90
 
       # Publish the IPA as a GitHub Release asset so there is a direct,
@@ -84,11 +96,11 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
-          name: LaunchTest build ${{ github.run_number }}
+          name: NutriCheck build ${{ github.run_number }}
           body: |
             Unsigned **device (arm64)** IPA for sideloading.
 
-            Download `LaunchTest.ipa` below and upload it to the iOSGods
+            Download `NutriCheck.ipa` below and upload it to the iOSGods
             signer (App+ / VIP online sign, or Sideloadly). They re-sign it
             with their certificate; this build is intentionally unsigned.
-          files: LaunchTest.ipa
+          files: NutriCheck.ipa
