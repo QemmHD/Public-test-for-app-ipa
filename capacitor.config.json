@@ -1,10 +1,10 @@
 {
-  "appId": "com.launchtest.app",
-  "appName": "LaunchTest",
+  "appId": "com.nutricheck.app",
+  "appName": "NutriCheck",
   "webDir": "www",
   "ios": {
     "backgroundColor": "#0a0a0f",
     "contentInset": "automatic",
-    "limitsNavigationsToAppBoundDomains": true
+    "limitsNavigationsToAppBoundDomains": false
   }
 }
