@@ -19,8 +19,8 @@
     view: "home", prev: "home",
     product: null, ingDetail: null, ingTab: "what",
     history: [], favorites: [], profile: {}, health: {}, settings: { theme: "dark" }, pending: null,
-    searchResults: null, searchQuery: "", searchSort: "rel", historyFilter: "all",
-    alts: { forId: "", loading: false, list: null }, scoreOpen: false, nutOpen: false, onboarded: true,
+    searchResults: null, searchRaw: null, searchQuery: "", searchSort: "rel", historyFilter: "all",
+    alts: { forId: "", loading: false, list: null }, scoreOpen: false, onboarded: true,
     insightsFilter: "all", editHealth: false, encQuery: "", ingFrom: "result",
     research: { term: "", loading: false, data: null, error: false },
     busy: false, statusMsg: ""
@@ -283,16 +283,24 @@
   }
 
   /* -------------------------------------------------- Open Food Facts */
-  var OFF_FIELDS = "code,product_name,brands,image_front_small_url,image_front_url,ingredients_text,ingredients_text_en,additives_tags,categories_tags,nova_group,nutriscore_grade,nutriments";
+  var OFF_FIELDS = "code,product_name,brands,image_front_small_url,image_front_url,ingredients_text,ingredients_text_en,additives_tags,categories_tags,serving_quantity,nova_group,nutriscore_grade,nutriments";
   function mapOff(p, code) {
     if (!p) return null;
     var cats = p.categories_tags || [], catTag = "";
     for (var i = cats.length - 1; i >= 0; i--) { if (/^en:/.test(cats[i]) && cats[i].length > 5) { catTag = cats[i].slice(3); break; } }
     if (!catTag && cats.length) catTag = String(cats[cats.length - 1]).replace(/^[a-z]{2}:/, "");
     return { barcode: code || p.code || "", name: p.product_name || "Unknown product", brand: p.brands || "",
-      image: p.image_front_small_url || p.image_front_url || "", category: catTag,
+      image: p.image_front_small_url || p.image_front_url || "", category: catTag, serving_quantity: p.serving_quantity,
       ingredientsText: p.ingredients_text_en || p.ingredients_text || "",
       nova_group: p.nova_group, nutriscore_grade: p.nutriscore_grade, nutriments: p.nutriments || {} };
+  }
+  // Best-available calories per portion: per-serving if known, else per-100g scaled by serving size, else per-100g.
+  function computeKcal(off) {
+    var nu = off && off.nutriments; if (!nu) return null;
+    var s = num(nu["energy-kcal_serving"]); if (s != null) return Math.round(s);
+    var per100 = num(nu["energy-kcal_100g"]); if (per100 == null) return null;
+    var sq = num(off.serving_quantity);
+    return Math.round(sq ? per100 * sq / 100 : per100);
   }
   function lookupBarcode(code) {
     var url = OFF_BASE + encodeURIComponent(code) + ".json?fields=" + OFF_FIELDS;
@@ -321,7 +329,7 @@
       image: (off && off.image) || "", category: (off && off.category) || "", photoKey: opts.photoKey || "", ingredientsText: text,
       source: opts.source || (off ? "Open Food Facts" : "Photo / OCR"),
       nutriments: (off && off.nutriments) || null,
-      kcal: (off && off.nutriments) ? (num(off.nutriments["energy-kcal_serving"]) || num(off.nutriments["energy-kcal_100g"]) || null) : null,
+      kcal: computeKcal(off),
       score: r.score, badge: r.badge, classified: r.classified, nutrition: r.nutrition,
       flaggedCount: r.flaggedCount, scoreReasons: r.scoreReasons, logged: "checked", ateAt: 0, ts: Date.now()
     };
@@ -416,7 +424,7 @@
         '<div class="brk-val">' + (num(p.kcal) != null ? Math.round(num(p.kcal)) + " kcal" : "—") + '</div></div>';
     }).join("") : '<div class="lrow"><div class="row-main"><div class="row-sub">Nothing logged today — tap “I ate this” on a product.</div></div></div>';
     return '<div class="panel glass today"><div class="panel-h">Today <span class="cnt">' + items.length + ' eaten</span></div>' +
-      '<div class="today-cal"><div><span class="te">' + eaten + '</span> <span class="tt">/ ' + tgt.target + ' kcal</span></div>' +
+      '<div class="today-cal"><div><span class="te">≈' + eaten + '</span> <span class="tt">/ ' + tgt.target + ' kcal</span></div>' +
       '<div class="trem' + (remaining < 0 ? " over" : "") + '">' + (remaining >= 0 ? remaining + " left" : (-remaining) + " over") + '</div></div>' +
       '<div class="tbar"><div class="tfill" style="width:' + pct + '%' + (remaining < 0 ? ";background:var(--bad)" : "") + '"></div></div>' + rows + '</div>';
   }
@@ -450,12 +458,12 @@
   function runSearch(query) {
     query = String(query || "").trim();
     if (query.length < 2) return;
-    state.searchQuery = query; state.searchResults = null;
+    state.searchQuery = query; state.searchRaw = null; state.searchResults = null; state.searchSort = "rel";
     go("search");
     busy(true, "Searching…");
     searchProducts(query).then(function (results) {
-      busy(false, ""); state.searchResults = results; render();
-    }).catch(function () { busy(false, ""); state.searchResults = []; render(); });
+      busy(false, ""); state.searchRaw = results; render();
+    }).catch(function () { busy(false, ""); state.searchRaw = []; render(); });
   }
   function openOff(off) {
     if (!off) return;
@@ -617,21 +625,24 @@
   }
   function viewSearch() {
     var rows = "", sortChips = "";
-    if (state.searchResults && state.searchResults.length) {
-      if (state.searchSort === "health") {
-        var rank = { a: 0, b: 1, c: 2, d: 3, e: 4 };
-        state.searchResults.sort(function (x, y) {
-          var rx = rank[String(x.nutriscore_grade || "").toLowerCase()]; rx = (rx == null ? 9 : rx);
-          var ry = rank[String(y.nutriscore_grade || "").toLowerCase()]; ry = (ry == null ? 9 : ry);
-          return rx - ry;
-        });
-      }
+    // Build display list from the untouched raw results so toggling sort is reversible.
+    var list = state.searchRaw ? state.searchRaw.slice() : null;
+    if (list && list.length && state.searchSort === "health") {
+      var rank = { a: 0, b: 1, c: 2, d: 3, e: 4 };
+      list.sort(function (x, y) {
+        var rx = rank[String(x.nutriscore_grade || "").toLowerCase()]; rx = (rx == null ? 9 : rx);
+        var ry = rank[String(y.nutriscore_grade || "").toLowerCase()]; ry = (ry == null ? 9 : ry);
+        return rx - ry;
+      });
+    }
+    state.searchResults = list; // the click handler indexes into this exact (displayed) array
+    if (list && list.length) {
       sortChips = '<div class="chips sm"><button class="chip' + (state.searchSort !== "health" ? " on" : "") + '" data-sort="rel">Relevance</button>' +
         '<button class="chip' + (state.searchSort === "health" ? " on" : "") + '" data-sort="health">Healthiest first</button></div>';
     }
-    if (state.searchResults == null) rows = '<div class="empty small">Searching…</div>';
-    else if (!state.searchResults.length) rows = '<div class="empty">No products found for “' + esc(state.searchQuery) + '”.<br>Try a different name or scan the barcode.</div>';
-    else rows = state.searchResults.map(function (o, i) {
+    if (state.searchRaw == null) rows = '<div class="empty small">Searching…</div>';
+    else if (!list.length) rows = '<div class="empty">No products found for “' + esc(state.searchQuery) + '”.<br>Try a different name or scan the barcode.</div>';
+    else rows = list.map(function (o, i) {
       return '<div class="row card tappable" data-search-idx="' + i + '">' +
         (o.image ? '<img class="srch-img" src="' + esc(o.image) + '" alt="">' : '<div class="srch-img ph">🥫</div>') +
         '<div class="row-main"><div class="row-title">' + esc(o.name) + '</div>' +
@@ -897,7 +908,7 @@
       return (STATUS_RANK[b.risk] - STATUS_RANK[a.risk]) || a.names[0].localeCompare(b.names[0]);
     });
     if (q) list = list.filter(function (a) {
-      return a.names.some(function (n) { return n.indexOf(q) !== -1; }) || norm(a.category).indexOf(q) !== -1;
+      return a.names.some(function (n) { return norm(n).indexOf(q) !== -1; }) || norm(a.category).indexOf(q) !== -1;
     });
     var rows = list.map(function (a) {
       return '<div class="lrow tappable" data-enc="' + a.id + '">' + dot(statusColor(a.risk)) +
