@@ -1342,7 +1342,7 @@ var CB_DATA = (function () {
      page even when it isn't one of the individually-written additives. */
   const groups = {
     seedOil: {
-      category: "Industrial seed/vegetable oil", status: "caution",
+      category: "Industrial seed/vegetable oil", status: "limit",
       summary: "Highly refined oil rich in omega-6 fat and a marker of processed food.",
       whatIs: "Seed and vegetable oils (canola, soybean, corn, sunflower, cottonseed, etc.) are extracted from seeds using high heat and chemical solvents, then bleached and deodorized.",
       whyFlagged: "They are very high in omega-6 linoleic acid and oxidize easily during processing and cooking. A diet heavily skewed toward omega-6 is a hallmark of ultra-processed eating.",
@@ -1369,7 +1369,7 @@ var CB_DATA = (function () {
       studies: [{ title: "Use of non-sugar sweeteners — WHO guideline", source: "World Health Organization", year: 2023 }]
     },
     vague: {
-      category: "Undisclosed ingredient", status: "caution",
+      category: "Undisclosed ingredient", status: "limit",
       summary: "A vague catch-all term that can hide many undisclosed compounds.",
       whatIs: "Terms like 'natural flavors', 'artificial flavors' and 'spices' are umbrella labels that can each represent dozens of individual compounds a manufacturer isn't required to disclose.",
       whyFlagged: "Lack of transparency — you can't tell exactly what's in it, and these blends may contain solvents, preservatives or allergens.",

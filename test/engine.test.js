@@ -417,3 +417,71 @@ test("parseIngredients does not drop legitimate look-alikes (iron, milk fat)", (
     assert.ok(got.includes(n), "expected to keep: " + n);
   });
 });
+
+/* ---------------- evidence calibration (Yuka/Bobby reconciliation) ----------------
+ * Seed/vegetable oils and vague flavor terms are calibrated to `limit`, not `caution`:
+ * RCTs do not support the seed-oil "inflammation" claim, and undisclosed-flavor terms
+ * are a transparency concern, not an established safety hazard. The strict,
+ * evidence-backed flags below must stay exactly where they are. */
+["canola oil", "vegetable oil", "soybean oil", "sunflower oil"].forEach((oil) => {
+  test("CALIBRATION: seed oil '" + oil + "' is limit, not caution", () => {
+    const c = engine.classify(engine.norm(oil), oil, "food");
+    assert.strictEqual(c.status, "limit");
+    assert.strictEqual(c.group, "seedOil");
+  });
+});
+
+["spices", "artificial flavor", "natural flavoring"].forEach((term) => {
+  test("CALIBRATION: vague term '" + term + "' is limit, not caution", () => {
+    const c = engine.classify(engine.norm(term), term, "food");
+    assert.strictEqual(c.status, "limit");
+  });
+});
+
+test("CALIBRATION: olive oil is NOT swept into the seed-oil bucket", () => {
+  const c = engine.classify(engine.norm("Olive Oil"), "olive oil", "food");
+  assert.notStrictEqual(c.group, "seedOil");
+  assert.notStrictEqual(c.status, "caution");
+});
+
+test("CALIBRATION REGRESSION: evidence-backed strict flags are unchanged", () => {
+  const strict = [
+    ["potassium bromate", "avoid"], ["sodium nitrite", "avoid"], ["titanium dioxide", "avoid"],
+    ["red 40", "caution"], ["aspartame", "caution"], ["carrageenan", "caution"], ["tbhq", "caution"]
+  ];
+  strict.forEach(([name, exp]) => {
+    const c = engine.classify(engine.norm(name), name, "food");
+    assert.strictEqual(c.status, exp, name + " should stay " + exp);
+  });
+});
+
+/* --------------------- Yuka/Bobby evidence calibration (seed oils, vague) */
+test("seed/vegetable oils calibrate to limit (not caution)", () => {
+  ["canola oil", "vegetable oil", "soybean oil"].forEach((n) => {
+    const c = engine.classify(engine.norm(n), n, "food");
+    assert.strictEqual(c.status, "limit", n + " should be limit");
+    assert.strictEqual(c.group, "seedOil", n + " should hit seedOil group");
+  });
+});
+
+test("vague flavor terms calibrate to limit (transparency, not safety)", () => {
+  ["spices", "flavoring"].forEach((n) => {
+    const c = engine.classify(engine.norm(n), n, "food");
+    assert.strictEqual(c.status, "limit", n + " should be limit");
+    assert.strictEqual(c.group, "vague", n + " should hit vague group");
+  });
+});
+
+test("olive oil is not over-flagged as an industrial seed oil", () => {
+  const c = engine.classify(engine.norm("olive oil"), "olive oil", "food");
+  assert.notStrictEqual(c.group, "seedOil");
+  assert.ok(c.status === "good" || c.status === "ok", "olive oil should not be flagged");
+});
+
+test("evidence-backed avoid ratings remain unchanged after calibration", () => {
+  [["potassium bromate", "avoid"], ["sodium nitrite", "avoid"], ["titanium dioxide", "avoid"]]
+    .forEach(([n, exp]) => {
+      const c = engine.classify(engine.norm(n), n, "food");
+      assert.strictEqual(c.status, exp, n + " should stay " + exp);
+    });
+});

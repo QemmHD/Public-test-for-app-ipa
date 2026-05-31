@@ -185,7 +185,7 @@
             return { status: meta.status, group: ck[ci], reason: meta.reason };
           }
         }
-        if (listHitTok(vagueT, toks)) return { status: "caution", group: "vague", reason: "Undisclosed ingredient" };
+        if (listHitTok(vagueT, toks)) return { status: "limit", group: "vague", reason: "Undisclosed ingredient" };
         if (listHitTok(cleanT, toks)) return { status: "good", group: "clean", reason: "Recognized ingredient" };
         return { status: "unknown", group: "unknown", reason: "Not catalogued yet" };
       }
@@ -194,8 +194,8 @@
       var a = findInIndex(foodIndex, toks);
       if (a) return { status: a.risk, additive: a, name: a.names[0], reason: a.category };
       if (listHitTok(sweetenersT, toks)) return { status: "caution", group: "sweetener", reason: "Artificial sweetener" };
-      if (listHitTok(seedOilsT, toks)) return { status: "caution", group: "seedOil", reason: "Industrial seed oil" };
-      if (listHitTok(vagueT, toks)) return { status: "caution", group: "vague", reason: "Undisclosed ingredient" };
+      if (listHitTok(seedOilsT, toks)) return { status: "limit", group: "seedOil", reason: "Industrial seed oil" };
+      if (listHitTok(vagueT, toks)) return { status: "limit", group: "vague", reason: "Undisclosed ingredient" };
       var en = findENumberByName(toks) || findENumberByCode(raw);
       if (en) return { status: en.risk, group: egroup(en.risk), name: en.name, enumber: en.code, reason: "Food additive" + (en.code ? " · " + en.code : "") };
       if (listHitTok(addedSugarsT, toks)) return { status: "limit", group: "addedSugar", reason: "Added sugar" };
