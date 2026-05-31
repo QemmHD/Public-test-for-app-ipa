@@ -210,6 +210,22 @@ body::before {
 .ti-ico { font-size: 22px; }
 .ti-lbl { font-size: 11px; margin-top: 3px; font-weight: 650; }
 
+/* svg icons */
+.ic { width: 20px; height: 20px; flex-shrink: 0; vertical-align: -4px; }
+.big-btn .ic { width: 22px; height: 22px; vertical-align: -5px; margin-right: 6px; }
+.search-go { display: flex; align-items: center; justify-content: center; }
+.search-go .ic { width: 22px; height: 22px; vertical-align: 0; }
+.ghost-btn .ic { width: 19px; height: 19px; vertical-align: -4px; margin-right: 4px; }
+.ti-ico .ic { width: 25px; height: 25px; }
+.ti-ico { height: 25px; display: flex; align-items: center; justify-content: center; }
+
+/* eaten / checking segmented control */
+.logseg { display: flex; gap: 8px; margin: 14px 0 2px; }
+.seg-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 13px 8px; border-radius: 14px; border: 1px solid var(--brd); background: var(--glass); color: var(--mut); font-weight: 700; font-size: 14px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+.seg-btn .ic { width: 18px; height: 18px; vertical-align: 0; }
+.seg-btn.on { color: #fff; border-color: transparent; background: linear-gradient(135deg, var(--accent), var(--accent2)); box-shadow: 0 8px 22px rgba(90,110,255,0.32); }
+.seg-btn.on.ate { background: linear-gradient(135deg, #34d27b, #1f9d5c); box-shadow: 0 8px 22px rgba(52,210,123,0.34); }
+
 /* favorite star */
 .fav-btn { position: absolute; top: 14px; right: 14px; z-index: 2; width: 42px; height: 42px; border-radius: 50%; border: 1px solid var(--brd); background: rgba(0,0,0,0.25); color: #ffd24a; font-size: 21px; line-height: 0; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
 .fav-btn.on { background: rgba(255,210,74,0.16); border-color: rgba(255,210,74,0.5); }

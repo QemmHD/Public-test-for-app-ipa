@@ -20,7 +20,7 @@
     product: null, ingDetail: null, ingTab: "what",
     history: [], favorites: [], profile: {}, pending: null,
     searchResults: null, searchQuery: "", historyFilter: "all",
-    alts: { forId: "", loading: false, list: null }, scoreOpen: false, onboarded: true,
+    alts: { forId: "", loading: false, list: null }, scoreOpen: false, onboarded: true, insightsFilter: "all",
     research: { term: "", loading: false, data: null, error: false },
     busy: false, statusMsg: ""
   };
@@ -296,8 +296,17 @@
       image: (off && off.image) || "", category: (off && off.category) || "", photoKey: opts.photoKey || "", ingredientsText: text,
       source: opts.source || (off ? "Open Food Facts" : "Photo / OCR"),
       score: r.score, badge: r.badge, classified: r.classified, nutrition: r.nutrition,
-      flaggedCount: r.flaggedCount, scoreReasons: r.scoreReasons, ts: Date.now()
+      flaggedCount: r.flaggedCount, scoreReasons: r.scoreReasons, logged: "checked", ts: Date.now()
     };
+  }
+  function setLogged(lg) {
+    if (!state.product) return;
+    state.product.logged = lg;
+    var h = state.history.filter(function (x) { return x.id === state.product.id; })[0];
+    if (h) h.logged = lg;
+    var f = state.favorites.filter(function (x) { return x.id === state.product.id; })[0];
+    if (f) f.logged = lg;
+    saveHistory(); saveFavs(); render();
   }
   function searchByCategory(cat) {
     var url = "https://world.openfoodfacts.org/cgi/search.pl?action=process&json=1&page_size=40" +
@@ -474,6 +483,18 @@
   function scoreColor(cls) { return cls === "exc" ? "#1fae54" : cls === "good" ? "#7ac943" : cls === "mid" ? "#ff9f1c" : "#ff3b30"; }
   function statusColor(st) { return st === "avoid" ? "#ff3b30" : st === "caution" ? "#ff7a45" : st === "limit" ? "#ff9f1c" : st === "good" ? "#2fd07a" : "#8a8a99"; }
   function dot(color) { return '<span class="dot" style="background:' + color + '"></span>'; }
+  var ICONS = {
+    scan: '<path d="M4 8V6a2 2 0 0 1 2-2h2"/><path d="M16 4h2a2 2 0 0 1 2 2v2"/><path d="M20 16v2a2 2 0 0 1-2 2h-2"/><path d="M8 20H6a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    chart: '<path d="M5 21V10"/><path d="M12 21V4"/><path d="M19 21v-7"/><path d="M3 21h18"/>',
+    user: '<circle cx="12" cy="8" r="4"/><path d="M4.5 21a7.5 7.5 0 0 1 15 0"/>',
+    search: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',
+    camera: '<path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.5"/>',
+    keypad: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h.01M12 7h.01M16 7h.01M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01"/>',
+    tag: '<path d="M3 12l9-9 9 9-9 9z"/><circle cx="8.5" cy="8.5" r="1.4"/>',
+    fork: '<path d="M7 3v7a2 2 0 0 0 2 2v9M5 3v4M9 3v4M17 3c-1.5 0-2.5 2-2.5 5s1 4 2.5 4 2.5-1 2.5-4-1-5-2.5-5zM17 16v5"/>'
+  };
+  function icon(n, cls) { return '<svg class="ic' + (cls ? " " + cls : "") + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + (ICONS[n] || "") + '</svg>'; }
 
   function go(view) {
     if (view !== "scanner") stopScanner();
@@ -486,10 +507,10 @@
     return '<div class="screen">' +
       '<header class="hd"><div class="logo">🥗 NutriCheck</div><div class="sub">Scan food. See what\'s really inside.</div></header>' +
       '<div class="searchbar"><input id="q" class="text-input search-input" placeholder="Search a product or brand…" />' +
-      '<button class="search-go" data-act="searchGo">Search</button></div>' +
-      '<button class="big-btn" data-act="scan">📷 Scan a barcode</button>' +
-      '<div class="dual"><button class="ghost-btn" data-act="addPhoto">🏷️ Add by photo</button>' +
-      '<button class="ghost-btn" data-act="manual">⌨️ Enter code</button></div>' +
+      '<button class="search-go" data-act="searchGo">' + icon("search") + '</button></div>' +
+      '<button class="big-btn" data-act="scan">' + icon("scan") + ' Scan a barcode</button>' +
+      '<div class="dual"><button class="ghost-btn" data-act="addPhoto">' + icon("tag") + ' Add by photo</button>' +
+      '<button class="ghost-btn" data-act="manual">' + icon("keypad") + ' Enter code</button></div>' +
       (recent.length ? ('<div class="section-title">Recent scans</div>' + recent.map(historyRow).join("")) :
         '<div class="empty">No scans yet.<br>Scan your first product above 👆</div>') +
       '</div>';
@@ -566,6 +587,10 @@
           '<div class="badge ' + p.badge.cls + '">' + esc(p.badge.label) + '</div>' +
           '<button class="why-btn" data-act="toggleScore">' + (state.scoreOpen ? "Hide score details" : "How is this scored?") + '</button>' +
         '</div>' +
+      '</div>' +
+      '<div class="logseg">' +
+        '<button class="seg-btn' + (p.logged === "eaten" ? " on ate" : "") + '" data-log="eaten">' + icon("fork") + ' I ate this</button>' +
+        '<button class="seg-btn' + (p.logged !== "eaten" ? " on" : "") + '" data-log="checked">' + icon("search") + ' Just checking</button>' +
       '</div>' +
       whyBlock(p) +
       (alerts.length ? ('<div class="alerts">' + alerts.map(function (a) {
@@ -656,18 +681,25 @@
   }
 
   function viewInsights() {
-    var s = computeInsights(state.history);
-    if (!s.n) return '<div class="screen"><header class="hd"><div class="logo">Insights</div></header>' +
-      '<div class="empty">Scan a few products and your stats show up here 📊</div></div>';
+    var eatenMode = state.insightsFilter === "eaten";
+    var eatenCount = state.history.filter(function (p) { return p.logged === "eaten"; }).length;
+    var source = eatenMode ? state.history.filter(function (p) { return p.logged === "eaten"; }) : state.history;
+    var chips = '<div class="chips">' +
+      '<button class="chip' + (!eatenMode ? " on" : "") + '" data-ins="all">All scans</button>' +
+      '<button class="chip' + (eatenMode ? " on" : "") + '" data-ins="eaten">🍽 Eaten (' + eatenCount + ')</button></div>';
+    var s = computeInsights(source);
+    if (!s.n) return '<div class="screen"><header class="hd"><div class="logo">Insights</div>' +
+      '<div class="sub">Your scanning habits</div></header>' + chips +
+      '<div class="empty">' + (eatenMode ? "Mark products as “I ate this” on the result screen to track your diet here 🍽" : "Scan a few products and your stats show up here 📊") + '</div></div>';
     function seg(cls, v) { return v ? '<div class="seg ' + cls + '" style="flex:' + v + '"></div>' : ""; }
     var bar = '<div class="distbar">' + seg("exc", s.dist.exc) + seg("good", s.dist.good) + seg("mid", s.dist.mid) + seg("bad", s.dist.bad) + '</div>';
     var topHtml = s.top.length ? s.top.map(function (f) {
       return '<div class="lrow"><div class="row-main"><div class="row-title">' + esc(f.name) + '</div></div><div class="status-tag caution">' + f.count + '×</div></div>';
     }).join("") : '<div class="lrow"><div class="row-main"><div class="row-sub">No flagged additives yet 🎉</div></div></div>';
     return '<div class="screen">' +
-      '<header class="hd"><div class="logo">Insights</div><div class="sub">Your scanning habits</div></header>' +
+      '<header class="hd"><div class="logo">Insights</div><div class="sub">Your scanning habits</div></header>' + chips +
       '<div class="stat-grid">' +
-        '<div class="stat card"><div class="stat-num">' + s.n + '</div><div class="stat-lbl">Products scanned</div></div>' +
+        '<div class="stat card"><div class="stat-num">' + s.n + '</div><div class="stat-lbl">' + (eatenMode ? "Foods eaten" : "Products scanned") + '</div></div>' +
         '<div class="stat card"><div class="stat-num" style="color:' + scoreColor(bandFor(s.avg, false).cls) + '">' + s.avg + '</div><div class="stat-lbl">Average score</div></div>' +
       '</div>' +
       '<div class="panel glass"><div class="panel-h">Verdict mix</div><div class="lrow" style="display:block">' + bar +
@@ -724,11 +756,11 @@
       (title ? '<div class="bb-title">' + esc(title) + '</div>' : '') + '</div>';
   }
   function tabBar() {
-    var items = [["home", "Scan", "📷"], ["history", "History", "🕘"], ["insights", "Insights", "📊"], ["profile", "Profile", "👤"]];
+    var items = [["home", "Scan", "scan"], ["history", "History", "clock"], ["insights", "Insights", "chart"], ["profile", "Profile", "user"]];
     var active = state.view === "history" ? "history" : state.view === "insights" ? "insights" : state.view === "profile" ? "profile" : "home";
     return '<nav class="tabbar">' + items.map(function (i) {
       return '<button class="tabitem' + (active === i[0] ? " on" : "") + '" data-nav="' + i[0] + '">' +
-        '<div class="ti-ico">' + i[2] + '</div><div class="ti-lbl">' + i[1] + '</div></button>';
+        '<div class="ti-ico">' + icon(i[2]) + '</div><div class="ti-lbl">' + i[1] + '</div></button>';
     }).join("") + '</nav>';
   }
 
@@ -754,9 +786,11 @@
 
   /* --------------------------------------------------------- events */
   function onClick(e) {
-    var t = e.target.closest("[data-act],[data-nav],[data-open],[data-ingidx],[data-tab],[data-toggle],[data-research],[data-search-idx],[data-alt],[data-fav],[data-hist]");
+    var t = e.target.closest("[data-act],[data-nav],[data-open],[data-ingidx],[data-tab],[data-toggle],[data-research],[data-search-idx],[data-alt],[data-fav],[data-hist],[data-log],[data-ins]");
     if (!t) return;
     if (t.dataset.fav != null) { toggleFav(state.product); render(); return; }
+    if (t.dataset.log != null) { setLogged(t.dataset.log); return; }
+    if (t.dataset.ins != null) { state.insightsFilter = t.dataset.ins; render(); return; }
     if (t.dataset.hist != null) { state.historyFilter = t.dataset.hist; render(); return; }
     if (t.dataset.alt != null) { var ap = state.alts.list && state.alts.list[+t.dataset.alt]; if (ap) openResult(ap); return; }
     if (t.dataset.research != null) { doResearch(t.dataset.research); return; }
