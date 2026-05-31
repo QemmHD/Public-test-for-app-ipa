@@ -5,6 +5,9 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-ios:
     runs-on: macos-latest
@@ -74,3 +77,18 @@ jobs:
           name: LaunchTest-IPA
           path: LaunchTest.ipa
           retention-days: 90
+
+      # Publish the IPA as a GitHub Release asset so there is a direct,
+      # one-click download link for the file to upload into the iOSGods signer.
+      - name: Publish IPA to a GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: LaunchTest build ${{ github.run_number }}
+          body: |
+            Unsigned **device (arm64)** IPA for sideloading.
+
+            Download `LaunchTest.ipa` below and upload it to the iOSGods
+            signer (App+ / VIP online sign, or Sideloadly). They re-sign it
+            with their certificate; this build is intentionally unsigned.
+          files: LaunchTest.ipa
