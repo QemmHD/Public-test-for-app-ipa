@@ -375,9 +375,9 @@
   function researchBlock(d) {
     var r = state.research;
     if (!r || r.term !== d.title) return "";
-    if (r.loading) return '<div class="research"><div class="spinner small"></div><div class="rh">Researching “' + esc(d.title) + '” online…</div></div>';
-    if (r.error || !r.data) return '<div class="research"><div class="rh">🔎 No public summary found for “' + esc(d.title) + '” yet.</div></div>';
-    return '<div class="research"><div class="rh">🔎 Researched · Wikipedia</div>' +
+    if (r.loading) return '<div class="research glass"><div class="spinner small"></div><div class="rh">Researching “' + esc(d.title) + '” online…</div></div>';
+    if (r.error || !r.data) return '<div class="research glass"><div class="rh">🔎 No public summary found for “' + esc(d.title) + '” yet.</div></div>';
+    return '<div class="research glass"><div class="rh">🔎 Researched · Wikipedia</div>' +
       (r.data.description ? '<div class="rdesc">' + esc(r.data.description) + '</div>' : "") +
       '<p>' + esc(r.data.extract) + '</p>' +
       (r.data.url ? '<a class="rlink" href="' + esc(r.data.url) + '" target="_blank" rel="noopener">Read more on Wikipedia ›</a>' : "") +
@@ -465,36 +465,40 @@
         STATUS_LABEL[st] + ' <span class="cnt">' + rows.length + '</span></div>' + rows.join("");
     });
 
+    var c = scoreColor(p.badge.cls);
     return '<div class="screen result">' + backBar("") +
-      '<div class="product-head">' +
-        (p.image ? '<img class="phead-img" src="' + esc(p.image) + '" alt="">' : '<div class="phead-img ph">🥫</div>') +
-        '<div class="phead-txt"><div class="phead-name">' + esc(p.name) + '</div>' +
-        '<div class="phead-brand">' + esc(p.brand || "") + '</div>' +
-        '<div class="phead-src">via ' + esc(p.source) + '</div></div>' +
-      '</div>' +
-      '<div class="score-wrap">' +
-        '<div class="score-ring" style="--c:' + scoreColor(p.badge.cls) + ';--p:' + p.score + '">' +
-        '<div class="score-num">' + p.score + '</div><div class="score-of">/100</div></div>' +
-        '<div class="badge ' + p.badge.cls + '">' + esc(p.badge.label) + '</div>' +
+      '<div class="hero glass" style="--c:' + c + '">' +
+        '<div class="product-head">' +
+          (p.image ? '<img class="phead-img" src="' + esc(p.image) + '" alt="">' : '<div class="phead-img ph">🥫</div>') +
+          '<div class="phead-txt"><div class="phead-name">' + esc(p.name) + '</div>' +
+          '<div class="phead-brand">' + esc(p.brand || "") + '</div>' +
+          '<div class="phead-src">via ' + esc(p.source) + '</div></div>' +
+        '</div>' +
+        '<div class="score-wrap">' +
+          '<div class="score-glow"></div>' +
+          '<div class="score-ring" style="--c:' + c + ';--p:' + p.score + '">' +
+          '<div class="score-num">' + p.score + '</div><div class="score-of">out of 100</div></div>' +
+          '<div class="badge ' + p.badge.cls + '">' + esc(p.badge.label) + '</div>' +
+        '</div>' +
       '</div>' +
       (alerts.length ? ('<div class="alerts">' + alerts.map(function (a) {
         return '<div class="alert">⚠️ <b>' + esc(cap(a.key)) + '</b>: contains ' + esc(a.hits.join(", ")) + '</div>';
       }).join("") + '</div>') : "") +
-      (n.negatives && n.negatives.length ? '<div class="section-title neg">⚠ Negatives</div>' + n.negatives.map(brkRow).join("") : "") +
-      (n.positives && n.positives.length ? '<div class="section-title pos">✓ Positives</div>' + n.positives.map(brkRow).join("") : "") +
-      '<div class="section-title">Ingredients <span class="cnt">' + p.classified.length + '</span></div>' +
+      (n.negatives && n.negatives.length ? '<div class="panel glass"><div class="panel-h neg"><span>⚠</span> Negatives</div>' + n.negatives.map(brkRow).join("") + '</div>' : "") +
+      (n.positives && n.positives.length ? '<div class="panel glass"><div class="panel-h pos"><span>✓</span> Positives</div>' + n.positives.map(brkRow).join("") + '</div>' : "") +
+      '<div class="panel glass"><div class="panel-h">Ingredients <span class="cnt">' + p.classified.length + '</span></div>' +
       '<div class="legend">Tap any ingredient for details</div>' +
       (p.classified.length ? groupsHtml : '<div class="empty small">No ingredient list available for this product.</div>') +
-      '</div>';
+      '</div></div>';
   }
   function brkRow(r) {
-    return '<div class="brk card">' + dot(sevColor(r.sev)) +
+    return '<div class="lrow brk">' + dot(sevColor(r.sev)) +
       '<div class="row-main"><div class="row-title">' + esc(r.label) + '</div>' +
       '<div class="row-sub">' + esc(r.note || "") + '</div></div>' +
       '<div class="brk-val ' + r.sev + '">' + esc(r.value) + '</div></div>';
   }
   function ingredientRow(c, idx) {
-    return '<div class="ing-row card tappable" data-ingidx="' + idx + '">' + dot(statusColor(c.status)) +
+    return '<div class="lrow ing-row tappable" data-ingidx="' + idx + '">' + dot(statusColor(c.status)) +
       '<div class="row-main"><div class="row-title">' + esc(c.raw) + '</div>' +
       '<div class="row-sub">' + esc(c.reason) + '</div></div>' +
       '<div class="status-tag ' + c.status + '">' + STATUS_LABEL[c.status] + ' ›</div></div>';
@@ -508,12 +512,12 @@
     else if (state.ingTab === "why") body = '<p>' + esc(d.whyFlagged) + '</p>';
     else if (state.ingTab === "risk") body = '<p>' + esc(d.effects) + '</p>';
     else body = (d.studies && d.studies.length) ? d.studies.map(function (s) {
-      return '<div class="study"><div class="study-title">' + esc(s.title) + '</div>' +
+      return '<div class="study glass"><div class="study-title">' + esc(s.title) + '</div>' +
         '<div class="study-src">' + esc(s.source) + (s.year ? " · " + s.year : "") + '</div></div>';
     }).join("") : '<div class="empty small">No specific studies catalogued for this one yet.</div>';
 
     return '<div class="screen">' + backBar(d.title) +
-      '<div class="ing-head" style="--sc:' + statusColor(d.status) + '">' + dot(statusColor(d.status)) +
+      '<div class="ing-head glass" style="--sc:' + statusColor(d.status) + '">' + dot(statusColor(d.status)) +
         '<div class="row-main"><div class="ing-cat">' + esc(d.category) + (d.enumber ? " · " + esc(d.enumber) : "") + '</div>' +
         '<div class="ing-summary">' + esc(d.summary) + '</div></div>' +
         '<div class="status-tag ' + d.status + '">' + STATUS_LABEL[d.status] + '</div></div>' +
@@ -553,7 +557,7 @@
       "We couldn't read the ingredients for this barcode. Take a clear photo of the <b>ingredients list</b> and we'll read it." :
       "Take a clear, well-lit photo of the <b>ingredients list</b> on the package.";
     return '<div class="screen">' + backBar("Add by photo") +
-      '<div class="photo-card"><div class="photo-illu">🏷️</div><p>' + note + '</p>' +
+      '<div class="photo-card glass"><div class="photo-illu">🏷️</div><p>' + note + '</p>' +
       '<label class="big-btn"><input id="photo" type="file" accept="image/*" capture="environment" hidden> 📸 Take / choose photo</label>' +
       '<div class="hint">Fill the frame with just the ingredients text for the best read.</div></div>' +
       '<div id="ocrPreview"></div></div>';
