@@ -457,8 +457,64 @@ window.CB_DATA = (function () {
       whyFlagged: "Generally safe; a rare manufactured-citric-acid sensitivity has been reported in isolated cases.",
       healthRisk: "No significant concerns for most people.",
       studies: []
+    },
+    {
+      id: "amaranth", names: ["amaranth", "red 2", "fd&c red no. 2", "e123"], enumber: "E123",
+      category: "Artificial color", risk: "avoid",
+      summary: "Synthetic red dye banned in the United States since 1976.",
+      whatIs: "Amaranth (Red No. 2) is a synthetic azo dye once used to color foods and drinks.",
+      whyFlagged: "Studies tied it to cancer in animals; the FDA banned it from food in 1976. Still permitted in limited uses in some countries.",
+      healthRisk: "Possible carcinogen (animal data); part of the azo-dye group linked to hyperactivity.",
+      studies: [
+        { title: "FDA ban of FD&C Red No. 2 (amaranth)", source: "U.S. FDA", year: 1976 }
+      ]
+    },
+    {
+      id: "quinolineyellow", names: ["quinoline yellow", "e104"], enumber: "E104",
+      category: "Artificial color", risk: "caution",
+      summary: "Synthetic yellow dye not approved for food in the U.S.",
+      whatIs: "Quinoline Yellow is a synthetic dye used in some sweets, drinks and medicines outside the U.S.",
+      whyFlagged: "One of the 'Southampton Six' dyes linked to hyperactivity; not approved as a food color in the United States and carries a warning label in the EU.",
+      healthRisk: "Hyperactivity in sensitive children; possible allergic reactions.",
+      studies: [
+        { title: "McCann et al. — food additives and hyperactivity (Southampton study)", source: "The Lancet", year: 2007 }
+      ]
+    },
+    {
+      id: "ponceau4r", names: ["ponceau 4r", "ponceau", "e124", "cochineal red a"], enumber: "E124",
+      category: "Artificial color", risk: "caution",
+      summary: "Synthetic red dye banned in the U.S. and Norway.",
+      whatIs: "Ponceau 4R is a synthetic azo dye used to color sweets, drinks and desserts in some countries.",
+      whyFlagged: "Banned in the United States and Norway; part of the Southampton hyperactivity study; possible carcinogenic concerns in animal studies.",
+      healthRisk: "Hyperactivity in sensitive children; allergic reactions; animal-study concerns.",
+      studies: [
+        { title: "McCann et al. — food additives and hyperactivity (Southampton study)", source: "The Lancet", year: 2007 }
+      ]
     }
   ];
+
+  /* Countries/regions where an additive is banned or restricted (by id). */
+  const bannedMap = {
+    red3: "Banned in food in the EU; the U.S. FDA revoked its food use in January 2025",
+    red40: "Requires a hyperactivity warning label across the EU",
+    yellow5: "Requires a warning label in the EU; previously banned in Norway and Austria",
+    yellow6: "Requires a warning label in the EU; was banned in Norway",
+    amaranth: "Banned in food in the United States (FDA, since 1976)",
+    quinolineyellow: "Not approved for food in the United States; warning label in the EU",
+    ponceau4r: "Banned in the United States and Norway",
+    titaniumdioxide: "Banned as a food additive in the European Union (since 2022)",
+    potassiumbromate: "Banned in the EU, UK, Canada, Brazil, Argentina and others",
+    bha: "Restricted in the EU; California requires a cancer warning",
+    bht: "Restricted in parts of the EU and Japan",
+    tbhq: "Tightly restricted; banned in food in Japan",
+    bvo: "Banned in the EU, India and Japan; the U.S. revoked it in 2024",
+    azodicarbonamide: "Banned in the EU, UK and Australia",
+    propylparaben: "Removed from the EU's approved food additives list",
+    transfat: "Effectively banned in the U.S. (2018), Canada, Denmark and many countries",
+    sodiumnitrite: "Tightly restricted in the EU; processed meat is an IARC Group 1 carcinogen",
+    caramel4: "Restricted under California Prop 65 (4-MEI cancer warning)",
+    propylgallate: "Restricted in several countries for certain food uses"
+  };
 
   // Seed/vegetable oils flagged per user preference (Bobby-Approved style).
   const seedOils = [
@@ -758,7 +814,7 @@ window.CB_DATA = (function () {
   };
 
   return {
-    groups: groups,
+    groups: groups, bannedMap: bannedMap,
     additives: additives, seedOils: seedOils, addedSugars: addedSugars,
     artificialSweeteners: artificialSweeteners, vagueTerms: vagueTerms,
     cleanIngredients: cleanIngredients, allergenMap: allergenMap, eNumbers: eNumbers

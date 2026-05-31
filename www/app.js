@@ -18,9 +18,10 @@
   var state = {
     view: "home", prev: "home",
     product: null, ingDetail: null, ingTab: "what",
-    history: [], favorites: [], profile: {}, pending: null,
-    searchResults: null, searchQuery: "", historyFilter: "all",
-    alts: { forId: "", loading: false, list: null }, scoreOpen: false, onboarded: true, insightsFilter: "all",
+    history: [], favorites: [], profile: {}, health: {}, settings: { theme: "dark" }, pending: null,
+    searchResults: null, searchRaw: null, searchQuery: "", searchSort: "rel", historyFilter: "all",
+    alts: { forId: "", loading: false, list: null }, scoreOpen: false, onboarded: true,
+    insightsFilter: "all", editHealth: false, encQuery: "", ingFrom: "result",
     research: { term: "", loading: false, data: null, error: false },
     busy: false, statusMsg: ""
   };
@@ -32,7 +33,30 @@
     try { state.history = JSON.parse(localStorage.getItem("cb_history") || "[]"); } catch (e) { state.history = []; }
     try { state.favorites = JSON.parse(localStorage.getItem("cb_favs") || "[]"); } catch (e) { state.favorites = []; }
     try { state.profile = JSON.parse(localStorage.getItem("cb_profile") || "{}"); } catch (e) { state.profile = {}; }
+    try { state.health = JSON.parse(localStorage.getItem("cb_health") || "{}"); } catch (e) { state.health = {}; }
+    try { state.settings = JSON.parse(localStorage.getItem("cb_settings") || '{"theme":"dark"}'); } catch (e) { state.settings = { theme: "dark" }; }
     state.onboarded = localStorage.getItem("cb_onboarded") === "1";
+  }
+  function saveHealth() { try { localStorage.setItem("cb_health", JSON.stringify(state.health)); } catch (e) {} }
+  function saveSettings() { try { localStorage.setItem("cb_settings", JSON.stringify(state.settings)); } catch (e) {} }
+
+  // Mifflin-St Jeor BMR -> TDEE -> calorie/macro target.
+  function computeTargets(h) {
+    if (!h || !h.kg || !h.cm || !h.age) return null;
+    var bmr = 10 * h.kg + 6.25 * h.cm - 5 * h.age + (h.sex === "female" ? -161 : 5);
+    var act = parseFloat(h.activity) || 1.375;
+    var tdee = bmr * act;
+    var target = h.goal === "lose" ? tdee - 500 : h.goal === "gain" ? tdee + 400 : tdee;
+    target = Math.max(1200, Math.round(target));
+    return {
+      bmr: Math.round(bmr), tdee: Math.round(tdee), target: target,
+      protein: Math.round(target * 0.30 / 4), carbs: Math.round(target * 0.40 / 4), fat: Math.round(target * 0.30 / 9)
+    };
+  }
+  function applyTheme(theme) {
+    var t = theme || (state.settings && state.settings.theme) || "dark";
+    if (t === "auto") t = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) ? "light" : "dark";
+    document.body.className = t === "light" ? "theme-light" : "theme-dark";
   }
   function saveHistory() { try { localStorage.setItem("cb_history", JSON.stringify(state.history.slice(0, 100))); } catch (e) {} }
   function saveFavs() { try { localStorage.setItem("cb_favs", JSON.stringify(state.favorites.slice(0, 100))); } catch (e) {} }
@@ -161,11 +185,12 @@
     if (item.additive) {
       var a = item.additive;
       return { title: titleCase(a.names[0]), category: a.category, enumber: a.enumber || "", status: a.risk,
-        summary: a.summary, whatIs: a.whatIs, whyFlagged: a.whyFlagged, effects: a.healthRisk, studies: a.studies || [] };
+        summary: a.summary, whatIs: a.whatIs, whyFlagged: a.whyFlagged, effects: a.healthRisk,
+        banned: (DATA.bannedMap && DATA.bannedMap[a.id]) || "", studies: a.studies || [] };
     }
     var g = DATA.groups[item.group] || DATA.groups.unknown;
     return { title: titleCase(item.name || item.raw), category: g.category, enumber: item.enumber || "", status: item.status || g.status,
-      summary: g.summary, whatIs: g.whatIs, whyFlagged: g.whyFlagged, effects: g.effects, studies: g.studies || [] };
+      summary: g.summary, whatIs: g.whatIs, whyFlagged: g.whyFlagged, effects: g.effects, banned: "", studies: g.studies || [] };
   }
 
   /* --------------------------------------------------- nutrition scoring */
@@ -258,16 +283,24 @@
   }
 
   /* -------------------------------------------------- Open Food Facts */
-  var OFF_FIELDS = "code,product_name,brands,image_front_small_url,image_front_url,ingredients_text,ingredients_text_en,additives_tags,categories_tags,nova_group,nutriscore_grade,nutriments";
+  var OFF_FIELDS = "code,product_name,brands,image_front_small_url,image_front_url,ingredients_text,ingredients_text_en,additives_tags,categories_tags,serving_quantity,nova_group,nutriscore_grade,nutriments";
   function mapOff(p, code) {
     if (!p) return null;
     var cats = p.categories_tags || [], catTag = "";
     for (var i = cats.length - 1; i >= 0; i--) { if (/^en:/.test(cats[i]) && cats[i].length > 5) { catTag = cats[i].slice(3); break; } }
     if (!catTag && cats.length) catTag = String(cats[cats.length - 1]).replace(/^[a-z]{2}:/, "");
     return { barcode: code || p.code || "", name: p.product_name || "Unknown product", brand: p.brands || "",
-      image: p.image_front_small_url || p.image_front_url || "", category: catTag,
+      image: p.image_front_small_url || p.image_front_url || "", category: catTag, serving_quantity: p.serving_quantity,
       ingredientsText: p.ingredients_text_en || p.ingredients_text || "",
       nova_group: p.nova_group, nutriscore_grade: p.nutriscore_grade, nutriments: p.nutriments || {} };
+  }
+  // Best-available calories per portion: per-serving if known, else per-100g scaled by serving size, else per-100g.
+  function computeKcal(off) {
+    var nu = off && off.nutriments; if (!nu) return null;
+    var s = num(nu["energy-kcal_serving"]); if (s != null) return Math.round(s);
+    var per100 = num(nu["energy-kcal_100g"]); if (per100 == null) return null;
+    var sq = num(off.serving_quantity);
+    return Math.round(sq ? per100 * sq / 100 : per100);
   }
   function lookupBarcode(code) {
     var url = OFF_BASE + encodeURIComponent(code) + ".json?fields=" + OFF_FIELDS;
@@ -295,17 +328,20 @@
       name: (off && off.name) || opts.name || "Scanned product", brand: (off && off.brand) || "",
       image: (off && off.image) || "", category: (off && off.category) || "", photoKey: opts.photoKey || "", ingredientsText: text,
       source: opts.source || (off ? "Open Food Facts" : "Photo / OCR"),
+      nutriments: (off && off.nutriments) || null,
+      kcal: computeKcal(off),
       score: r.score, badge: r.badge, classified: r.classified, nutrition: r.nutrition,
-      flaggedCount: r.flaggedCount, scoreReasons: r.scoreReasons, logged: "checked", ts: Date.now()
+      flaggedCount: r.flaggedCount, scoreReasons: r.scoreReasons, logged: "checked", ateAt: 0, ts: Date.now()
     };
   }
   function setLogged(lg) {
     if (!state.product) return;
-    state.product.logged = lg;
+    var at = lg === "eaten" ? Date.now() : 0;
+    state.product.logged = lg; state.product.ateAt = at;
     var h = state.history.filter(function (x) { return x.id === state.product.id; })[0];
-    if (h) h.logged = lg;
+    if (h) { h.logged = lg; h.ateAt = at; }
     var f = state.favorites.filter(function (x) { return x.id === state.product.id; })[0];
-    if (f) f.logged = lg;
+    if (f) { f.logged = lg; f.ateAt = at; }
     saveHistory(); saveFavs(); render();
   }
   function searchByCategory(cat) {
@@ -370,6 +406,28 @@
       .sort(function (a, b) { return b.count - a.count; }).slice(0, 6);
     return { n: h.length, avg: h.length ? Math.round(sum / h.length) : 0, dist: dist, top: top, best: best, worst: worst };
   }
+  function sameDay(a, b) {
+    if (!a) return false;
+    var d1 = new Date(a), d2 = new Date(b);
+    return d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth() && d1.getDate() === d2.getDate();
+  }
+  function todayCard() {
+    var tgt = computeTargets(state.health);
+    if (!tgt) return '<div class="panel glass today"><div class="lrow"><div class="row-main"><div class="row-title">Set your calorie goal</div>' +
+      '<div class="row-sub">Add your details in Profile to track today\'s intake</div></div><button class="chip on" data-nav="profile">Set up</button></div></div>';
+    var items = state.history.filter(function (p) { return p.logged === "eaten" && sameDay(p.ateAt, Date.now()); });
+    var eaten = Math.round(items.reduce(function (s, p) { return s + (num(p.kcal) || 0); }, 0));
+    var pct = Math.min(100, Math.round(eaten / tgt.target * 100));
+    var remaining = tgt.target - eaten;
+    var rows = items.length ? items.map(function (p) {
+      return '<div class="lrow"><div class="row-main"><div class="row-title">' + esc(p.name) + '</div></div>' +
+        '<div class="brk-val">' + (num(p.kcal) != null ? Math.round(num(p.kcal)) + " kcal" : "—") + '</div></div>';
+    }).join("") : '<div class="lrow"><div class="row-main"><div class="row-sub">Nothing logged today — tap “I ate this” on a product.</div></div></div>';
+    return '<div class="panel glass today"><div class="panel-h">Today <span class="cnt">' + items.length + ' eaten</span></div>' +
+      '<div class="today-cal"><div><span class="te">≈' + eaten + '</span> <span class="tt">/ ' + tgt.target + ' kcal</span></div>' +
+      '<div class="trem' + (remaining < 0 ? " over" : "") + '">' + (remaining >= 0 ? remaining + " left" : (-remaining) + " over") + '</div></div>' +
+      '<div class="tbar"><div class="tfill" style="width:' + pct + '%' + (remaining < 0 ? ";background:var(--bad)" : "") + '"></div></div>' + rows + '</div>';
+  }
 
   /* ------------------------------------------------------- scanner */
   var zxingReader = null;
@@ -400,12 +458,12 @@
   function runSearch(query) {
     query = String(query || "").trim();
     if (query.length < 2) return;
-    state.searchQuery = query; state.searchResults = null;
+    state.searchQuery = query; state.searchRaw = null; state.searchResults = null; state.searchSort = "rel";
     go("search");
     busy(true, "Searching…");
     searchProducts(query).then(function (results) {
-      busy(false, ""); state.searchResults = results; render();
-    }).catch(function () { busy(false, ""); state.searchResults = []; render(); });
+      busy(false, ""); state.searchRaw = results; render();
+    }).catch(function () { busy(false, ""); state.searchRaw = []; render(); });
   }
   function openOff(off) {
     if (!off) return;
@@ -543,6 +601,7 @@
       '<button class="big-btn" data-act="scan">' + icon("scan") + ' Scan a barcode</button>' +
       '<div class="dual"><button class="ghost-btn" data-act="addPhoto">' + icon("tag") + ' Add by photo</button>' +
       '<button class="ghost-btn" data-act="manual">' + icon("keypad") + ' Enter code</button></div>' +
+      '<button class="ghost-btn" data-act="encyclopedia">📚 Ingredient encyclopedia</button>' +
       (recent.length ? ('<div class="section-title">Recent scans</div>' + recent.map(historyRow).join("")) :
         '<div class="empty">' + illus("scan") + 'No scans yet.<br>Scan or search your first product above.</div>') +
       '</div>';
@@ -565,10 +624,25 @@
       '</div>';
   }
   function viewSearch() {
-    var rows = "";
-    if (state.searchResults == null) rows = '<div class="empty small">Searching…</div>';
-    else if (!state.searchResults.length) rows = '<div class="empty">No products found for “' + esc(state.searchQuery) + '”.<br>Try a different name or scan the barcode.</div>';
-    else rows = state.searchResults.map(function (o, i) {
+    var rows = "", sortChips = "";
+    // Build display list from the untouched raw results so toggling sort is reversible.
+    var list = state.searchRaw ? state.searchRaw.slice() : null;
+    if (list && list.length && state.searchSort === "health") {
+      var rank = { a: 0, b: 1, c: 2, d: 3, e: 4 };
+      list.sort(function (x, y) {
+        var rx = rank[String(x.nutriscore_grade || "").toLowerCase()]; rx = (rx == null ? 9 : rx);
+        var ry = rank[String(y.nutriscore_grade || "").toLowerCase()]; ry = (ry == null ? 9 : ry);
+        return rx - ry;
+      });
+    }
+    state.searchResults = list; // the click handler indexes into this exact (displayed) array
+    if (list && list.length) {
+      sortChips = '<div class="chips sm"><button class="chip' + (state.searchSort !== "health" ? " on" : "") + '" data-sort="rel">Relevance</button>' +
+        '<button class="chip' + (state.searchSort === "health" ? " on" : "") + '" data-sort="health">Healthiest first</button></div>';
+    }
+    if (state.searchRaw == null) rows = '<div class="empty small">Searching…</div>';
+    else if (!list.length) rows = '<div class="empty">No products found for “' + esc(state.searchQuery) + '”.<br>Try a different name or scan the barcode.</div>';
+    else rows = list.map(function (o, i) {
       return '<div class="row card tappable" data-search-idx="' + i + '">' +
         (o.image ? '<img class="srch-img" src="' + esc(o.image) + '" alt="">' : '<div class="srch-img ph">🥫</div>') +
         '<div class="row-main"><div class="row-title">' + esc(o.name) + '</div>' +
@@ -577,7 +651,7 @@
     }).join("");
     return '<div class="screen">' + backBar("Search") +
       '<div class="searchbar"><input id="q" class="text-input search-input" value="' + esc(state.searchQuery) + '" placeholder="Search a product or brand…" />' +
-      '<button class="search-go" data-act="searchGo">Search</button></div>' + rows + '</div>';
+      '<button class="search-go" data-act="searchGo">' + icon("search") + '</button></div>' + sortChips + rows + '</div>';
   }
 
   function viewManual() {
@@ -631,6 +705,7 @@
       altsBlock(p) +
       (n.negatives && n.negatives.length ? '<div class="panel glass"><div class="panel-h neg"><span>⚠</span> Negatives</div>' + n.negatives.map(brkRow).join("") + '</div>' : "") +
       (n.positives && n.positives.length ? '<div class="panel glass"><div class="panel-h pos"><span>✓</span> Positives</div>' + n.positives.map(brkRow).join("") + '</div>' : "") +
+      nutritionTable(p) +
       '<div class="panel glass"><div class="panel-h">Ingredients <span class="cnt">' + p.classified.length + '</span></div>' +
       '<div class="legend">Tap any ingredient for details</div>' +
       (p.classified.length ? groupsHtml : '<div class="empty small">No ingredient list available for this product.</div>') +
@@ -660,6 +735,21 @@
         '<div class="mini-score" style="background:' + scoreColor(prod.badge.cls) + '">' + prod.score + '</div></div>';
     }).join("");
     return '<div class="panel glass"><div class="panel-h pos"><span>↑</span> Better choices in this category</div>' + rows + '</div>';
+  }
+  function nutritionTable(p) {
+    var nu = p.nutriments; if (!nu) return "";
+    var rows = [["Energy", nu["energy-kcal_100g"], " kcal"], ["Fat", nu["fat_100g"], " g"],
+      [" of which saturates", nu["saturated-fat_100g"], " g"], ["Carbohydrate", nu["carbohydrates_100g"], " g"],
+      [" of which sugars", nu["sugars_100g"], " g"], ["Fiber", nu["fiber_100g"], " g"],
+      ["Protein", nu["proteins_100g"], " g"], ["Salt", nu["salt_100g"], " g"]];
+    var html = rows.map(function (r) {
+      var v = num(r[1]); if (v == null) return "";
+      var sub = /^ /.test(r[0]);
+      return '<div class="lrow nutri' + (sub ? " sub" : "") + '"><div class="row-main"><div class="row-title">' + esc(r[0].trim()) +
+        '</div></div><div class="brk-val">' + (Math.round(v * 10) / 10) + r[2] + '</div></div>';
+    }).join("");
+    if (!html) return "";
+    return '<div class="panel glass"><div class="panel-h">Nutrition facts <span class="cnt">per 100g</span></div>' + html + '</div>';
   }
   function brkRow(r) {
     return '<div class="lrow brk">' + dot(sevColor(r.sev)) +
@@ -691,6 +781,7 @@
         '<div class="row-main"><div class="ing-cat">' + esc(d.category) + (d.enumber ? " · " + esc(d.enumber) : "") + '</div>' +
         '<div class="ing-summary">' + esc(d.summary) + '</div></div>' +
         '<div class="status-tag ' + d.status + '">' + STATUS_LABEL[d.status] + '</div></div>' +
+      (d.banned ? '<div class="banned-note">🌍 <b>Banned / restricted:</b> ' + esc(d.banned) + '</div>' : "") +
       '<div class="tabs">' + tabs.map(function (t) {
         return '<button class="tab' + (state.ingTab === t[0] ? " on" : "") + '" data-tab="' + t[0] + '">' + t[1] + '</button>';
       }).join("") + '</div>' +
@@ -720,8 +811,9 @@
       '<button class="chip' + (!eatenMode ? " on" : "") + '" data-ins="all">All scans</button>' +
       '<button class="chip' + (eatenMode ? " on" : "") + '" data-ins="eaten">🍽 Eaten (' + eatenCount + ')</button></div>';
     var s = computeInsights(source);
+    var today = todayCard();
     if (!s.n) return '<div class="screen"><header class="hd"><div class="logo">Insights</div>' +
-      '<div class="sub">Your scanning habits</div></header>' + chips +
+      '<div class="sub">Your diet & scanning habits</div></header>' + today + chips +
       '<div class="empty">' + illus(eatenMode ? "heart" : "chart") + (eatenMode ? "Mark products as “I ate this” on the result screen to track your diet here." : "Scan a few products and your stats show up here.") + '</div></div>';
     function seg(cls, v) { return v ? '<div class="seg ' + cls + '" style="flex:' + v + '"></div>' : ""; }
     var bar = '<div class="distbar">' + seg("exc", s.dist.exc) + seg("good", s.dist.good) + seg("mid", s.dist.mid) + seg("bad", s.dist.bad) + '</div>';
@@ -729,7 +821,7 @@
       return '<div class="lrow"><div class="row-main"><div class="row-title">' + esc(f.name) + '</div></div><div class="status-tag caution">' + f.count + '×</div></div>';
     }).join("") : '<div class="lrow"><div class="row-main"><div class="row-sub">No flagged additives yet 🎉</div></div></div>';
     return '<div class="screen">' +
-      '<header class="hd"><div class="logo">Insights</div><div class="sub">Your scanning habits</div></header>' + chips +
+      '<header class="hd"><div class="logo">Insights</div><div class="sub">Your diet & scanning habits</div></header>' + today + chips +
       '<div class="stat-grid">' +
         '<div class="stat card"><div class="stat-num">' + s.n + '</div><div class="stat-lbl">' + (eatenMode ? "Foods eaten" : "Products scanned") + '</div></div>' +
         '<div class="stat card"><div class="stat-num" style="color:' + scoreColor(bandFor(s.avg, false).cls) + '">' + s.avg + '</div><div class="stat-lbl">Average score</div></div>' +
@@ -761,14 +853,84 @@
       '<button class="big-btn" data-act="finishOnboard">Start scanning →</button></div>';
   }
 
+  function macroChip(label, val, unit) {
+    return '<div class="macro"><div class="macro-num">' + val + unit + '</div><div class="macro-lbl">' + label + '</div></div>';
+  }
+  function healthForm() {
+    var h = state.health || {};
+    function opt(v, label, cur) { return '<option value="' + v + '"' + (String(cur) === String(v) ? " selected" : "") + '>' + label + '</option>'; }
+    return '<div class="panel glass hform">' +
+      '<div class="frow"><label>Sex</label><select id="h_sex">' + opt("male", "Male", h.sex) + opt("female", "Female", h.sex) + '</select></div>' +
+      '<div class="frow"><label>Age</label><input id="h_age" type="number" inputmode="numeric" value="' + esc(h.age || "") + '" placeholder="years"></div>' +
+      '<div class="frow"><label>Height</label><div class="ftin"><input id="h_ft" type="number" inputmode="numeric" value="' + esc(h.ft || "") + '" placeholder="ft"><input id="h_in" type="number" inputmode="numeric" value="' + esc(h.in || "") + '" placeholder="in"></div></div>' +
+      '<div class="frow"><label>Weight</label><input id="h_lb" type="number" inputmode="decimal" value="' + esc(h.lb || "") + '" placeholder="lb"></div>' +
+      '<div class="frow"><label>Activity</label><select id="h_act">' +
+        opt("1.2", "Sedentary", h.activity) + opt("1.375", "Lightly active", h.activity) + opt("1.55", "Moderately active", h.activity) +
+        opt("1.725", "Very active", h.activity) + opt("1.9", "Athlete", h.activity) + '</select></div>' +
+      '<div class="frow"><label>Goal</label><select id="h_goal">' + opt("lose", "Lose weight", h.goal) + opt("maintain", "Maintain", h.goal) + opt("gain", "Gain muscle", h.goal) + '</select></div>' +
+      '<button class="big-btn" data-act="saveHealth">Calculate my goal</button></div>';
+  }
   function viewProfile() {
+    var t = computeTargets(state.health);
+    var showForm = state.editHealth || !t;
+    var health = showForm ? healthForm() :
+      '<div class="panel glass goal-card">' +
+        '<div class="goal-cal"><div class="goal-num">' + t.target + '</div><div class="goal-lbl">kcal / day target</div></div>' +
+        '<div class="macros">' + macroChip("Protein", t.protein, "g") + macroChip("Carbs", t.carbs, "g") + macroChip("Fat", t.fat, "g") + '</div>' +
+        '<div class="lrow"><div class="row-main"><div class="row-sub">BMR ' + t.bmr + ' · maintenance ' + t.tdee + ' kcal · goal: ' + esc(state.health.goal || "maintain") + '</div></div></div>' +
+        '<button class="ghost-btn" data-act="editHealth">Edit my details</button></div>';
+
+    var s = state.settings || {};
+    var themeSel = ["dark", "light", "auto"].map(function (o) {
+      return '<button class="chip' + ((s.theme || "dark") === o ? " on" : "") + '" data-theme="' + o + '">' + cap(o) + '</button>';
+    }).join("");
+    var settings = '<div class="section-title">Settings</div><div class="panel glass">' +
+      '<div class="lrow"><div class="row-main"><div class="row-title">Theme</div></div><div class="chips sm">' + themeSel + '</div></div>' +
+      '<div class="lrow tappable" data-act="exportData"><div class="row-main"><div class="row-title">Export my data</div><div class="row-sub">Download a backup file</div></div><div class="chev">›</div></div>' +
+      '<label class="lrow tappable"><div class="row-main"><div class="row-title">Import data</div><div class="row-sub">Restore from a backup</div></div><input id="importfile" type="file" accept="application/json" hidden><div class="chev">›</div></label></div>';
+
+    var allergens = '<div class="section-title">Diet & allergens</div>' + PROFILE_OPTS.map(function (o) {
+      var on = !!state.profile[o[0]];
+      return '<div class="row card toggle-row tappable" data-toggle="' + o[0] + '"><div class="row-title">' + o[1] + '</div>' +
+        '<div class="switch ' + (on ? "on" : "") + '"><span></span></div></div>';
+    }).join("");
+
     return '<div class="screen">' +
-      '<header class="hd"><div class="logo">My profile</div><div class="sub">Get a personal ⚠️ alert when a product conflicts</div></header>' +
-      PROFILE_OPTS.map(function (o) {
-        var on = !!state.profile[o[0]];
-        return '<div class="row card toggle-row tappable" data-toggle="' + o[0] + '"><div class="row-title">' + o[1] + '</div>' +
-          '<div class="switch ' + (on ? "on" : "") + '"><span></span></div></div>';
-      }).join("") + '<div class="disclaimer">Stored only on this device.</div></div>';
+      '<header class="hd"><div class="logo">My profile</div><div class="sub">Health goal, diet & settings</div></header>' +
+      '<div class="section-title">Health & calorie goal</div>' + health +
+      settings + allergens +
+      '<div class="disclaimer">Stored only on this device. Calorie targets are estimates, not medical advice.</div></div>';
+  }
+
+  function viewEncyclopedia() {
+    var q = norm(state.encQuery);
+    var list = DATA.additives.slice().sort(function (a, b) {
+      return (STATUS_RANK[b.risk] - STATUS_RANK[a.risk]) || a.names[0].localeCompare(b.names[0]);
+    });
+    if (q) list = list.filter(function (a) {
+      return a.names.some(function (n) { return norm(n).indexOf(q) !== -1; }) || norm(a.category).indexOf(q) !== -1;
+    });
+    var rows = list.map(function (a) {
+      return '<div class="lrow tappable" data-enc="' + a.id + '">' + dot(statusColor(a.risk)) +
+        '<div class="row-main"><div class="row-title">' + esc(titleCase(a.names[0])) + (a.enumber ? " · " + esc(a.enumber) : "") + '</div>' +
+        '<div class="row-sub">' + esc(a.category) + '</div></div>' +
+        '<div class="status-tag ' + a.risk + '">' + STATUS_LABEL[a.risk] + ' ›</div></div>';
+    }).join("");
+    return '<div class="screen">' + backBar("Ingredient encyclopedia") +
+      '<div class="searchbar"><input id="encq" class="text-input search-input" value="' + esc(state.encQuery) + '" placeholder="Search ' + DATA.additives.length + ' additives…" />' +
+      '<button class="search-go" data-act="encGo">' + icon("search") + '</button></div>' +
+      '<div class="panel glass">' + (rows || '<div class="lrow"><div class="row-main"><div class="row-sub">No matches.</div></div></div>') + '</div></div>';
+  }
+  function exportData() {
+    try {
+      var data = { app: "NutriCheck", version: 4, exportedAt: new Date().toISOString(),
+        history: state.history, favorites: state.favorites, profile: state.profile, health: state.health, settings: state.settings };
+      var blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a"); a.href = url; a.download = "nutricheck-backup.json";
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+    } catch (e) { alert("Couldn't export on this device."); }
   }
 
   function viewAddPhoto() {
@@ -807,6 +969,7 @@
     else if (v === "insights") html = viewInsights();
     else if (v === "profile") html = viewProfile();
     else if (v === "addPhoto") html = viewAddPhoto();
+    else if (v === "encyclopedia") html = viewEncyclopedia();
     else if (v === "onboard") html = viewOnboard();
     else html = viewHome();
 
@@ -819,12 +982,20 @@
 
   /* --------------------------------------------------------- events */
   function onClick(e) {
-    var t = e.target.closest("[data-act],[data-nav],[data-open],[data-ingidx],[data-tab],[data-toggle],[data-research],[data-search-idx],[data-alt],[data-fav],[data-hist],[data-log],[data-ins]");
+    var t = e.target.closest("[data-act],[data-nav],[data-open],[data-ingidx],[data-tab],[data-toggle],[data-research],[data-search-idx],[data-alt],[data-fav],[data-hist],[data-log],[data-ins],[data-theme],[data-enc],[data-sort]");
     if (!t) return;
     if (t.dataset.fav != null) { toggleFav(state.product); render(); return; }
     if (t.dataset.log != null) { setLogged(t.dataset.log); return; }
     if (t.dataset.ins != null) { state.insightsFilter = t.dataset.ins; render(); return; }
     if (t.dataset.hist != null) { state.historyFilter = t.dataset.hist; render(); return; }
+    if (t.dataset.theme != null) { state.settings.theme = t.dataset.theme; saveSettings(); applyTheme(); render(); return; }
+    if (t.dataset.sort != null) { state.searchSort = t.dataset.sort; render(); return; }
+    if (t.dataset.enc != null) {
+      var ea = DATA.additives.filter(function (x) { return x.id === t.dataset.enc; })[0];
+      if (ea) { state.ingDetail = ingredientDetail({ additive: ea }); state.ingTab = "what"; state.ingFrom = "encyclopedia";
+        state.research = { term: "", loading: false, data: null, error: false }; go("ingredient"); }
+      return;
+    }
     if (t.dataset.alt != null) { var ap = state.alts.list && state.alts.list[+t.dataset.alt]; if (ap) openResult(ap); return; }
     if (t.dataset.research != null) { doResearch(t.dataset.research); return; }
     if (t.dataset.searchIdx != null) {
@@ -840,7 +1011,7 @@
       var item = state.product && state.product.classified[+t.dataset.ingidx];
       if (item) {
         state.ingDetail = ingredientDetail(item);
-        state.ingTab = "what";
+        state.ingTab = "what"; state.ingFrom = "result";
         state.research = { term: "", loading: false, data: null, error: false };
         go("ingredient");
         if (item.status === "unknown") doResearch(state.ingDetail.title);
@@ -855,15 +1026,43 @@
     else if (act === "home") go("home");
     else if (act === "addPhoto") go("addPhoto");
     else if (act === "manual") go("manual");
-    else if (act === "back") go(state.view === "ingredient" ? "result" : "home");
+    else if (act === "back") go(state.view === "ingredient" ? state.ingFrom : "home");
     else if (act === "manualGo") { var el = document.getElementById("bc"); if (el && el.value.trim()) handleBarcode(el.value.trim()); }
     else if (act === "searchGo") { var qe = document.getElementById("q"); if (qe && qe.value.trim()) runSearch(qe.value.trim()); }
     else if (act === "toggleScore") { state.scoreOpen = !state.scoreOpen; render(); }
+    else if (act === "encyclopedia") { state.encQuery = ""; go("encyclopedia"); }
+    else if (act === "encGo") { var ec = document.getElementById("encq"); state.encQuery = ec ? ec.value.trim() : ""; render(); }
+    else if (act === "editHealth") { state.editHealth = true; render(); }
+    else if (act === "exportData") { exportData(); }
+    else if (act === "saveHealth") {
+      var g = function (id) { var el = document.getElementById(id); return el ? el.value : ""; };
+      var age = +g("h_age"), ft = +g("h_ft"), inch = +g("h_in"), lb = +g("h_lb");
+      if (!age || (!ft && !inch) || !lb) { alert("Please fill in age, height and weight."); return; }
+      var cm = Math.round((ft * 12 + inch) * 2.54), kg = Math.round(lb * 0.45359 * 10) / 10;
+      state.health = { sex: g("h_sex"), age: age, ft: ft, in: inch, lb: lb, activity: g("h_act"), goal: g("h_goal"), cm: cm, kg: kg };
+      saveHealth(); state.editHealth = false; render();
+    }
     else if (act === "finishOnboard") { try { localStorage.setItem("cb_onboarded", "1"); } catch (e) {} state.onboarded = true; go("home"); }
     else if (act === "clearHist") { if (confirm("Clear all scan history?")) { state.history = []; saveHistory(); render(); } }
   }
 
   function onChange(e) {
+    if (e.target && e.target.id === "importfile" && e.target.files && e.target.files[0]) {
+      var fr = new FileReader();
+      fr.onload = function () {
+        try {
+          var d = JSON.parse(fr.result);
+          if (d.history) state.history = d.history;
+          if (d.favorites) state.favorites = d.favorites;
+          if (d.profile) state.profile = d.profile;
+          if (d.health) state.health = d.health;
+          if (d.settings) state.settings = d.settings;
+          saveHistory(); saveFavs(); saveProfile(); saveHealth(); saveSettings(); applyTheme(); render();
+          alert("Data imported successfully.");
+        } catch (err) { alert("That backup file couldn't be read."); }
+      };
+      fr.readAsText(e.target.files[0]); return;
+    }
     if (e.target && e.target.id === "photo" && e.target.files && e.target.files[0]) {
       var file = e.target.files[0];
       busy(true, "Reading label…");
@@ -890,10 +1089,12 @@
     if (e.key !== "Enter" || !e.target) return;
     if (e.target.id === "q" && e.target.value.trim()) { e.preventDefault(); runSearch(e.target.value.trim()); }
     else if (e.target.id === "bc" && e.target.value.trim()) { e.preventDefault(); handleBarcode(e.target.value.trim()); }
+    else if (e.target.id === "encq") { e.preventDefault(); state.encQuery = e.target.value.trim(); render(); }
   }
   function init() {
     app = document.getElementById("app");
     loadLocal();
+    applyTheme();
     if (!state.onboarded) state.view = "onboard";
     document.addEventListener("click", onClick);
     document.addEventListener("change", onChange);
