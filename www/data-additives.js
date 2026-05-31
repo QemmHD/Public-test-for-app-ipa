@@ -521,11 +521,151 @@ window.CB_DATA = (function () {
     "stevia", "monk fruit", "erythritol", "allulose", "blackstrap molasses", "coconut sugar"
   ];
 
-  for (var ci = 0; ci < extraClean.length; ci++) {
-    if (cleanIngredients.indexOf(extraClean[ci]) === -1) cleanIngredients.push(extraClean[ci]);
+  // Large second pass of common U.S. grocery ingredients (whole foods / basics).
+  const extraClean2 = [
+    "watermelon", "cantaloupe", "honeydew", "kiwi", "plum", "apricot", "fig", "pomegranate",
+    "grapefruit", "tangerine", "clementine", "nectarine", "blackberries", "raspberries",
+    "currant", "guava", "papaya", "passion fruit", "dragon fruit", "lychee", "persimmon",
+    "prunes", "dried apricots", "dried cranberries", "coconut flakes",
+    "brussels sprouts", "artichoke", "eggplant", "okra", "leek", "scallion", "scallions",
+    "shallot", "radish", "turnip", "parsnip", "rutabaga", "fennel", "bok choy", "collard greens",
+    "swiss chard", "arugula", "romaine", "watercress", "endive", "jalapeno", "serrano",
+    "poblano", "butternut squash", "acorn squash", "pumpkin", "corn kernels", "snap peas",
+    "snow peas", "bean sprouts", "water chestnut", "bamboo shoots", "green onion", "cherry tomatoes",
+    "sushi rice", "bulgur", "rye flour", "spelt", "teff", "sorghum", "amaranth", "polenta",
+    "grits", "popcorn", "whole grain", "bran", "wheat germ", "cornstarch", "corn starch",
+    "turkey breast", "ground turkey", "tofu", "seitan", "egg whites", "whey protein",
+    "pea protein", "halibut", "mahi mahi", "trout", "mackerel", "herring", "clams", "mussels",
+    "oysters", "scallops", "duck", "venison", "bison", "crab", "lobster",
+    "greek yogurt", "ricotta", "feta", "goat cheese", "swiss cheese", "provolone", "gouda",
+    "brie", "half and half", "evaporated milk", "plain yogurt",
+    "sunflower butter", "cashew butter", "poppy seeds", "hemp hearts",
+    "kidney beans", "pinto beans", "navy beans", "cannellini beans", "lima beans", "split peas",
+    "black eyed peas", "soybeans", "fava beans", "mung beans", "adzuki beans", "great northern beans",
+    "allspice", "anise", "caraway", "celery seed", "chili powder", "chives", "curry powder",
+    "fennel seed", "fenugreek", "garlic powder", "onion powder", "marjoram", "mustard powder",
+    "saffron", "savory", "star anise", "tarragon", "vanilla bean", "lemongrass", "bay leaves",
+    "smoked paprika", "red pepper flakes", "italian seasoning", "herbs",
+    "tomato sauce", "crushed tomatoes", "diced tomatoes", "coconut water", "almond extract",
+    "cocoa butter", "unsweetened cocoa", "baking chocolate", "arrowroot", "nutritional yeast",
+    "pickles", "soy sauce", "tamari", "fish sauce", "worcestershire sauce", "dijon mustard",
+    "ghee", "tallow", "duck fat", "sesame oil", "walnut oil", "flaxseed oil", "mct oil",
+    "ground beef", "chicken breast", "pork chop", "egg noodles", "whole grain bread",
+    "rolled barley", "quinoa flakes", "potato starch", "tapioca starch", "rice flour",
+    "vanilla beans", "fresh herbs", "lime", "lemon", "garlic", "onions", "celery"
+  ];
+  for (var c2 = 0; c2 < extraClean2.length; c2++) {
+    if (cleanIngredients.indexOf(extraClean2[c2]) === -1) cleanIngredients.push(extraClean2[c2]);
   }
 
+  // More added-sugar synonyms seen on U.S. labels.
+  const extraSugars = [
+    "turbinado", "demerara", "muscovado", "powdered sugar", "confectioners sugar",
+    "brown rice syrup", "tapioca syrup", "date syrup", "maple sugar", "palm sugar",
+    "golden syrup", "treacle", "sorghum syrup", "malt syrup", "caramel syrup",
+    "beet sugar", "raw sugar", "coconut nectar", "corn sweetener", "crystalline fructose",
+    "fruit juice", "honey", "agave nectar", "maltose syrup"
+  ];
+  for (var s2 = 0; s2 < extraSugars.length; s2++) {
+    if (addedSugars.indexOf(extraSugars[s2]) === -1) addedSugars.push(extraSugars[s2]);
+  }
+
+  // More vague / undisclosed terms.
+  const extraVague = ["flavor", "flavors", "flavour", "flavours", "natural and artificial flavors", "seasoning", "seasonings", "smoke flavor", "natural smoke flavor"];
+  for (var v2 = 0; v2 < extraVague.length; v2++) {
+    if (vagueTerms.indexOf(extraVague[v2]) === -1) vagueTerms.push(extraVague[v2]);
+  }
+
+  /* Category-level explanations so EVERY ingredient has a meaningful detail
+     page even when it isn't one of the individually-written additives. */
+  const groups = {
+    seedOil: {
+      category: "Industrial seed/vegetable oil", status: "caution",
+      summary: "Highly refined oil rich in omega-6 fat and a marker of processed food.",
+      whatIs: "Seed and vegetable oils (canola, soybean, corn, sunflower, cottonseed, etc.) are extracted from seeds using high heat and chemical solvents, then bleached and deodorized.",
+      whyFlagged: "They are very high in omega-6 linoleic acid and oxidize easily during processing and cooking. A diet heavily skewed toward omega-6 is a hallmark of ultra-processed eating.",
+      effects: "May contribute to inflammation and an unbalanced omega-6:omega-3 ratio; heart-health evidence is debated. Mostly a sign the product is highly processed.",
+      studies: [{ title: "Dietary linoleic acid and the omega-6/omega-3 balance (review)", source: "Nutrients", year: 2018 }]
+    },
+    addedSugar: {
+      category: "Added sugar", status: "limit",
+      summary: "Sugar added during processing; excess intake drives metabolic disease.",
+      whatIs: "Added sugars (cane sugar, corn syrup, dextrose, fructose, syrups, juice concentrates) are sweeteners added to a product — unlike sugar naturally present in whole fruit or milk.",
+      whyFlagged: "They add calories with no nutrients and are easy to over-consume. Health authorities advise keeping added sugar under ~10% of daily calories.",
+      effects: "High intake is linked to weight gain, type-2 diabetes, fatty liver, tooth decay and heart disease.",
+      studies: [
+        { title: "Added sugar intake and cardiovascular disease mortality", source: "JAMA Internal Medicine", year: 2014 },
+        { title: "Dietary sugars and cardiovascular health (AHA scientific statement)", source: "Circulation", year: 2009 }
+      ]
+    },
+    sweetener: {
+      category: "Artificial sweetener", status: "caution",
+      summary: "Synthetic non-nutritive sweetener with mixed long-term evidence.",
+      whatIs: "Non-nutritive sweeteners deliver sweetness with little or no calories and are many times sweeter than sugar.",
+      whyFlagged: "Regulator-approved, but emerging research raises questions about effects on the gut microbiome, appetite and metabolism; the WHO advises against using them for weight control.",
+      effects: "Possible gut-microbiome and metabolic effects; some people report digestive upset. Evidence is still evolving.",
+      studies: [{ title: "Use of non-sugar sweeteners — WHO guideline", source: "World Health Organization", year: 2023 }]
+    },
+    vague: {
+      category: "Undisclosed ingredient", status: "caution",
+      summary: "A vague catch-all term that can hide many undisclosed compounds.",
+      whatIs: "Terms like 'natural flavors', 'artificial flavors' and 'spices' are umbrella labels that can each represent dozens of individual compounds a manufacturer isn't required to disclose.",
+      whyFlagged: "Lack of transparency — you can't tell exactly what's in it, and these blends may contain solvents, preservatives or allergens.",
+      effects: "Usually harmless, but a real problem for people with sensitivities or allergies who can't verify the contents.",
+      studies: []
+    },
+    clean: {
+      category: "Whole-food ingredient", status: "good",
+      summary: "A recognized whole-food ingredient with no known concerns.",
+      whatIs: "This is a real, recognizable food ingredient rather than an industrial additive.",
+      whyFlagged: "Not flagged — this is exactly the kind of ingredient you want to see on a label.",
+      effects: "No known concerns at normal dietary amounts.",
+      studies: []
+    },
+    unknown: {
+      category: "Not yet catalogued", status: "unknown",
+      summary: "We don't have detailed information on this ingredient yet.",
+      whatIs: "This ingredient isn't in NutriCheck's database yet, so we can't fully classify it.",
+      whyFlagged: "Not necessarily bad — just unrecognized. The database is expanding continuously.",
+      effects: "Unknown. If it reads like a chemical additive, treat it with mild caution.",
+      studies: []
+    },
+    eOk: {
+      category: "Food additive", status: "ok",
+      summary: "An approved food additive generally considered low-risk.",
+      whatIs: "An approved food additive (E-number) used for color, texture, preservation or flavor.",
+      whyFlagged: "Considered low-risk at normal levels by food-safety regulators.",
+      effects: "No significant concerns at typical dietary amounts.",
+      studies: []
+    },
+    eLimit: {
+      category: "Food additive", status: "limit",
+      summary: "An approved additive that's best kept in moderation.",
+      whatIs: "An approved food additive (E-number); common in processed foods.",
+      whyFlagged: "Approved, but a marker of processed food and best limited.",
+      effects: "Low direct risk; the bigger concern is a diet high in ultra-processed foods.",
+      studies: []
+    },
+    eCaution: {
+      category: "Food additive", status: "caution",
+      summary: "An additive with some safety questions or mixed evidence.",
+      whatIs: "An approved food additive that has drawn safety questions or restrictions in some regions.",
+      whyFlagged: "Mixed or emerging evidence of effects such as digestive, behavioral or allergic reactions.",
+      effects: "Possible effects in sensitive individuals; the strength of evidence varies by additive.",
+      studies: []
+    },
+    eAvoid: {
+      category: "Food additive", status: "avoid",
+      summary: "An additive linked to notable health concerns or bans.",
+      whatIs: "A food additive associated with health concerns and restricted or banned in some countries.",
+      whyFlagged: "Stronger evidence of harm or regulatory action against it.",
+      effects: "Potential health risk — worth avoiding where you can.",
+      studies: []
+    }
+  };
+
   return {
+    groups: groups,
     additives: additives, seedOils: seedOils, addedSugars: addedSugars,
     artificialSweeteners: artificialSweeteners, vagueTerms: vagueTerms,
     cleanIngredients: cleanIngredients, allergenMap: allergenMap, eNumbers: eNumbers
