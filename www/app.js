@@ -414,40 +414,66 @@
   }
 
   /* ------------------------------------------------------- scanner */
+  // Barcode decoding uses ZBar (WebAssembly) as the primary engine. Its 1D/UPC
+  // locator is far stronger than the old pure-JS ZXing path and it runs at
+  // near-native speed, which is what actually makes scanning work inside iOS
+  // WKWebView (where the native BarcodeDetector API is unsupported). ZBar reads
+  // both horizontal and vertical orientations itself. ZXing is kept only as a
+  // fallback for when the vendored ZBar module failed to load.
   var zxingReader = null;
+  var camStream = null, scanRAF = null, scanBusy = false, scanCanvas = null, scanCtx = null;
+  function zbarReady() { return !!(window.zbarWasm && window.zbarWasm.scanImageData); }
+  // Decode any barcode ZBar finds in a canvas; return the first decoded text.
+  function zbarDecodeCanvas(canvas) {
+    if (!zbarReady()) return Promise.resolve(null);
+    var imgData;
+    try {
+      var ctx = canvas.getContext("2d", { willReadFrequently: true });
+      imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    } catch (e) { return Promise.resolve(null); }
+    return window.zbarWasm.scanImageData(imgData).then(function (syms) {
+      if (!syms || !syms.length) return null;
+      for (var i = 0; i < syms.length; i++) {
+        var t = "";
+        try { t = syms[i].decode(); } catch (e2) {}
+        if (t) return t;
+      }
+      return null;
+    }).catch(function () { return null; });
+  }
   function startScanner() {
     if (state.view !== "scanner") return;
-    setStatus("Loading scanner…");
-    var p = window.ZXing ? Promise.resolve() : loadScriptLocalFirst(ZXING_LOCAL, ZXING_URL);
-    p.then(function () {
+    if (camStream || scanRAF) stopScanner(); // never open a second camera on a double entry
+    setStatus("Starting camera…");
+    // facingMode:{ideal} is only a soft hint — iOS may hand back the FRONT
+    // camera, so try an exact environment lock first and fall back progressively.
+    var tries = [
+      { video: { facingMode: { exact: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } } },
+      { video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } } },
+      { video: true }
+    ];
+    function getCam(i) {
+      return navigator.mediaDevices.getUserMedia(tries[i]).catch(function (e) {
+        if (i + 1 < tries.length) return getCam(i + 1);
+        throw e;
+      });
+    }
+    getCam(0).then(function (stream) {
+      // A re-render may have navigated us away before the camera opened; release
+      // it and bail quietly instead of alerting "camera unavailable".
+      if (state.view !== "scanner") { try { stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {} return; }
       var video = document.getElementById("cam");
-      // A re-render may have navigated us away before this resolved; bail quietly
-      // instead of alerting "camera unavailable".
-      if (state.view !== "scanner") return;
-      if (!video || !window.ZXing) throw new Error("scanner unavailable");
-      var hints = new Map(), F = ZXing.BarcodeFormat;
-      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,
-        [F.UPC_A, F.UPC_E, F.EAN_13, F.EAN_8, F.CODE_128, F.CODE_39, F.ITF]);
-      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-      zxingReader = new ZXing.BrowserMultiFormatReader(hints, 120);
+      if (!video) { try { stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {} throw new Error("scanner unavailable"); }
+      camStream = stream;
+      video.srcObject = stream;
+      video.setAttribute("playsinline", "");
+      var pl = video.play();
+      if (pl && pl.catch) pl.catch(function () {});
+      scanCanvas = document.createElement("canvas");
+      scanCtx = scanCanvas.getContext("2d", { willReadFrequently: true });
+      if (!zbarReady()) return startScannerZXing(video);
       setStatus("Point the back camera at the barcode");
-      var onDecode = function (res) { if (res) { stopScanner(); handleBarcode(res.getText()); } };
-      // facingMode:{ideal} is only a soft hint — iOS may hand back the FRONT
-      // camera, so the barcode is never in frame and nothing ever decodes.
-      // Force the rear camera at a high resolution (thin UPC bars need the
-      // detail) and fall back progressively if the device rejects it.
-      var tries = [
-        { video: { facingMode: { exact: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } } },
-        { video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } } },
-        { video: true }
-      ];
-      function attempt(i) {
-        return zxingReader.decodeFromConstraints(tries[i], video, onDecode).catch(function (e) {
-          if (i + 1 < tries.length) return attempt(i + 1);
-          throw e;
-        });
-      }
-      return attempt(0);
+      loopScan(video);
     }).catch(function (e) {
       setStatus("");
       var msg = "Camera unavailable. Enter the barcode manually.";
@@ -457,7 +483,57 @@
       go("manual");
     });
   }
-  function stopScanner() { try { if (zxingReader) zxingReader.reset(); } catch (e) {} zxingReader = null; }
+  // Grab frames and decode with ZBar. We scan a centred horizontal band (where the
+  // on-screen guide sits and a UPC is usually held) downscaled to ~960px so each
+  // pass is fast; scanBusy serialises passes so we never queue frames faster than
+  // ZBar can clear them.
+  function loopScan(video) {
+    if (state.view !== "scanner" || !camStream) return;
+    if (!scanBusy && video.readyState >= 2 && video.videoWidth) {
+      scanBusy = true;
+      var vw = video.videoWidth, vh = video.videoHeight;
+      var cropH = Math.round(vh * 0.6), sy = Math.round((vh - cropH) / 2);
+      var scale = Math.min(1, 960 / vw);
+      var dw = Math.max(1, Math.round(vw * scale)), dh = Math.max(1, Math.round(cropH * scale));
+      scanCanvas.width = dw; scanCanvas.height = dh;
+      scanCtx.drawImage(video, 0, sy, vw, cropH, 0, 0, dw, dh);
+      zbarDecodeCanvas(scanCanvas).then(function (code) {
+        scanBusy = false;
+        if (!code || state.view !== "scanner") return;
+        // Ignore noise / partial reads — a real EAN/UPC is 8+ digits.
+        if (String(code).replace(/\D/g, "").length < 8) return;
+        stopScanner();
+        handleBarcode(code);
+      });
+    }
+    scanRAF = requestAnimationFrame(function () { loopScan(video); });
+  }
+  // Legacy ZXing live decoder, used only when ZBar is unavailable. Reuses the
+  // already-opened camera stream.
+  function startScannerZXing(video) {
+    var p = window.ZXing ? Promise.resolve() : loadScriptLocalFirst(ZXING_LOCAL, ZXING_URL);
+    return p.then(function () {
+      if (state.view !== "scanner") return;
+      if (!video || !window.ZXing) throw new Error("scanner unavailable");
+      var hints = new Map(), F = ZXing.BarcodeFormat;
+      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,
+        [F.UPC_A, F.UPC_E, F.EAN_13, F.EAN_8, F.CODE_128, F.CODE_39, F.ITF]);
+      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+      zxingReader = new ZXing.BrowserMultiFormatReader(hints, 120);
+      setStatus("Point the back camera at the barcode");
+      var onDecode = function (res) { if (res && state.view === "scanner") { stopScanner(); handleBarcode(res.getText()); } };
+      return zxingReader.decodeFromStream(camStream, video, onDecode);
+    });
+  }
+  function stopScanner() {
+    if (scanRAF) { try { cancelAnimationFrame(scanRAF); } catch (e) {} scanRAF = null; }
+    scanBusy = false;
+    try { if (zxingReader) zxingReader.reset(); } catch (e) {}
+    zxingReader = null;
+    if (camStream) { try { camStream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {} camStream = null; }
+    var v = document.getElementById("cam");
+    if (v) { try { v.srcObject = null; } catch (e) {} }
+  }
   function loadImage(src) {
     return new Promise(function (res, rej) {
       var im = new Image();
@@ -492,15 +568,37 @@
       return c.toDataURL("image/jpeg", 0.95);
     } catch (e) { return null; }
   }
-  // Reliable fallback for iOS: decode a barcode from a single still photo taken
-  // with the native camera (full autofocus + resolution), instead of the live
-  // stream which often can't focus on dense UPC bars in WKWebView. ZXing only
-  // makes one decode pass per image, so we retry across zoom levels and
-  // orientations until one hits.
+  // Reliable path for iOS: decode a barcode from a single still photo taken with
+  // the native camera (full autofocus + resolution), instead of the live stream
+  // which often can't focus on dense UPC bars in WKWebView. ZBar makes one pass
+  // per image but reads both orientations itself, so we only vary the centre
+  // zoom; if ZBar isn't loaded we fall back to the ZXing multi-pass decoder.
   function decodeBarcodeFromImage(dataUrl) {
+    if (!zbarReady()) return decodeBarcodeFromImageZXing(dataUrl);
+    return loadImage(dataUrl).then(function (img) {
+      var crops = [1, 0.7, 0.5, 0.35], i = 0;
+      function next() {
+        if (i >= crops.length) return null;
+        var url = renderVariant(img, 1600, 0, crops[i++]);
+        if (!url) return next();
+        return loadImage(url).then(function (vimg) {
+          var c = document.createElement("canvas");
+          c.width = vimg.naturalWidth || vimg.width;
+          c.height = vimg.naturalHeight || vimg.height;
+          c.getContext("2d", { willReadFrequently: true }).drawImage(vimg, 0, 0);
+          return zbarDecodeCanvas(c);
+        }).then(function (code) { return code || next(); }).catch(function () { return next(); });
+      }
+      return next();
+    }).then(function (code) {
+      // If ZBar found nothing, give the slower ZXing rotate/zoom pass a chance.
+      return code || decodeBarcodeFromImageZXing(dataUrl);
+    });
+  }
+  function decodeBarcodeFromImageZXing(dataUrl) {
     var p = window.ZXing ? Promise.resolve() : loadScriptLocalFirst(ZXING_LOCAL, ZXING_URL);
     return p.then(function () {
-      if (!window.ZXing) throw new Error("scanner unavailable");
+      if (!window.ZXing) return null;
       var F = ZXing.BarcodeFormat;
       function makeReader() {
         var hints = new Map();
@@ -533,7 +631,7 @@
         }
         return next();
       });
-    });
+    }).catch(function () { return null; });
   }
 
   function runSearch(query) {
