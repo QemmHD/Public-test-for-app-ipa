@@ -650,6 +650,18 @@
   function illus(name) { return '<div class="illuswrap"><svg class="illus" viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">' + (ILLUS[name] || "") + '</svg></div>'; }
 
   var lastAnimatedId = null;
+  var lastRenderedView = null;
+  // One-line plain-language verdict so the result is clear at a glance.
+  function verdictLine(p) {
+    var m = {
+      exc: "A clean, well-rated product.",
+      good: "A solid choice — little to worry about.",
+      mid: "Mixed — a few ingredients worth watching.",
+      bad: "Best avoided, or kept occasional."
+    };
+    var txt = m[p.badge.cls];
+    return txt ? '<div class="verdict">' + txt + '</div>' : "";
+  }
   function animateScore() {
     var ring = document.querySelector(".score-ring"), numEl = document.querySelector(".score-num");
     if (!ring || !numEl || !state.product) return;
@@ -771,6 +783,7 @@
           '<div class="score-ring" style="--c:' + c + ';--p:' + p.score + '">' +
           '<div class="score-num">' + p.score + '</div><div class="score-of">out of 100</div></div>' +
           '<div class="badge ' + p.badge.cls + '">' + esc(p.badge.label) + '</div>' +
+          verdictLine(p) +
           '<button class="why-btn" data-act="toggleScore">' + (state.scoreOpen ? "Hide score details" : "How is this scored?") + '</button>' +
         '</div>' +
       '</div>' +
@@ -1077,10 +1090,19 @@
     else if (v === "onboard") html = viewOnboard();
     else html = viewHome();
 
+    // Preserve scroll position when re-rendering the SAME view in place (a fav
+    // toggle, portion step, filter, etc.) so the page doesn't jump to the top
+    // and feel broken. Reset to the top only when actually changing screens.
+    var sameView = (v === lastRenderedView);
+    var keepY = sameView ? (window.scrollY || window.pageYOffset || 0) : 0;
+
     var showTabs = (v === "home" || v === "history" || v === "insights" || v === "profile");
     app.innerHTML = '<div class="app-body">' + html + '</div>' + (showTabs ? tabBar() : "");
     if (state.busy) app.insertAdjacentHTML("beforeend",
       '<div class="overlay"><div class="spinner"></div><div class="ov-msg">' + esc(state.statusMsg || "Working…") + '</div></div>');
+
+    window.scrollTo(0, keepY);
+    lastRenderedView = v;
     if (v === "result" && state.product && state.product.id !== lastAnimatedId) { lastAnimatedId = state.product.id; animateScore(); }
   }
 

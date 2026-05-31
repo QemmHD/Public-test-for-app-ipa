@@ -21,6 +21,7 @@ html, body {
   font-family: "Plus Jakarta Sans", ui-rounded, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   -webkit-font-smoothing: antialiased; overscroll-behavior: none;
   letter-spacing: -0.01em;
+  overflow: hidden; /* only .app-body scrolls — keeps the tab bar pinned */
 }
 body::before {
   content: ""; position: fixed; inset: -25%; z-index: -2; pointer-events: none;
@@ -31,8 +32,10 @@ body::before {
   filter: blur(26px); animation: drift 20s ease-in-out infinite alternate;
 }
 @keyframes drift { to { transform: translateY(-4%) scale(1.06); } }
-#app { min-height: 100%; display: flex; flex-direction: column; }
-.app-body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+#app { height: 100%; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+/* min-height:0 lets the flex child actually scroll instead of growing #app
+   (which used to push the bottom tab bar off-screen). */
+.app-body { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .app-body > .screen { animation: fadeUp 0.3s cubic-bezier(.2,.7,.2,1); }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 .screen { padding: calc(var(--safe-top) + 18px) 18px 30px; max-width: 600px; margin: 0 auto; }
@@ -370,6 +373,13 @@ body.theme-light .tbar, body.theme-light .distbar { background: rgba(0,0,0,0.08)
 body.theme-light .score-ring { background: radial-gradient(closest-side, #fff 71%, transparent 72%), conic-gradient(var(--c) calc(var(--p,0)*3.6deg), rgba(0,0,0,0.10) 0); }
 body.theme-light .cancel-btn { background: #16161d; color: #fff; }
 body.theme-light .cnt { background: rgba(0,0,0,0.08); }
+
+/* ============ result verdict line ============ */
+.verdict {
+  font-size: 14px; line-height: 1.4; text-align: center;
+  color: var(--txt); opacity: 0.85; max-width: 32ch;
+  margin: 6px auto 2px;
+}
 
 /* ============ OCR review (correct misreads before analyzing) ============ */
 .ocr-review { margin-top: 14px; }
