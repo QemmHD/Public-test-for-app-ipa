@@ -169,10 +169,12 @@
     if (sug != null) row("Sugar", sug, "g", sug <= 5 ? "good" : sug <= 22.5 ? "mid" : "bad", sug <= 5 ? "Low" : sug <= 22.5 ? "Moderate" : "Too much sugar");
     var salt = num(nu["salt_100g"]); if (salt == null && num(nu["sodium_100g"]) != null) salt = num(nu["sodium_100g"]) * 2.5;
     if (salt != null) row("Salt", salt, "g", salt <= 0.3 ? "good" : salt <= 1.5 ? "mid" : "bad", salt <= 0.3 ? "Low" : salt <= 1.5 ? "Moderate" : "Too much salt");
+    // Fiber/protein are "good to have" — only surface them as positives when notable,
+    // so they never read as a negative.
     var fib = num(nu["fiber_100g"]);
-    if (fib != null) row("Fiber", fib, "g", fib >= 3 ? "good" : "mid", fib >= 6 ? "Excellent source" : fib >= 3 ? "Good source" : "Low");
+    if (fib != null && fib >= 3) row("Fiber", fib, "g", "good", fib >= 6 ? "Excellent source" : "Good source");
     var pro = num(nu["proteins_100g"]);
-    if (pro != null) row("Protein", pro, "g", pro >= 8 ? "good" : "mid", pro >= 8 ? "Good source" : pro >= 5 ? "Some protein" : "Low");
+    if (pro != null && pro >= 8) row("Protein", pro, "g", "good", "Good source");
     out.hasData = (out.negatives.length + out.positives.length) > 0;
     return out;
   }
