@@ -458,21 +458,75 @@
     });
   }
   function stopScanner() { try { if (zxingReader) zxingReader.reset(); } catch (e) {} zxingReader = null; }
+  function loadImage(src) {
+    return new Promise(function (res, rej) {
+      var im = new Image();
+      im.onload = function () { res(im); };
+      im.onerror = function () { rej(new Error("img load failed")); };
+      im.src = src;
+    });
+  }
+  // Draw the source image to a canvas at a target longest-edge size and rotation,
+  // returning a JPEG data URL. A phone photo of a barcode often only decodes at a
+  // particular scale/orientation, so we generate several variants to try.
+  function renderVariant(img, maxEdge, rotDeg) {
+    try {
+      var w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+      if (!w || !h) return null;
+      var scale = Math.min(1, maxEdge / Math.max(w, h));
+      var sw = Math.round(w * scale), sh = Math.round(h * scale);
+      var c = document.createElement("canvas");
+      var ctx = c.getContext("2d");
+      if (rotDeg === 90 || rotDeg === 270) { c.width = sh; c.height = sw; } else { c.width = sw; c.height = sh; }
+      ctx.save();
+      if (rotDeg === 90) { ctx.translate(sh, 0); ctx.rotate(Math.PI / 2); }
+      else if (rotDeg === 180) { ctx.translate(sw, sh); ctx.rotate(Math.PI); }
+      else if (rotDeg === 270) { ctx.translate(0, sw); ctx.rotate(3 * Math.PI / 2); }
+      ctx.drawImage(img, 0, 0, sw, sh);
+      ctx.restore();
+      return c.toDataURL("image/jpeg", 0.92);
+    } catch (e) { return null; }
+  }
   // Reliable fallback for iOS: decode a barcode from a single still photo taken
   // with the native camera (full autofocus + resolution), instead of the live
-  // stream which often can't focus on dense UPC bars in WKWebView.
+  // stream which often can't focus on dense UPC bars in WKWebView. ZXing only
+  // makes one decode pass per image, so we retry across several scales and
+  // rotations until one hits.
   function decodeBarcodeFromImage(dataUrl) {
     var p = window.ZXing ? Promise.resolve() : loadScriptLocalFirst(ZXING_LOCAL, ZXING_URL);
     return p.then(function () {
       if (!window.ZXing) throw new Error("scanner unavailable");
-      var hints = new Map(), F = ZXing.BarcodeFormat;
-      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,
-        [F.UPC_A, F.UPC_E, F.EAN_13, F.EAN_8, F.CODE_128, F.CODE_39, F.ITF]);
-      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-      var reader = new ZXing.BrowserMultiFormatReader(hints);
-      return reader.decodeFromImageUrl(dataUrl).then(function (res) {
-        return res ? res.getText() : null;
-      }).catch(function () { return null; });
+      var F = ZXing.BarcodeFormat;
+      function makeReader() {
+        var hints = new Map();
+        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,
+          [F.UPC_A, F.UPC_E, F.EAN_13, F.EAN_8, F.CODE_128, F.CODE_39, F.ITF]);
+        hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+        return new ZXing.BrowserMultiFormatReader(hints);
+      }
+      // Try horizontal first across scales, then vertical. For a 1D barcode 180°
+      // and 270° are redundant (TRY_HARDER already reads the reversed row).
+      var attempts = [];
+      [0, 90].forEach(function (rot) {
+        [2048, 1280, 900].forEach(function (edge) { attempts.push({ rot: rot, edge: edge }); });
+      });
+      return loadImage(dataUrl).then(function (img) {
+        var i = 0;
+        function next() {
+          if (i >= attempts.length) return null;
+          var a = attempts[i++];
+          var url = renderVariant(img, a.edge, a.rot);
+          if (!url) return next();
+          return loadImage(url).then(function (variantImg) {
+            return makeReader().decodeFromImageElement(variantImg).then(function (res) {
+              return res ? res.getText() : null;
+            }).catch(function () { return null; });
+          }).catch(function () { return null; }).then(function (code) {
+            return code || next();
+          });
+        }
+        return next();
+      });
     });
   }
 
