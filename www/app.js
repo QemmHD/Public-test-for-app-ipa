@@ -13,6 +13,7 @@
     view: "home", prev: "home",
     product: null, ingDetail: null, ingTab: "what",
     history: [], profile: {}, pending: null,
+    searchResults: null, searchQuery: "",
     research: { term: "", loading: false, data: null, error: false },
     busy: false, statusMsg: ""
   };
@@ -233,17 +234,29 @@
   }
 
   /* -------------------------------------------------- Open Food Facts */
+  var OFF_FIELDS = "code,product_name,brands,image_front_small_url,image_front_url,ingredients_text,ingredients_text_en,additives_tags,nova_group,nutriscore_grade,nutriments";
+  function mapOff(p, code) {
+    if (!p) return null;
+    return { barcode: code || p.code || "", name: p.product_name || "Unknown product", brand: p.brands || "",
+      image: p.image_front_small_url || p.image_front_url || "",
+      ingredientsText: p.ingredients_text_en || p.ingredients_text || "",
+      nova_group: p.nova_group, nutriscore_grade: p.nutriscore_grade, nutriments: p.nutriments || {} };
+  }
   function lookupBarcode(code) {
-    var url = OFF_BASE + encodeURIComponent(code) +
-      ".json?fields=product_name,brands,image_front_url,ingredients_text,ingredients_text_en,additives_tags,nova_group,nutriscore_grade,nutriments";
+    var url = OFF_BASE + encodeURIComponent(code) + ".json?fields=" + OFF_FIELDS;
+    return fetch(url, { headers: { "Accept": "application/json" } })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { return (j && j.status === 1 && j.product) ? mapOff(j.product, code) : null; });
+  }
+  function searchProducts(query) {
+    var url = "https://world.openfoodfacts.org/cgi/search.pl?search_terms=" + encodeURIComponent(query) +
+      "&search_simple=1&action=process&json=1&page_size=24&fields=" + OFF_FIELDS;
     return fetch(url, { headers: { "Accept": "application/json" } })
       .then(function (r) { return r.json(); })
       .then(function (j) {
-        if (!j || j.status !== 1 || !j.product) return null;
-        var p = j.product;
-        return { barcode: code, name: p.product_name || "Unknown product", brand: p.brands || "",
-          image: p.image_front_url || "", ingredientsText: p.ingredients_text_en || p.ingredients_text || "",
-          nova_group: p.nova_group, nutriscore_grade: p.nutriscore_grade, nutriments: p.nutriments || {} };
+        var arr = (j && j.products) || [];
+        return arr.map(function (p) { return mapOff(p); })
+          .filter(function (o) { return o && o.name && o.name !== "Unknown product"; });
       });
   }
   function buildProduct(off, ingredientsText, opts) {
@@ -291,6 +304,22 @@
     });
   }
   function stopScanner() { try { if (zxingReader) zxingReader.reset(); } catch (e) {} zxingReader = null; }
+
+  function runSearch(query) {
+    query = String(query || "").trim();
+    if (query.length < 2) return;
+    state.searchQuery = query; state.searchResults = null;
+    go("search");
+    busy(true, "Searching…");
+    searchProducts(query).then(function (results) {
+      busy(false, ""); state.searchResults = results; render();
+    }).catch(function () { busy(false, ""); state.searchResults = []; render(); });
+  }
+  function openOff(off) {
+    if (!off) return;
+    if (!off.ingredientsText) { state.pending = { barcode: off.barcode, off: off }; go("addPhoto"); return; }
+    showProduct(buildProduct(off));
+  }
 
   function handleBarcode(code) {
     code = String(code || "").replace(/\D/g, "");
@@ -373,6 +402,8 @@
     var recent = state.history.slice(0, 6);
     return '<div class="screen">' +
       '<header class="hd"><div class="logo">🥗 NutriCheck</div><div class="sub">Scan food. See what\'s really inside.</div></header>' +
+      '<div class="searchbar"><input id="q" class="text-input search-input" placeholder="Search a product or brand…" />' +
+      '<button class="search-go" data-act="searchGo">Search</button></div>' +
       '<button class="big-btn" data-act="scan">📷 Scan a barcode</button>' +
       '<div class="dual"><button class="ghost-btn" data-act="addPhoto">🏷️ Add by photo</button>' +
       '<button class="ghost-btn" data-act="manual">⌨️ Enter code</button></div>' +
@@ -397,6 +428,22 @@
       '<button class="cancel-btn" data-act="home">Cancel</button></div>' +
       '</div>';
   }
+  function viewSearch() {
+    var rows = "";
+    if (state.searchResults == null) rows = '<div class="empty small">Searching…</div>';
+    else if (!state.searchResults.length) rows = '<div class="empty">No products found for “' + esc(state.searchQuery) + '”.<br>Try a different name or scan the barcode.</div>';
+    else rows = state.searchResults.map(function (o, i) {
+      return '<div class="row card tappable" data-search-idx="' + i + '">' +
+        (o.image ? '<img class="srch-img" src="' + esc(o.image) + '" alt="">' : '<div class="srch-img ph">🥫</div>') +
+        '<div class="row-main"><div class="row-title">' + esc(o.name) + '</div>' +
+        '<div class="row-sub">' + esc(o.brand || (o.ingredientsText ? "" : "No ingredient data")) + '</div></div>' +
+        '<div class="chev">›</div></div>';
+    }).join("");
+    return '<div class="screen">' + backBar("Search") +
+      '<div class="searchbar"><input id="q" class="text-input search-input" value="' + esc(state.searchQuery) + '" placeholder="Search a product or brand…" />' +
+      '<button class="search-go" data-act="searchGo">Search</button></div>' + rows + '</div>';
+  }
+
   function viewManual() {
     return '<div class="screen">' + backBar("Enter barcode") +
       '<input id="bc" class="text-input" inputmode="numeric" placeholder="e.g. 049000028911" />' +
@@ -528,6 +575,7 @@
   function render() {
     var v = state.view, html;
     if (v === "scanner") html = viewScanner();
+    else if (v === "search") html = viewSearch();
     else if (v === "manual") html = viewManual();
     else if (v === "result") html = viewResult();
     else if (v === "ingredient") html = viewIngredient();
@@ -544,9 +592,13 @@
 
   /* --------------------------------------------------------- events */
   function onClick(e) {
-    var t = e.target.closest("[data-act],[data-nav],[data-open],[data-ingidx],[data-tab],[data-toggle],[data-research]");
+    var t = e.target.closest("[data-act],[data-nav],[data-open],[data-ingidx],[data-tab],[data-toggle],[data-research],[data-search-idx]");
     if (!t) return;
     if (t.dataset.research != null) { doResearch(t.dataset.research); return; }
+    if (t.dataset.searchIdx != null) {
+      var o = state.searchResults && state.searchResults[+t.dataset.searchIdx];
+      if (o) openOff(o); return;
+    }
     if (t.dataset.nav) { go(t.dataset.nav); return; }
     if (t.dataset.open) {
       var p = state.history.filter(function (h) { return h.id === t.dataset.open; })[0];
@@ -573,6 +625,7 @@
     else if (act === "manual") go("manual");
     else if (act === "back") go(state.view === "ingredient" ? "result" : "home");
     else if (act === "manualGo") { var el = document.getElementById("bc"); if (el && el.value.trim()) handleBarcode(el.value.trim()); }
+    else if (act === "searchGo") { var qe = document.getElementById("q"); if (qe && qe.value.trim()) runSearch(qe.value.trim()); }
     else if (act === "clearHist") { if (confirm("Clear all scan history?")) { state.history = []; saveHistory(); render(); } }
   }
 
@@ -599,11 +652,17 @@
     }
   }
 
+  function onKey(e) {
+    if (e.key !== "Enter" || !e.target) return;
+    if (e.target.id === "q" && e.target.value.trim()) { e.preventDefault(); runSearch(e.target.value.trim()); }
+    else if (e.target.id === "bc" && e.target.value.trim()) { e.preventDefault(); handleBarcode(e.target.value.trim()); }
+  }
   function init() {
     app = document.getElementById("app");
     loadLocal();
     document.addEventListener("click", onClick);
     document.addEventListener("change", onChange);
+    document.addEventListener("keydown", onKey);
     render();
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
