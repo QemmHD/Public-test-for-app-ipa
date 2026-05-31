@@ -1,7 +1,7 @@
 {
-  "name": "shiftlog",
+  "name": "launchtest",
   "version": "1.0.0",
-  "description": "Work shift time tracker",
+  "description": "Minimal iOS app to verify IPA signing & launch",
   "scripts": {
     "build": "echo 'static'"
   },

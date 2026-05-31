@@ -1,9 +1,12 @@
-name: Build ShiftLog IPA
+name: Build LaunchTest IPA
 
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build-ios:
@@ -31,13 +34,17 @@ jobs:
           cd ios/App
           pod install
 
-      - name: Build unsigned IPA
+      # Build for a real device (iphoneos / arm64), UNSIGNED.
+      # iOSGods (and other signing services / Sideloadly) strip the signature
+      # and re-sign with their own certificate, so we must NOT ship a simulator
+      # build here — a simulator binary cannot install on a physical iPhone.
+      - name: Build unsigned device IPA
         run: |
           cd ios/App
           xcodebuild \
             -workspace App.xcworkspace \
             -scheme App \
-            -sdk iphonesimulator \
+            -sdk iphoneos \
             -configuration Release \
             -derivedDataPath build \
             CODE_SIGN_IDENTITY="" \
@@ -49,14 +56,39 @@ jobs:
       - name: Package IPA
         run: |
           cd ios/App
+          APP_PATH="build/Build/Products/Release-iphoneos/App.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "::error::Expected device build at $APP_PATH was not found"
+            ls -R build/Build/Products || true
+            exit 1
+          fi
+          rm -rf Payload
           mkdir -p Payload
-          cp -r build/Build/Products/Release-iphonesimulator/App.app Payload/
-          zip -r ShiftLog.ipa Payload
-          mv ShiftLog.ipa ../../ShiftLog.ipa
+          cp -r "$APP_PATH" Payload/
+          # Sanity check: confirm the binary is an arm64 device Mach-O.
+          echo "== Mach-O architecture =="
+          lipo -info "Payload/App.app/App" || file "Payload/App.app/App"
+          zip -qr LaunchTest.ipa Payload
+          mv LaunchTest.ipa ../../LaunchTest.ipa
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ShiftLog-IPA
-          path: ShiftLog.ipa
+          name: LaunchTest-IPA
+          path: LaunchTest.ipa
           retention-days: 90
+
+      # Publish the IPA as a GitHub Release asset so there is a direct,
+      # one-click download link for the file to upload into the iOSGods signer.
+      - name: Publish IPA to a GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: LaunchTest build ${{ github.run_number }}
+          body: |
+            Unsigned **device (arm64)** IPA for sideloading.
+
+            Download `LaunchTest.ipa` below and upload it to the iOSGods
+            signer (App+ / VIP online sign, or Sideloadly). They re-sign it
+            with their certificate; this build is intentionally unsigned.
+          files: LaunchTest.ipa
