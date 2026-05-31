@@ -312,3 +312,79 @@ test("diffProducts is symmetric on a tie", () => {
   assert.strictEqual(d.better, "tie");
   assert.strictEqual(d.scoreDelta, 0);
 });
+
+/* ------------------------------------ expanded E-number coverage (food) */
+test("newly-added gum (E414 gum arabic) classifies ok", () => {
+  const c = engine.classify(engine.norm("Gum Arabic"), "gum arabic", "food");
+  assert.strictEqual(c.status, "ok");
+});
+
+test("newly-added emulsifier polysorbate 80 classifies caution", () => {
+  const c = engine.classify(engine.norm("Polysorbate 80"), "polysorbate 80", "food");
+  assert.strictEqual(c.status, "caution");
+});
+
+test("brominated vegetable oil classifies avoid", () => {
+  const c = engine.classify(engine.norm("Brominated Vegetable Oil"), "brominated vegetable oil", "food");
+  assert.strictEqual(c.status, "avoid");
+});
+
+test("banned azo colour citrus red 2 classifies avoid", () => {
+  const c = engine.classify(engine.norm("Citrus Red 2"), "citrus red 2", "food");
+  assert.strictEqual(c.status, "avoid");
+});
+
+test("flavour enhancer maltol (E636) classifies limit", () => {
+  const c = engine.classify(engine.norm("Maltol"), "maltol", "food");
+  assert.strictEqual(c.status, "limit");
+});
+
+test("polysaccharide pullulan (E1204) classifies ok", () => {
+  const c = engine.classify(engine.norm("Pullulan"), "pullulan", "food");
+  assert.strictEqual(c.status, "ok");
+});
+
+/* ------------------------------- new cosmetic concern buckets (beauty) */
+test("phthalate (diethyl phthalate) is flagged caution/avoid", () => {
+  const c = engine.classify(engine.norm("Diethyl Phthalate"), "diethyl phthalate", "beauty");
+  assert.ok(c.status === "caution" || c.status === "avoid");
+});
+
+test("ethoxylated emulsifier ceteareth-20 classifies limit", () => {
+  const c = engine.classify(engine.norm("Ceteareth-20"), "ceteareth-20", "beauty");
+  assert.strictEqual(c.status, "limit");
+});
+
+test("microplastic bucket catches polyethylene as limit", () => {
+  const c = engine.classify(engine.norm("Polyethylene"), "polyethylene", "beauty");
+  assert.strictEqual(c.status, "limit");
+  assert.strictEqual(c.group, "microplastic");
+});
+
+/* ----------------------------------- whole-food breadth (extraClean3) */
+test("whole food blueberries classifies good/clean", () => {
+  const c = engine.classify(engine.norm("Blueberries"), "blueberries", "food");
+  assert.ok(c.status === "ok" || c.status === "good" || c.clean === true);
+});
+
+test("whole food brown rice classifies good/clean", () => {
+  const c = engine.classify(engine.norm("Brown Rice"), "brown rice", "food");
+  assert.ok(c.status === "ok" || c.status === "good" || c.clean === true);
+});
+
+/* ----------------------- FALSE-POSITIVE regression (look-alikes safe) */
+test("silica is NOT mis-flagged as a silicone", () => {
+  const c = engine.classify(engine.norm("Silica"), "silica", "beauty");
+  assert.notStrictEqual(c.group, "siliconeOther");
+});
+
+test("silicon dioxide is NOT mis-flagged as a silicone", () => {
+  const c = engine.classify(engine.norm("Silicon Dioxide"), "silicon dioxide", "beauty");
+  assert.notStrictEqual(c.group, "siliconeOther");
+});
+
+test("glycerin stays benign (not caught by a new bucket)", () => {
+  const c = engine.classify(engine.norm("Glycerin"), "glycerin", "beauty");
+  assert.notStrictEqual(c.status, "avoid");
+  assert.notStrictEqual(c.status, "caution");
+});

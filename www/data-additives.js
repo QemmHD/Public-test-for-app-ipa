@@ -724,7 +724,81 @@ var CB_DATA = (function () {
     ["E1451", "Acetylated oxidized starch", "limit"], ["E1505", "Triethyl citrate", "ok"],
     ["E1510", "Ethanol", "ok"], ["E1517", "Glyceryl diacetate", "limit"],
     ["E1518", "Triacetin", "limit"], ["E1519", "Benzyl alcohol", "limit"],
-    ["E1520", "Propylene glycol", "limit"], ["E1521", "Polyethylene glycol (PEG)", "limit"]
+    ["E1520", "Propylene glycol", "limit"], ["E1521", "Polyethylene glycol (PEG)", "limit"],
+    // --- Supplemental gap-fill: remaining assigned codes across all ranges ---
+    // Colours (E100–E199)
+    ["E121", "Citrus Red 2", "avoid"], ["E125", "Ponceau SX (Scarlet GN)", "avoid"],
+    ["E160f", "Ethyl ester of beta-apo-8'-carotenoic acid", "ok"],
+    ["E161a", "Flavoxanthin", "ok"], ["E161c", "Cryptoxanthin", "ok"],
+    ["E161d", "Rubixanthin", "ok"], ["E161e", "Violaxanthin", "ok"],
+    ["E161f", "Rhodoxanthin", "ok"], ["E161h", "Zeaxanthin", "ok"],
+    ["E181", "Tannic acid", "ok"],
+    // Preservatives (E200–E299)
+    ["E209", "Heptyl para-hydroxybenzoate", "caution"], ["E216", "Propylparaben", "avoid"],
+    ["E217", "Sodium propyl para-hydroxybenzoate", "avoid"], ["E225", "Potassium sulphite", "caution"],
+    ["E227", "Calcium hydrogen sulphite", "caution"], ["E230", "Biphenyl (diphenyl)", "caution"],
+    ["E231", "Orthophenyl phenol", "caution"], ["E232", "Sodium orthophenyl phenol", "caution"],
+    ["E233", "Thiabendazole", "caution"], ["E236", "Formic acid", "limit"],
+    ["E237", "Sodium formate", "limit"], ["E238", "Calcium formate", "limit"],
+    ["E243", "Ethyl lauroyl arginate", "limit"],
+    // Antioxidants & acidity regulators (E300–E399)
+    ["E303", "Potassium ascorbate", "ok"], ["E323", "Anoxomer", "limit"],
+    ["E354", "Calcium tartrate", "ok"], ["E356", "Sodium adipate", "ok"],
+    ["E357", "Potassium adipate", "ok"], ["E359", "Ammonium adipate", "ok"],
+    ["E365", "Sodium fumarate", "ok"], ["E366", "Potassium fumarate", "ok"],
+    ["E367", "Calcium fumarate", "ok"], ["E368", "Ammonium fumarate", "ok"],
+    ["E370", "1,4-Heptonolactone", "limit"], ["E375", "Niacin (nicotinic acid)", "ok"],
+    ["E381", "Ferric ammonium citrate", "ok"], ["E383", "Calcium glycerophosphate", "ok"],
+    ["E384", "Isopropyl citrate", "limit"], ["E386", "Disodium EDTA", "limit"],
+    ["E387", "Oxystearin", "limit"], ["E388", "Thiodipropionic acid", "limit"],
+    ["E389", "Dilauryl thiodipropionate", "limit"], ["E390", "Distearyl thiodipropionate", "limit"],
+    ["E391", "Phytic acid", "ok"], ["E399", "Calcium lactobionate", "ok"],
+    // Thickeners, stabilizers, emulsifiers (E400–E499)
+    ["E424", "Curdlan", "ok"], ["E429", "Peptones", "ok"],
+    ["E430", "Polyoxyethylene (8) stearate", "caution"], ["E443", "Brominated vegetable oil", "avoid"],
+    ["E456", "Potassium polyaspartate", "ok"], ["E457", "Alpha-cyclodextrin", "ok"],
+    ["E462", "Ethyl cellulose", "ok"], ["E467", "Ethyl hydroxyethyl cellulose", "ok"],
+    ["E469", "Enzymatically hydrolysed carboxymethyl cellulose", "ok"],
+    ["E472d", "Tartaric acid esters of mono- and diglycerides", "limit"],
+    ["E472f", "Mixed acetic and tartaric acid esters of mono- and diglycerides", "limit"],
+    ["E478", "Lactylated fatty acid esters of glycerol", "limit"],
+    ["E479b", "Thermally oxidized soya bean oil", "limit"],
+    ["E480", "Dioctyl sodium sulphosuccinate", "limit"], ["E493", "Sorbitan monolaurate", "limit"],
+    ["E496", "Sorbitan trioleate", "limit"],
+    // pH / anti-caking / misc (E500–E599)
+    ["E510", "Ammonium chloride", "ok"], ["E512", "Stannous chloride", "limit"],
+    ["E513", "Sulphuric acid", "ok"], ["E518", "Magnesium sulphate", "ok"],
+    ["E519", "Copper sulphate", "caution"], ["E523", "Aluminium ammonium sulphate", "caution"],
+    ["E530", "Magnesium oxide", "ok"], ["E538", "Calcium ferrocyanide", "limit"],
+    ["E542", "Bone phosphate", "limit"], ["E544", "Calcium polyphosphate", "limit"],
+    ["E545", "Ammonium polyphosphate", "limit"], ["E550", "Sodium silicate", "limit"],
+    ["E553a", "Magnesium silicate", "limit"], ["E556", "Aluminium calcium silicate", "caution"],
+    ["E558", "Bentonite", "ok"], ["E559", "Aluminium silicate (kaolin)", "caution"],
+    ["E574", "Gluconic acid", "ok"], ["E577", "Potassium gluconate", "ok"],
+    ["E579", "Ferrous gluconate", "ok"],
+    // Flavor enhancers (E600–E699)
+    ["E636", "Maltol", "limit"], ["E637", "Ethyl maltol", "limit"], ["E641", "L-leucine", "ok"],
+    // Glazing agents, gases, sweeteners, improvers (E900–E999)
+    ["E908", "Rice bran wax", "ok"], ["E913", "Lanolin", "limit"],
+    ["E915", "Esters of colophonium", "limit"], ["E922", "Potassium persulphate", "caution"],
+    ["E923", "Ammonium persulphate", "caution"], ["E925", "Chlorine", "caution"],
+    ["E926", "Chlorine dioxide", "caution"], ["E928", "Benzoyl peroxide", "caution"],
+    ["E930", "Calcium peroxide", "limit"], ["E940", "Dichlorodifluoromethane", "limit"],
+    ["E943b", "Isobutane", "limit"], ["E945", "Chloropentafluoroethane", "limit"],
+    ["E949", "Hydrogen", "ok"], ["E956", "Alitame", "caution"],
+    ["E964", "Polyglycitol syrup", "limit"], ["E999", "Quillaia extract", "limit"],
+    // Additional / modified starches, enzymes (E1000–E1525)
+    ["E1000", "Cholic acid", "limit"], ["E1001", "Choline salts", "ok"],
+    ["E1103", "Invertase", "ok"], ["E1104", "Lipases", "ok"],
+    ["E1204", "Pullulan", "ok"], ["E1205", "Basic methacrylate copolymer", "limit"],
+    ["E1206", "Neutral methacrylate copolymer", "limit"], ["E1207", "Anionic methacrylate copolymer", "limit"],
+    ["E1208", "Polyvinylpyrrolidone-vinyl acetate copolymer", "limit"],
+    ["E1209", "Polyvinyl alcohol-polyethylene glycol graft copolymer", "limit"],
+    ["E1401", "Acid-treated starch", "limit"], ["E1402", "Alkaline-treated starch", "limit"],
+    ["E1403", "Bleached starch", "limit"], ["E1405", "Enzyme-treated starch", "limit"],
+    ["E1411", "Distarch glycerol", "limit"], ["E1423", "Acetylated distarch glycerol", "limit"],
+    ["E1430", "Distarch glycerine", "limit"], ["E1452", "Starch aluminium octenyl succinate", "limit"],
+    ["E1503", "Castor oil", "ok"], ["E1504", "Ethyl acetate", "limit"]
   ];
 
   // Expanded whole-food / clean ingredient recognition.
@@ -792,20 +866,63 @@ var CB_DATA = (function () {
     if (cleanIngredients.indexOf(extraClean2[c2]) === -1) cleanIngredients.push(extraClean2[c2]);
   }
 
+  // Third pass: more common whole foods / pantry basics seen on real labels.
+  const extraClean3 = [
+    // produce
+    "strawberries", "blueberries", "spinach", "kale", "carrots", "carrot", "tomato", "tomatoes",
+    "apple", "apples", "banana", "bananas", "lemon juice", "lime juice", "ginger", "garlic cloves",
+    "sweet corn", "green peas", "yellow onion", "red onion", "white onion", "sweet onion",
+    "red pepper", "green pepper", "yellow pepper", "chili pepper", "habanero", "anaheim pepper",
+    "napa cabbage", "red cabbage", "green cabbage", "iceberg lettuce", "mixed greens", "baby spinach",
+    "portobello", "shiitake", "cremini", "white mushrooms", "russet potato", "yukon gold potato",
+    "raisins", "dates", "dried figs", "golden raisins", "dried mango", "sun-dried tomatoes",
+    // grains / starches
+    "brown rice", "white rice", "long grain rice", "short grain rice", "wheat flour",
+    "whole wheat flour", "all-purpose flour", "bread flour", "oat flour", "buckwheat flour",
+    "rolled oats", "quick oats", "instant oats", "oat bran", "wheat bran", "farro", "freekeh",
+    "millet flour", "barley flour", "chickpea pasta", "lentil pasta", "brown rice pasta",
+    // protein
+    "chicken thigh", "chicken wings", "whole chicken", "ground chicken", "pork loin",
+    "pork tenderloin", "beef sirloin", "beef tenderloin", "ribeye", "flank steak", "chuck roast",
+    "salmon", "tuna", "tilapia", "catfish", "snapper", "pollock", "whitefish", "octopus", "squid",
+    "egg", "eggs", "egg yolk", "egg yolks", "whole egg", "liquid egg whites",
+    // dairy / alternatives
+    "buttermilk", "clotted cream", "creme fraiche", "mascarpone", "burrata", "queso fresco",
+    "cashew milk", "rice milk", "hemp milk", "macadamia milk", "pea milk", "lactose-free milk",
+    // legumes / nuts / seeds
+    "garbanzo beans", "white beans", "red lentils", "green lentils", "brown lentils", "yellow lentils",
+    "roasted peanuts", "raw almonds", "raw cashews", "walnuts", "almonds", "cashews", "peanuts",
+    "chia seeds", "flax seeds", "ground flaxseed", "pumpkin seeds", "sunflower seeds", "sesame oil",
+    // condiments / pantry
+    "extra virgin olive oil", "olive oil", "avocado oil", "coconut oil", "grapeseed oil",
+    "apple cider vinegar", "red wine vinegar", "sherry vinegar", "champagne vinegar",
+    "honey mustard", "whole grain mustard", "yellow mustard", "ketchup", "salsa", "guacamole",
+    "hummus", "pesto", "marinara", "vegetable stock", "beef broth", "fish stock",
+    "vanilla extract", "lemon zest", "orange zest", "lime zest", "fresh ginger", "fresh garlic",
+    "cinnamon", "ground cinnamon", "ground ginger", "ground turmeric", "turmeric", "basil", "tarragon"
+  ];
+  for (var c3 = 0; c3 < extraClean3.length; c3++) {
+    if (cleanIngredients.indexOf(extraClean3[c3]) === -1) cleanIngredients.push(extraClean3[c3]);
+  }
+
   // More added-sugar synonyms seen on U.S. labels.
   const extraSugars = [
     "turbinado", "demerara", "muscovado", "powdered sugar", "confectioners sugar",
     "brown rice syrup", "tapioca syrup", "date syrup", "maple sugar", "palm sugar",
     "golden syrup", "treacle", "sorghum syrup", "malt syrup", "caramel syrup",
     "beet sugar", "raw sugar", "coconut nectar", "corn sweetener", "crystalline fructose",
-    "fruit juice", "honey", "agave nectar", "maltose syrup"
+    "fruit juice", "honey", "agave nectar", "maltose syrup",
+    "evaporated cane juice", "cane sugar", "cane juice", "rice syrup", "barley malt",
+    "barley malt syrup", "fruit juice concentrate", "grape juice concentrate", "carob syrup",
+    "rice malt syrup", "yacon syrup", "panela", "jaggery",
+    "anhydrous dextrose", "glucose-fructose syrup", "glucose syrup", "isoglucose"
   ];
   for (var s2 = 0; s2 < extraSugars.length; s2++) {
     if (addedSugars.indexOf(extraSugars[s2]) === -1) addedSugars.push(extraSugars[s2]);
   }
 
   // More vague / undisclosed terms.
-  const extraVague = ["flavor", "flavors", "flavour", "flavours", "natural and artificial flavors", "seasoning", "seasonings", "smoke flavor", "natural smoke flavor"];
+  const extraVague = ["flavor", "flavors", "flavour", "flavours", "natural and artificial flavors", "seasoning", "seasonings", "smoke flavor", "natural smoke flavor", "natural flavor", "natural flavors", "artificial flavor", "artificial flavors", "natural flavoring", "spices", "spice", "spice extract", "flavoring", "flavorings", "natural flavour", "artificial flavour"];
   for (var v2 = 0; v2 < extraVague.length; v2++) {
     if (vagueTerms.indexOf(extraVague[v2]) === -1) vagueTerms.push(extraVague[v2]);
   }

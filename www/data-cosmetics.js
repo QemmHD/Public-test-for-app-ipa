@@ -400,20 +400,27 @@ window.CB_DATA_COSMETICS = (function () {
       "benzophenone-1", "benzophenone-2", "benzophenone-4", "ethylhexyl salicylate",
       "4-methylbenzylidene camphor", "3-benzylidene camphor", "genistein",
       "benzophenone-1", "benzophenone-2", "benzophenone-4", "4-methylbenzylidene camphor",
-      "ethylhexyl salicylate", "octyl salicylate", "propyl gallate", "genistein"
+      "ethylhexyl salicylate", "octyl salicylate", "propyl gallate", "genistein",
+      "octinoxate", "ethylhexyl methoxycinnamate", "benzophenone-3", "benzophenone-8",
+      "padimate o", "ensulizole", "sulisobenzone", "bisphenol a", "bisphenol s",
+      "triphenyl phosphate", "daidzein", "kaempferol", "octyl methoxycinnamate"
     ],
     formaldehydeReleaser: [
       "imidazolidinyl urea", "diazolidinyl urea", "sodium hydroxymethylglycinate",
       "bronopol", "2-bromo-2-nitropropane-1,3-diol", "polyoxymethylene urea",
       "methenamine", "hexamethylenetetramine", "glyoxal", "benzylhemiformal",
       "5-bromo-5-nitro-1,3-dioxane", "tris(hydroxymethyl) nitromethane",
-      "methenamine", "benzylhemiformal", "glyoxal", "tris(hydroxymethyl) nitromethane"
+      "dmdm hydantoin", "quaternium-15", "imidazolidinyl urea", "diazolidinyl urea",
+      "sodium hydroxymethylglycinate", "methylene glycol", "formalin", "paraformaldehyde"
     ],
     sulfate: [
       "ammonium lauryl sulfate", "ammonium laureth sulfate", "sodium myreth sulfate",
       "tea-lauryl sulfate", "sodium coco sulfate", "sodium lauryl sulfoacetate",
       "magnesium lauryl sulfate", "sodium cetearyl sulfate", "sodium c14-16 olefin sulfonate", "magnesium lauryl sulfate",
-      "sodium c14-16 olefin sulfonate", "sodium xylenesulfonate", "ammonium xylenesulfonate"
+      "sodium c14-16 olefin sulfonate", "sodium xylenesulfonate", "ammonium xylenesulfonate",
+      "sodium dodecylbenzenesulfonate", "linear alkylbenzene sulfonate", "sodium alpha-olefin sulfonate",
+      "tea-dodecylbenzenesulfonate", "ammonium c12-15 pareth sulfate", "sodium c12-15 pareth sulfate",
+      "sodium decyl sulfate", "sodium octyl sulfate"
     ],
     fragranceAllergen: [
       "limonene", "linalool", "citronellol", "geraniol", "eugenol", "coumarin",
@@ -422,27 +429,59 @@ window.CB_DATA_COSMETICS = (function () {
       "alpha-isomethyl ionone", "hydroxycitronellal", "evernia prunastri", "evernia furfuracea",
       "isoeugenol", "citral", "anise alcohol", "benzyl cinnamate", "hydroxycitronellal",
       "alpha-isomethyl ionone", "methyl 2-octynoate", "evernia prunastri", "evernia furfuracea",
-      "oakmoss extract", "cinnamyl alcohol", "butylphenyl methylpropional"
+      "oakmoss extract", "cinnamyl alcohol", "butylphenyl methylpropional",
+      "benzyl alcohol", "amylcinnamyl alcohol", "benzaldehyde", "isoeugenol", "methyl heptine carbonate",
+      "acetylhexamethyl tetralin", "hydroxyisohexyl 3-cyclohexene carboxaldehyde", "hexamethylindanopyran",
+      "3-propylidenephthalide", "salicylaldehyde", "dihydrocoumarin", "terpinolene",
+      "carvone", "menthol", "vanillin", "cananga odorata", "rose ketone-4"
     ],
     sensitizer: [
       "methyldibromo glutaronitrile", "iodopropynyl butylcarbamate", "chlorphenesin",
       "propolis", "colophonium", "balsam of peru", "cocamidopropyl betaine",
       "lanolin", "thimerosal", "neomycin", "cocamidopropyl betaine",
-      "chloroxylenol", "climbazole", "octylisothiazolinone", "benzisothiazolinone"
+      "chloroxylenol", "climbazole", "octylisothiazolinone", "benzisothiazolinone",
+      "methylisothiazolinone", "methylchloroisothiazolinone", "propolis cera", "rosin",
+      "abietic acid", "nickel sulfate", "potassium dichromate", "cobalt chloride",
+      "glyceryl thioglycolate", "ammonium thioglycolate", "toluenesulfonamide formaldehyde resin",
+      "dibromodicyanobutane", "sodium metabisulfite"
     ],
     alcoholDrying: [
       "alcohol denat", "denatured alcohol", "sd alcohol", "isopropyl alcohol", "ethanol",
-      "sd alcohol 40", "isopropanol"
+      "sd alcohol 40", "isopropanol", "sd alcohol 40-b", "alcohol denat.", "methanol",
+      "benzyl alcohol", "propanol", "alcohol denatured"
     ],
     siliconeOther: [
       "cyclohexasiloxane", "phenyl trimethicone", "amodimethicone", "trimethicone",
       "dimethiconol", "trimethylsiloxysilicate", "cetyl dimethicone", "stearyl dimethicone",
-      "behenoxy dimethicone", "bis-aminopropyl dimethicone"
+      "behenoxy dimethicone", "bis-aminopropyl dimethicone",
+      "cyclopentasiloxane", "cyclotetrasiloxane", "dimethicone crosspolymer", "dimethicone copolyol",
+      "cetearyl methicone", "polysilicone-11", "caprylyl methicone", "hexamethyldisiloxane",
+      "phenyl methicone", "cyclomethicone", "methicone"
     ],
     dye: [
       "lead acetate", "carbon black", "ci 77266", "ci 19140", "ci 16035", "ci 42090",
       "ci 15985", "ci 17200", "ci 45380", "ci 45410", "chromium oxide greens", "ferric ferrocyanide", "p-aminophenol",
-      "toluene-2,5-diamine", "basic brown 17", "hc blue", "ci 12490", "4-amino-2-hydroxytoluene"
+      "toluene-2,5-diamine", "basic brown 17", "hc blue", "ci 12490", "4-amino-2-hydroxytoluene",
+      "ci 77491", "ci 77492", "ci 77499", "ci 73360", "ci 15850", "ci 45370", "ci 47005",
+      "ci 42051", "ci 75470", "ci 77742", "ci 77000", "ci 77820", "d&c red 27", "d&c red 33",
+      "fd&c yellow 5", "fd&c yellow 6", "fd&c blue 1", "fd&c red 40", "p-phenylenediamine"
+    ],
+    phthalate: [
+      "diethyl phthalate", "dibutyl phthalate", "dimethyl phthalate", "diethylhexyl phthalate",
+      "di-n-butyl phthalate", "butyl benzyl phthalate", "diisononyl phthalate", "diisodecyl phthalate",
+      "dep", "dbp", "dehp", "bbp", "dinp", "didp", "dmp"
+    ],
+    pegEthoxylate: [
+      "peg-100 stearate", "peg-40 stearate", "peg-40 hydrogenated castor oil", "peg-7 glyceryl cocoate",
+      "peg-150 distearate", "peg-12 dimethicone", "peg-8", "peg-32", "peg-75 lanolin",
+      "ceteareth-20", "ceteareth-25", "ceteareth-12", "steareth-2", "steareth-20", "steareth-21",
+      "laureth-4", "laureth-7", "laureth-23", "oleth-10", "oleth-20", "trideceth-6",
+      "ppg-15 stearyl ether", "polysorbate 20", "polysorbate 60", "polysorbate 80"
+    ],
+    microplastic: [
+      "polyethylene", "polypropylene", "nylon-12", "nylon-6", "acrylates copolymer",
+      "acrylates crosspolymer", "polymethyl methacrylate", "polyethylene terephthalate",
+      "styrene acrylates copolymer"
     ]
   };
 
@@ -454,7 +493,10 @@ window.CB_DATA_COSMETICS = (function () {
     sensitizer: { status: "caution", reason: "Skin sensitizer / allergen" },
     alcoholDrying: { status: "limit", reason: "Drying alcohol" },
     siliconeOther: { status: "limit", reason: "Silicone (buildup / non-biodegradable)" },
-    dye: { status: "caution", reason: "Colorant of concern" }
+    dye: { status: "caution", reason: "Colorant of concern" },
+    phthalate: { status: "caution", reason: "Phthalate plasticizer (endocrine concern)" },
+    pegEthoxylate: { status: "limit", reason: "Ethoxylated (possible 1,4-dioxane trace)" },
+    microplastic: { status: "limit", reason: "Synthetic microplastic polymer" }
   };
 
   const groups = {
@@ -520,6 +562,30 @@ window.CB_DATA_COSMETICS = (function () {
       whatIs: "A pigment or dye used to color a personal-care product.",
       whyFlagged: "Some colorants carry heavy-metal contamination or other toxicity concerns.",
       effects: "Varies by colorant; possible irritation or contamination exposure.",
+      studies: []
+    },
+    phthalate: {
+      category: "Phthalate plasticizer", status: "caution",
+      summary: "A plasticizer linked to possible hormone disruption.",
+      whatIs: "Phthalates soften plastics and help fragrance and color cling; they often hide under the word \"fragrance\".",
+      whyFlagged: "Several phthalates are suspected endocrine disruptors and are restricted in cosmetics and banned in children's products in the EU.",
+      effects: "Possible hormonal and reproductive effects; evidence varies by specific phthalate.",
+      studies: []
+    },
+    pegEthoxylate: {
+      category: "Ethoxylated compound", status: "limit",
+      summary: "A PEG/ethoxylated ingredient that can carry trace 1,4-dioxane.",
+      whatIs: "PEG, -eth and polysorbate ingredients are made by ethoxylation to act as emulsifiers, solvents and surfactants.",
+      whyFlagged: "The ethoxylation process can leave trace 1,4-dioxane (a probable carcinogen) unless purified; the ingredients themselves are generally low-hazard.",
+      effects: "Low direct hazard; concern is residual 1,4-dioxane contamination and penetration enhancement.",
+      studies: []
+    },
+    microplastic: {
+      category: "Synthetic microplastic polymer", status: "limit",
+      summary: "A solid plastic polymer used as a film-former, bulking or exfoliating agent.",
+      whatIs: "These are synthetic plastics (polyethylene, nylon, acrylates, PMMA) added for texture, film or scrub beads.",
+      whyFlagged: "They do not biodegrade and contribute to microplastic pollution; the EU is phasing out intentionally added microplastics.",
+      effects: "Minimal direct health hazard; primary concern is environmental persistence.",
       studies: []
     }
   };
