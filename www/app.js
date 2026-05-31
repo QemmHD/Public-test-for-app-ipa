@@ -496,6 +496,37 @@
   };
   function icon(n, cls) { return '<svg class="ic' + (cls ? " " + cls : "") + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + (ICONS[n] || "") + '</svg>'; }
 
+  function brandLogo(px) {
+    return '<svg class="brandlogo" width="' + px + '" height="' + px + '" viewBox="0 0 48 48" fill="none">' +
+      '<defs><linearGradient id="ncg" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">' +
+      '<stop stop-color="#4f8bff"/><stop offset="1" stop-color="#8a5bff"/></linearGradient></defs>' +
+      '<rect width="48" height="48" rx="13" fill="url(#ncg)"/>' +
+      '<circle cx="24" cy="24" r="15" stroke="#fff" stroke-opacity="0.28" stroke-width="2.2"/>' +
+      '<path d="M15.5 24.5l5.5 6 12-14" stroke="#fff" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  }
+  var ILLUS = {
+    scan: '<rect x="14" y="22" width="72" height="56" rx="10"/><path d="M30 38v24M40 38v24M50 38v24M60 38v24M70 38v24"/>',
+    chart: '<path d="M20 80V52M40 80V30M60 80V44M80 80V22"/><path d="M14 82h72"/>',
+    box: '<path d="M50 16l30 16v36L50 84 20 68V32z"/><path d="M20 32l30 16 30-16M50 48v36"/>',
+    heart: '<path d="M50 80S22 62 22 40a15 15 0 0 1 28-6 15 15 0 0 1 28 6c0 22-28 40-28 40z"/>'
+  };
+  function illus(name) { return '<div class="illuswrap"><svg class="illus" viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">' + (ILLUS[name] || "") + '</svg></div>'; }
+
+  var lastAnimatedId = null;
+  function animateScore() {
+    var ring = document.querySelector(".score-ring"), numEl = document.querySelector(".score-num");
+    if (!ring || !numEl || !state.product) return;
+    var target = state.product.score, start = null, dur = 800;
+    function step(now) {
+      if (start === null) start = now;
+      var t = Math.min(1, (now - start) / dur), e = 1 - Math.pow(1 - t, 3);
+      ring.style.setProperty("--p", (target * e).toFixed(1));
+      numEl.textContent = Math.round(target * e);
+      if (t < 1) requestAnimationFrame(step); else { ring.style.setProperty("--p", target); numEl.textContent = target; }
+    }
+    requestAnimationFrame(step);
+  }
+
   function go(view) {
     if (view !== "scanner") stopScanner();
     state.prev = state.view; state.view = view; render();
@@ -505,14 +536,15 @@
   function viewHome() {
     var recent = state.history.slice(0, 6);
     return '<div class="screen">' +
-      '<header class="hd"><div class="logo">🥗 NutriCheck</div><div class="sub">Scan food. See what\'s really inside.</div></header>' +
+      '<header class="hd hd-brand">' + brandLogo(42) + '<div><div class="logo">NutriCheck</div>' +
+      '<div class="sub">Scan food. See what\'s really inside.</div></div></header>' +
       '<div class="searchbar"><input id="q" class="text-input search-input" placeholder="Search a product or brand…" />' +
       '<button class="search-go" data-act="searchGo">' + icon("search") + '</button></div>' +
       '<button class="big-btn" data-act="scan">' + icon("scan") + ' Scan a barcode</button>' +
       '<div class="dual"><button class="ghost-btn" data-act="addPhoto">' + icon("tag") + ' Add by photo</button>' +
       '<button class="ghost-btn" data-act="manual">' + icon("keypad") + ' Enter code</button></div>' +
       (recent.length ? ('<div class="section-title">Recent scans</div>' + recent.map(historyRow).join("")) :
-        '<div class="empty">No scans yet.<br>Scan your first product above 👆</div>') +
+        '<div class="empty">' + illus("scan") + 'No scans yet.<br>Scan or search your first product above.</div>') +
       '</div>';
   }
   function historyRow(p) {
@@ -676,7 +708,7 @@
       '<button class="chip' + (fav ? " on" : "") + '" data-hist="fav">★ Favorites</button></div>';
     var body = list.length ? list.map(historyRow).join("") +
       (!fav ? '<button class="ghost-btn danger" data-act="clearHist">Clear history</button>' : "") :
-      '<div class="empty">' + (fav ? "No favorites yet.<br>Tap ☆ on a product to save it." : "Nothing scanned yet.") + '</div>';
+      '<div class="empty">' + illus("box") + (fav ? "No favorites yet.<br>Tap ☆ on a product to save it." : "Nothing scanned yet.") + '</div>';
     return '<div class="screen"><header class="hd"><div class="logo">History</div></header>' + chips + body + '</div>';
   }
 
@@ -690,7 +722,7 @@
     var s = computeInsights(source);
     if (!s.n) return '<div class="screen"><header class="hd"><div class="logo">Insights</div>' +
       '<div class="sub">Your scanning habits</div></header>' + chips +
-      '<div class="empty">' + (eatenMode ? "Mark products as “I ate this” on the result screen to track your diet here 🍽" : "Scan a few products and your stats show up here 📊") + '</div></div>';
+      '<div class="empty">' + illus(eatenMode ? "heart" : "chart") + (eatenMode ? "Mark products as “I ate this” on the result screen to track your diet here." : "Scan a few products and your stats show up here.") + '</div></div>';
     function seg(cls, v) { return v ? '<div class="seg ' + cls + '" style="flex:' + v + '"></div>' : ""; }
     var bar = '<div class="distbar">' + seg("exc", s.dist.exc) + seg("good", s.dist.good) + seg("mid", s.dist.mid) + seg("bad", s.dist.bad) + '</div>';
     var topHtml = s.top.length ? s.top.map(function (f) {
@@ -717,7 +749,7 @@
         '<div class="switch ' + (on ? "on" : "") + '"><span></span></div></div>';
     }).join("");
     return '<div class="screen onboard">' +
-      '<div class="ob-hero"><div class="ob-logo">🥗</div><div class="logo">NutriCheck</div>' +
+      '<div class="ob-hero"><div class="ob-logo">' + brandLogo(88) + '</div><div class="logo">NutriCheck</div>' +
       '<div class="sub">Scan any food and instantly see what\'s really inside — every additive rated, explained and researched.</div></div>' +
       '<div class="ob-feats">' +
         '<div class="ob-feat">📷 <span>Scan or search any product</span></div>' +
@@ -782,6 +814,7 @@
     app.innerHTML = '<div class="app-body">' + html + '</div>' + (showTabs ? tabBar() : "");
     if (state.busy) app.insertAdjacentHTML("beforeend",
       '<div class="overlay"><div class="spinner"></div><div class="ov-msg">' + esc(state.statusMsg || "Working…") + '</div></div>');
+    if (v === "result" && state.product && state.product.id !== lastAnimatedId) { lastAnimatedId = state.product.id; animateScore(); }
   }
 
   /* --------------------------------------------------------- events */
