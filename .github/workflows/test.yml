@@ -1,0 +1,26 @@
+name: Engine tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Pure engine unit tests run with zero dependencies via Node's built-in
+      # test runner. This job is independent of the IPA build and never touches
+      # the shipped www/ artifact.
+      - name: Run engine tests
+        run: node --test

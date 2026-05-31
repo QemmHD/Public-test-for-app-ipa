@@ -3,11 +3,30 @@
   "use strict";
 
   var DATA = window.CB_DATA;
-  var OFF_BASE = "https://world.openfoodfacts.org/api/v2/product/";
+  var COS = window.CB_DATA_COSMETICS || null;
+  // Shared pure engine (parsing/classification/scoring). Initialized with both
+  // the food and cosmetic knowledge bases so one scan path handles any product.
+  var ENG = window.CB_ENGINE;
+  ENG.init({ food: DATA, cosmetics: COS });
+
+  // Open*Facts family — same free API, different product domains. Queried in
+  // order so a single barcode resolves to food, beauty, household or pet food.
+  var OFF_SOURCES = [
+    { base: "https://world.openfoodfacts.org/api/v2/product/", type: "food", label: "Open Food Facts" },
+    { base: "https://world.openbeautyfacts.org/api/v2/product/", type: "beauty", label: "Open Beauty Facts" },
+    { base: "https://world.openproductsfacts.org/api/v2/product/", type: "household", label: "Open Products Facts" },
+    { base: "https://world.openpetfoodfacts.org/api/v2/product/", type: "petfood", label: "Open Pet Food Facts" }
+  ];
+  var OFF_BASE = OFF_SOURCES[0].base;
+  // Local vendored libraries (offline). Fall back to CDN only if a local asset is missing.
+  var ZXING_LOCAL = "vendor/zxing/index.min.js";
+  var TESS_LOCAL = "vendor/tesseract/tesseract.min.js";
   var ZXING_URL = "https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js";
   var TESS_URL = "https://unpkg.com/tesseract.js@5.1.0/dist/tesseract.min.js";
 
   var WIKI = "https://en.wikipedia.org/api/rest_v1/page/summary/";
+  var FETCH_TIMEOUT = 8000, FETCH_RETRIES = 1;
+  var PROD_TTL = 1000 * 60 * 60 * 24 * 30; // 30-day barcode cache
 
   var PROFILE_OPTS = [
     ["gluten", "Gluten-free"], ["dairy", "Dairy-free"], ["egg", "Egg-free"], ["soy", "Soy-free"],
@@ -40,19 +59,8 @@
   function saveHealth() { try { localStorage.setItem("cb_health", JSON.stringify(state.health)); } catch (e) {} }
   function saveSettings() { try { localStorage.setItem("cb_settings", JSON.stringify(state.settings)); } catch (e) {} }
 
-  // Mifflin-St Jeor BMR -> TDEE -> calorie/macro target.
-  function computeTargets(h) {
-    if (!h || !h.kg || !h.cm || !h.age) return null;
-    var bmr = 10 * h.kg + 6.25 * h.cm - 5 * h.age + (h.sex === "female" ? -161 : 5);
-    var act = parseFloat(h.activity) || 1.375;
-    var tdee = bmr * act;
-    var target = h.goal === "lose" ? tdee - 500 : h.goal === "gain" ? tdee + 400 : tdee;
-    target = Math.max(1200, Math.round(target));
-    return {
-      bmr: Math.round(bmr), tdee: Math.round(tdee), target: target,
-      protein: Math.round(target * 0.30 / 4), carbs: Math.round(target * 0.40 / 4), fat: Math.round(target * 0.30 / 9)
-    };
-  }
+  // Mifflin-St Jeor BMR -> TDEE -> calorie/macro target (engine).
+  function computeTargets(h) { return ENG.computeTargets(h); }
   function applyTheme(theme) {
     var t = theme || (state.settings && state.settings.theme) || "dark";
     if (t === "auto") t = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) ? "light" : "dark";
@@ -96,14 +104,10 @@
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
     });
   }
-  function norm(s) {
-    return String(s || "").toLowerCase()
-      .replace(/\([^)]*\)/g, " ").replace(/\d+(\.\d+)?\s*%/g, " ")
-      .replace(/[^a-z0-9&'\- ]/g, " ").replace(/\s+/g, " ").trim();
-  }
-  function titleCase(s) { return String(s || "").replace(/\b\w/g, function (m) { return m.toUpperCase(); }); }
-  function num(v) { return typeof v === "number" && !isNaN(v) ? v : (v != null && v !== "" && !isNaN(+v) ? +v : null); }
-  function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
+  function norm(s) { return ENG.norm(s); }
+  function titleCase(s) { return ENG.titleCase(s); }
+  function num(v) { return ENG.num(v); }
+  function cap(s) { return ENG.cap(s); }
   function loadScript(url) {
     return new Promise(function (res, rej) {
       var s = document.createElement("script");
@@ -111,162 +115,37 @@
       document.head.appendChild(s);
     });
   }
+  // Prefer the local vendored copy (offline); only reach for the CDN if the
+  // local asset is missing or fails to load.
+  function loadScriptLocalFirst(localUrl, cdnUrl) {
+    return loadScript(localUrl).catch(function () { return cdnUrl ? loadScript(cdnUrl) : Promise.reject(new Error("missing " + localUrl)); });
+  }
 
-  /* ------------------------------------------------- ingredient parsing */
-  function parseIngredients(text) {
-    if (!text) return [];
-    var cleaned = text
-      .replace(/ingredients?:?/i, " ")
-      .replace(/contains( 2% or less of| less than 2% of)?:?/ig, ",")
-      .replace(/[\[\]{}]/g, ",").replace(/\band\b/gi, ",");
-    var parts = cleaned.split(/[,;.]+/), out = [];
-    for (var i = 0; i < parts.length; i++) {
-      var raw = parts[i].replace(/\([^)]*\)/g, "").trim();
-      if (!raw) continue;
-      var n = norm(raw);
-      if (!n || n.length < 2) continue;
-      if (out.length && out[out.length - 1].norm === n) continue;
-      out.push({ raw: raw.replace(/\s+/g, " ").trim(), norm: n });
-      if (out.length > 80) break;
-    }
-    return out;
-  }
-  function findAdditive(n) {
-    for (var i = 0; i < DATA.additives.length; i++) {
-      var a = DATA.additives[i];
-      for (var j = 0; j < a.names.length; j++) {
-        if (n === a.names[j] || n.indexOf(a.names[j]) !== -1) return a;
-      }
-    }
-    return null;
-  }
-  function listHit(list, n) {
-    for (var i = 0; i < list.length; i++) if (n === list[i] || n.indexOf(list[i]) !== -1) return list[i];
-    return null;
-  }
-  function findENumberByName(n) {
-    for (var i = 0; i < DATA.eNumbers.length; i++) {
-      var nm = norm(DATA.eNumbers[i][1]);
-      if (nm && nm.length >= 4 && (n === nm || n.indexOf(nm) !== -1))
-        return { code: DATA.eNumbers[i][0], name: DATA.eNumbers[i][1], risk: DATA.eNumbers[i][2] };
-    }
-    return null;
-  }
-  function findENumberByCode(raw) {
-    var m = String(raw || "").match(/\be ?(\d{3,4}[a-z]?)\b/);
-    if (!m) return null;
-    var code = "e" + m[1];
-    for (var i = 0; i < DATA.eNumbers.length; i++)
-      if (DATA.eNumbers[i][0].toLowerCase() === code)
-        return { code: DATA.eNumbers[i][0], name: DATA.eNumbers[i][1], risk: DATA.eNumbers[i][2] };
-    return { code: "E" + m[1].toUpperCase(), name: "Additive E" + m[1].toUpperCase(), risk: "caution" };
-  }
-  function egroup(risk) { return "e" + cap(risk); }
-
-  function classify(n, raw) {
-    var a = findAdditive(n);
-    if (a) return { status: a.risk, additive: a, name: a.names[0], reason: a.category };
-    if (listHit(DATA.artificialSweeteners, n)) return { status: "caution", group: "sweetener", reason: "Artificial sweetener" };
-    if (listHit(DATA.seedOils, n)) return { status: "caution", group: "seedOil", reason: "Industrial seed oil" };
-    if (listHit(DATA.vagueTerms, n)) return { status: "caution", group: "vague", reason: "Undisclosed ingredient" };
-    var en = findENumberByName(n) || findENumberByCode(raw);
-    if (en) return { status: en.risk, group: egroup(en.risk), name: en.name, enumber: en.code, reason: "Food additive" + (en.code ? " · " + en.code : "") };
-    if (listHit(DATA.addedSugars, n)) return { status: "limit", group: "addedSugar", reason: "Added sugar" };
-    if (listHit(DATA.cleanIngredients, n)) return { status: "good", group: "clean", reason: "Whole-food ingredient" };
-    if (/\be ?\d{3,4}[a-z]?\b/.test(String(raw || ""))) return { status: "caution", group: "eCaution", reason: "Unrecognized additive" };
-    return { status: "unknown", group: "unknown", reason: "Not catalogued yet" };
-  }
+  /* ----------------------- ingredient parsing / classification (engine) */
+  // Word-boundary (n-gram) matching lives in engine.js — no more substring
+  // false positives (e.g. "egg" inside "eggplant"). Thin wrappers preserve
+  // existing call sites here in the UI layer.
+  function parseIngredients(text) { return ENG.parseIngredients(text); }
+  function classify(n, raw, productType) { return ENG.classify(n, raw, productType); }
 
   var STATUS_RANK = { avoid: 4, caution: 3, limit: 2, unknown: 1, good: 0 };
   var STATUS_LABEL = { avoid: "Avoid", caution: "Caution", limit: "Limit", unknown: "Unknown", good: "Clean" };
   var STATUS_GROUPS = ["avoid", "caution", "limit", "unknown", "good"];
-
-  function ingredientDetail(item) {
-    if (item.additive) {
-      var a = item.additive;
-      return { title: titleCase(a.names[0]), category: a.category, enumber: a.enumber || "", status: a.risk,
-        summary: a.summary, whatIs: a.whatIs, whyFlagged: a.whyFlagged, effects: a.healthRisk,
-        banned: (DATA.bannedMap && DATA.bannedMap[a.id]) || "", studies: a.studies || [] };
-    }
-    var g = DATA.groups[item.group] || DATA.groups.unknown;
-    return { title: titleCase(item.name || item.raw), category: g.category, enumber: item.enumber || "", status: item.status || g.status,
-      summary: g.summary, whatIs: g.whatIs, whyFlagged: g.whyFlagged, effects: g.effects, banned: "", studies: g.studies || [] };
+  // Human label + emoji per product family for the result-screen type badge.
+  var PROD_TYPE_LABEL = {
+    food: ["🍽", "Food"], petfood: ["🐾", "Pet food"],
+    beauty: ["🧴", "Beauty / personal care"], household: ["🧽", "Household / other"]
+  };
+  function prodTypeBadge(t) {
+    var m = PROD_TYPE_LABEL[t] || PROD_TYPE_LABEL.household;
+    return '<div class="ptype-badge" data-ptype="' + esc(t || "food") + '">' + m[0] + ' ' + m[1] + '</div>';
   }
 
-  /* --------------------------------------------------- nutrition scoring */
-  function evalNutrition(off) {
-    var out = { hasData: false, negatives: [], positives: [] };
-    if (!off || !off.nutriments) return out;
-    var nu = off.nutriments;
-    function row(label, val, unit, sev, note) {
-      var v = (val == null) ? "—" : (Math.round(val * 10) / 10 + unit);
-      var r = { label: label, value: v, sev: sev, note: note };
-      (sev === "good" ? out.positives : out.negatives).push(r);
-    }
-    var kcal = num(nu["energy-kcal_100g"]);
-    if (kcal != null) row("Calories", kcal, " kcal", kcal <= 120 ? "good" : kcal <= 300 ? "mid" : "bad", kcal <= 120 ? "Low-calorie" : kcal <= 300 ? "Moderate" : "Calorie-dense");
-    var sat = num(nu["saturated-fat_100g"]);
-    if (sat != null) row("Saturated fat", sat, "g", sat <= 1.5 ? "good" : sat <= 5 ? "mid" : "bad", sat <= 1.5 ? "Low" : sat <= 5 ? "A bit high" : "High");
-    var sug = num(nu["sugars_100g"]);
-    if (sug != null) row("Sugar", sug, "g", sug <= 5 ? "good" : sug <= 22.5 ? "mid" : "bad", sug <= 5 ? "Low" : sug <= 22.5 ? "Moderate" : "Too much sugar");
-    var salt = num(nu["salt_100g"]); if (salt == null && num(nu["sodium_100g"]) != null) salt = num(nu["sodium_100g"]) * 2.5;
-    if (salt != null) row("Salt", salt, "g", salt <= 0.3 ? "good" : salt <= 1.5 ? "mid" : "bad", salt <= 0.3 ? "Low" : salt <= 1.5 ? "Moderate" : "Too much salt");
-    // Fiber/protein are "good to have" — only surface them as positives when notable,
-    // so they never read as a negative.
-    var fib = num(nu["fiber_100g"]);
-    if (fib != null && fib >= 3) row("Fiber", fib, "g", "good", fib >= 6 ? "Excellent source" : "Good source");
-    var pro = num(nu["proteins_100g"]);
-    if (pro != null && pro >= 8) row("Protein", pro, "g", "good", "Good source");
-    out.hasData = (out.negatives.length + out.positives.length) > 0;
-    return out;
-  }
-
-  function analyze(off, ingredientsText) {
-    var items = parseIngredients(ingredientsText);
-    var classified = items.map(function (it) {
-      var c = classify(it.norm, (it.raw || "").toLowerCase());
-      return { raw: it.raw, norm: it.norm, status: c.status, reason: c.reason,
-        additive: c.additive || null, group: c.group || null, name: c.name || it.raw, enumber: c.enumber || "" };
-    });
-
-    var avoidN = 0, cautN = 0, limitN = 0;
-    classified.forEach(function (c) {
-      if (c.status === "avoid") avoidN++; else if (c.status === "caution") cautN++; else if (c.status === "limit") limitN++;
-    });
-    var score = 100 - avoidN * 22 - cautN * 10 - limitN * 4;
-    var reasons = [];
-    if (avoidN) reasons.push({ d: -22 * avoidN, t: avoidN + " ingredient" + (avoidN > 1 ? "s" : "") + " to avoid" });
-    if (cautN) reasons.push({ d: -10 * cautN, t: cautN + " ingredient" + (cautN > 1 ? "s" : "") + " of concern" });
-    if (limitN) reasons.push({ d: -4 * limitN, t: limitN + " ingredient" + (limitN > 1 ? "s" : "") + " to limit" });
-
-    var nutrition = evalNutrition(off);
-    if (off) {
-      if (off.nova_group === 4) { score -= 8; reasons.push({ d: -8, t: "Ultra-processed (NOVA group 4)" }); }
-      var ns = String(off.nutriscore_grade || "").toLowerCase();
-      if (ns === "e") { score -= 12; reasons.push({ d: -12, t: "Nutri-Score E" }); }
-      else if (ns === "d") { score -= 7; reasons.push({ d: -7, t: "Nutri-Score D" }); }
-      else if (ns === "a") { score += 5; reasons.push({ d: 5, t: "Nutri-Score A" }); }
-      nutrition.negatives.forEach(function (r) { if (r.sev === "bad") { score -= 4; reasons.push({ d: -4, t: "High " + r.label.toLowerCase() }); } });
-    }
-
-    var hasAvoid = avoidN > 0;
-    score = Math.max(0, Math.min(100, Math.round(score)));
-    if (hasAvoid && score >= 40) { score = 39; reasons.push({ d: 0, t: "Capped: contains an avoid-grade ingredient" }); }
-
-    var flaggedCount = avoidN + cautN;
-    if (flaggedCount > 0) nutrition.negatives.unshift({ label: "Additives", value: flaggedCount + " to watch", sev: "bad", note: "Contains additives of concern" });
-    else if (classified.length) nutrition.positives.unshift({ label: "Additives", value: "None", sev: "good", note: "No risky additives" });
-
-    return { classified: classified, score: score, badge: bandFor(score, hasAvoid), nutrition: nutrition, flaggedCount: flaggedCount, scoreReasons: reasons };
-  }
-
-  function bandFor(score, hasAvoid) {
-    if (hasAvoid) return { label: "Bad", cls: "bad" };
-    if (score >= 80) return { label: "Excellent", cls: "exc" };
-    if (score >= 60) return { label: "Good", cls: "good" };
-    if (score >= 40) return { label: "Poor", cls: "mid" };
-    return { label: "Bad", cls: "bad" };
-  }
+  // Ingredient-detail / nutrition / scoring all live in the engine now.
+  function ingredientDetail(item) { return ENG.ingredientDetail(item); }
+  function evalNutrition(off) { return ENG.evalNutrition(off); }
+  function analyze(off, ingredientsText, productType) { return ENG.analyze(off, ingredientsText, productType); }
+  function bandFor(score, hasAvoid) { return ENG.bandFor(score, hasAvoid); }
 
   function personalAlerts(classified) {
     var alerts = [];
@@ -282,9 +161,31 @@
     return alerts;
   }
 
-  /* -------------------------------------------------- Open Food Facts */
+  /* ----------------------------------------- network: timeout + retry */
+  // Wrap fetch with an AbortController timeout and a small retry so a slow or
+  // dead network surfaces an error instead of hanging the UI forever.
+  function fetchWithTimeout(url, opts) {
+    opts = opts || {};
+    var timeoutMs = opts.timeoutMs || FETCH_TIMEOUT;
+    var retries = opts.retries == null ? FETCH_RETRIES : opts.retries;
+    function attempt(left) {
+      var ctrl = (typeof AbortController !== "undefined") ? new AbortController() : null;
+      var timer = ctrl ? setTimeout(function () { try { ctrl.abort(); } catch (e) {} }, timeoutMs) : null;
+      return fetch(url, { headers: { "Accept": "application/json" }, signal: ctrl ? ctrl.signal : undefined })
+        .then(function (r) { if (timer) clearTimeout(timer); return r; })
+        .catch(function (err) {
+          if (timer) clearTimeout(timer);
+          if (left > 0) return new Promise(function (res) { setTimeout(res, 400); }).then(function () { return attempt(left - 1); });
+          throw err;
+        });
+    }
+    return attempt(retries);
+  }
+  function fetchJson(url, opts) { return fetchWithTimeout(url, opts).then(function (r) { return r.ok ? r.json() : null; }); }
+
+  /* -------------------------------------------------- Open*Facts family */
   var OFF_FIELDS = "code,product_name,brands,image_front_small_url,image_front_url,ingredients_text,ingredients_text_en,additives_tags,categories_tags,serving_quantity,nova_group,nutriscore_grade,nutriments";
-  function mapOff(p, code) {
+  function mapOff(p, code, src) {
     if (!p) return null;
     var cats = p.categories_tags || [], catTag = "";
     for (var i = cats.length - 1; i >= 0; i--) { if (/^en:/.test(cats[i]) && cats[i].length > 5) { catTag = cats[i].slice(3); break; } }
@@ -292,47 +193,89 @@
     return { barcode: code || p.code || "", name: p.product_name || "Unknown product", brand: p.brands || "",
       image: p.image_front_small_url || p.image_front_url || "", category: catTag, serving_quantity: p.serving_quantity,
       ingredientsText: p.ingredients_text_en || p.ingredients_text || "",
+      productType: (src && src.type) || "food", source: (src && src.label) || "Open Food Facts",
       nova_group: p.nova_group, nutriscore_grade: p.nutriscore_grade, nutriments: p.nutriments || {} };
   }
-  // Best-available calories per portion: per-serving if known, else per-100g scaled by serving size, else per-100g.
-  function computeKcal(off) {
-    var nu = off && off.nutriments; if (!nu) return null;
-    var s = num(nu["energy-kcal_serving"]); if (s != null) return Math.round(s);
-    var per100 = num(nu["energy-kcal_100g"]); if (per100 == null) return null;
-    var sq = num(off.serving_quantity);
-    return Math.round(sq ? per100 * sq / 100 : per100);
+  // Best-available calories per portion (engine).
+  function computeKcal(off) { return ENG.computeKcal(off); }
+
+  // localStorage barcode cache so repeat scans are instant and work offline
+  // after the first successful fetch (hybrid mainly-offline).
+  function cachedProduct(code) {
+    try {
+      var raw = localStorage.getItem("cb_prod_" + code); if (!raw) return null;
+      var rec = JSON.parse(raw);
+      if (!rec || (Date.now() - (rec.ts || 0)) > PROD_TTL) return null;
+      return rec.off || null;
+    } catch (e) { return null; }
   }
+  function cacheProduct(code, off) {
+    try { localStorage.setItem("cb_prod_" + code, JSON.stringify({ ts: Date.now(), off: off })); } catch (e) {}
+  }
+  // Query each Open*Facts source in order; first product with data wins. The
+  // detected source sets productType (food / beauty / household / petfood).
   function lookupBarcode(code) {
-    var url = OFF_BASE + encodeURIComponent(code) + ".json?fields=" + OFF_FIELDS;
-    return fetch(url, { headers: { "Accept": "application/json" } })
-      .then(function (r) { return r.json(); })
-      .then(function (j) { return (j && j.status === 1 && j.product) ? mapOff(j.product, code) : null; });
+    var cached = cachedProduct(code);
+    if (cached) return Promise.resolve(cached);
+    function tryAt(i) {
+      if (i >= OFF_SOURCES.length) return Promise.resolve(null);
+      var src = OFF_SOURCES[i];
+      var url = src.base + encodeURIComponent(code) + ".json?fields=" + OFF_FIELDS;
+      return fetchJson(url).then(function (j) {
+        if (j && j.status === 1 && j.product) {
+          var off = mapOff(j.product, code, src);
+          cacheProduct(code, off);
+          return off;
+        }
+        return tryAt(i + 1);
+      }).catch(function () { return tryAt(i + 1); });
+    }
+    return tryAt(0);
   }
   function searchProducts(query) {
     var url = "https://world.openfoodfacts.org/cgi/search.pl?search_terms=" + encodeURIComponent(query) +
       "&search_simple=1&action=process&json=1&page_size=24&fields=" + OFF_FIELDS;
-    return fetch(url, { headers: { "Accept": "application/json" } })
-      .then(function (r) { return r.json(); })
+    return fetchJson(url)
       .then(function (j) {
         var arr = (j && j.products) || [];
-        return arr.map(function (p) { return mapOff(p); })
+        return arr.map(function (p) { return mapOff(p, "", OFF_SOURCES[0]); })
           .filter(function (o) { return o && o.name && o.name !== "Unknown product"; });
       });
   }
   function buildProduct(off, ingredientsText, opts) {
     opts = opts || {};
     var text = ingredientsText || (off && off.ingredientsText) || "";
-    var r = analyze(off, text);
+    var ptype = opts.productType || (off && off.productType) || "food";
+    var food = ENG.isFoodType(ptype);
+    var r = analyze(off, text, ptype);
     return {
       id: (off && off.barcode) || ("p" + Date.now()), barcode: (off && off.barcode) || "",
       name: (off && off.name) || opts.name || "Scanned product", brand: (off && off.brand) || "",
       image: (off && off.image) || "", category: (off && off.category) || "", photoKey: opts.photoKey || "", ingredientsText: text,
-      source: opts.source || (off ? "Open Food Facts" : "Photo / OCR"),
-      nutriments: (off && off.nutriments) || null,
-      kcal: computeKcal(off),
+      source: opts.source || (off && off.source) || (off ? "Open Food Facts" : "Photo / OCR"),
+      productType: ptype, isFood: food,
+      nutriments: food ? ((off && off.nutriments) || null) : null,
+      kcal: food ? computeKcal(off) : null,
+      macros: food ? ENG.computeMacros(off) : null,
       score: r.score, badge: r.badge, classified: r.classified, nutrition: r.nutrition,
-      flaggedCount: r.flaggedCount, scoreReasons: r.scoreReasons, logged: "checked", ateAt: 0, ts: Date.now()
+      flaggedCount: r.flaggedCount, scoreReasons: r.scoreReasons, logged: "checked", ateAt: 0, portion: 1, ts: Date.now()
     };
+  }
+  // Adjust the serving multiplier on the current product (food only), keep
+  // the history/favorites copies in sync, and re-render scaled kcal + macros.
+  function setPortion(delta) {
+    var p = state.product; if (!p) return;
+    var next = Math.round(((p.portion || 1) + delta) * 4) / 4;
+    next = Math.max(0.25, Math.min(10, next));
+    p.portion = next;
+    var h = state.history.filter(function (x) { return x.id === p.id; })[0]; if (h) h.portion = next;
+    var f = state.favorites.filter(function (x) { return x.id === p.id; })[0]; if (f) f.portion = next;
+    saveHistory(); saveFavs(); render();
+  }
+  function scaledKcal(p) { var k = num(p.kcal); return k == null ? null : Math.round(k * (p.portion || 1)); }
+  function scaledMacro(p, key) {
+    var m = p.macros; if (!m || m[key] == null) return null;
+    return Math.round(m[key] * (p.portion || 1));
   }
   function setLogged(lg) {
     if (!state.product) return;
@@ -416,24 +359,65 @@
     if (!tgt) return '<div class="panel glass today"><div class="lrow"><div class="row-main"><div class="row-title">Set your calorie goal</div>' +
       '<div class="row-sub">Add your details in Profile to track today\'s intake</div></div><button class="chip on" data-nav="profile">Set up</button></div></div>';
     var items = state.history.filter(function (p) { return p.logged === "eaten" && sameDay(p.ateAt, Date.now()); });
-    var eaten = Math.round(items.reduce(function (s, p) { return s + (num(p.kcal) || 0); }, 0));
+    var eaten = Math.round(items.reduce(function (s, p) { return s + (scaledKcal(p) || 0); }, 0));
     var pct = Math.min(100, Math.round(eaten / tgt.target * 100));
     var remaining = tgt.target - eaten;
+    // Sum consumed macros (per-portion) for the macros-vs-target row.
+    var mac = { protein: 0, carbs: 0, fat: 0 };
+    items.forEach(function (p) { ['protein', 'carbs', 'fat'].forEach(function (k) { var v = scaledMacro(p, k); if (v != null) mac[k] += v; }); });
+    function macCell(key, lbl) {
+      var got = Math.round(mac[key]), goal = tgt[key];
+      var mpct = goal ? Math.min(100, Math.round(got / goal * 100)) : 0;
+      return '<div class="macro"><div class="macro-num">' + got + '<span class="mg">/' + goal + 'g</span></div>' +
+        '<div class="mtrack"><div class="mfill ' + key + '" style="width:' + mpct + '%"></div></div>' +
+        '<div class="macro-lbl">' + lbl + '</div></div>';
+    }
+    var macros = '<div class="macros today-macros">' + macCell("protein", "Protein") + macCell("carbs", "Carbs") + macCell("fat", "Fat") + '</div>';
     var rows = items.length ? items.map(function (p) {
-      return '<div class="lrow"><div class="row-main"><div class="row-title">' + esc(p.name) + '</div></div>' +
-        '<div class="brk-val">' + (num(p.kcal) != null ? Math.round(num(p.kcal)) + " kcal" : "—") + '</div></div>';
+      return '<div class="lrow"><div class="row-main"><div class="row-title">' + esc(p.name) +
+        ((p.portion && p.portion !== 1) ? ' <span class="por-tag">' + p.portion + '×</span>' : "") + '</div></div>' +
+        '<div class="brk-val">' + (scaledKcal(p) != null ? scaledKcal(p) + " kcal" : "—") + '</div></div>';
     }).join("") : '<div class="lrow"><div class="row-main"><div class="row-sub">Nothing logged today — tap “I ate this” on a product.</div></div></div>';
     return '<div class="panel glass today"><div class="panel-h">Today <span class="cnt">' + items.length + ' eaten</span></div>' +
       '<div class="today-cal"><div><span class="te">≈' + eaten + '</span> <span class="tt">/ ' + tgt.target + ' kcal</span></div>' +
       '<div class="trem' + (remaining < 0 ? " over" : "") + '">' + (remaining >= 0 ? remaining + " left" : (-remaining) + " over") + '</div></div>' +
-      '<div class="tbar"><div class="tfill" style="width:' + pct + '%' + (remaining < 0 ? ";background:var(--bad)" : "") + '"></div></div>' + rows + '</div>';
+      '<div class="tbar"><div class="tfill" style="width:' + pct + '%' + (remaining < 0 ? ";background:var(--bad)" : "") + '"></div></div>' +
+      macros + rows + '</div>';
+  }
+
+  // Last-7-day intake trend: a lightweight inline bar per day of eaten kcal
+  // vs target. No chart lib — just divs. Returns "" when nothing to show.
+  function trendsCard() {
+    var tgt = computeTargets(state.health);
+    var eaten = state.history.filter(function (p) { return p.logged === "eaten" && p.ateAt; });
+    if (!eaten.length) return "";
+    var days = [];
+    for (var i = 6; i >= 0; i--) {
+      var d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - i);
+      var kcal = eaten.filter(function (p) { return sameDay(p.ateAt, d.getTime()); })
+        .reduce(function (s, p) { return s + (scaledKcal(p) || 0); }, 0);
+      days.push({ d: d, kcal: Math.round(kcal) });
+    }
+    var maxK = Math.max(tgt ? tgt.target : 0, days.reduce(function (m, x) { return Math.max(m, x.kcal); }, 0), 1);
+    var dow = ["S", "M", "T", "W", "T", "F", "S"];
+    var bars = days.map(function (x) {
+      var h = Math.round(x.kcal / maxK * 100);
+      var over = tgt && x.kcal > tgt.target;
+      return '<div class="trend-col"><div class="trend-bar-wrap">' +
+        '<div class="trend-bar' + (over ? " over" : "") + '" style="height:' + h + '%"></div></div>' +
+        '<div class="trend-day">' + dow[x.d.getDay()] + '</div></div>';
+    }).join("");
+    var goalLine = tgt ? '<div class="trend-goal" style="bottom:' + Math.round(tgt.target / maxK * 100) + '%"></div>' : "";
+    return '<div class="panel glass"><div class="panel-h">Last 7 days' +
+      (tgt ? '<span class="cnt">goal ' + tgt.target + ' kcal</span>' : "") + '</div>' +
+      '<div class="trend-chart">' + goalLine + bars + '</div></div>';
   }
 
   /* ------------------------------------------------------- scanner */
   var zxingReader = null;
   function startScanner() {
     setStatus("Loading scanner…");
-    var p = window.ZXing ? Promise.resolve() : loadScript(ZXING_URL);
+    var p = window.ZXing ? Promise.resolve() : loadScriptLocalFirst(ZXING_LOCAL, ZXING_URL);
     p.then(function () {
       var video = document.getElementById("cam");
       if (!video || !window.ZXing) throw new Error("scanner unavailable");
@@ -488,19 +472,42 @@
   }
   function runOCR(dataUrl) {
     setStatus("Reading label…");
-    var p = window.Tesseract ? Promise.resolve() : loadScript(TESS_URL);
-    return p.then(function () { return Tesseract.recognize(dataUrl, "eng"); })
-      .then(function (r) { return { text: (r.data && r.data.text) || "", confidence: (r.data && r.data.confidence) || 0 }; });
+    var p = window.Tesseract ? Promise.resolve() : loadScriptLocalFirst(TESS_LOCAL, TESS_URL);
+    return p.then(function () {
+      // Point Tesseract at the local worker / wasm core / language data when
+      // they're vendored, so OCR runs fully offline. If the local files are
+      // absent Tesseract falls back to its own CDN defaults.
+      var opts = { langPath: "vendor/tesseract/lang", workerPath: "vendor/tesseract/worker.min.js", corePath: "vendor/tesseract" };
+      return Tesseract.recognize(dataUrl, "eng", hasLocalTess() ? opts : undefined);
+    }).then(function (r) { return { text: (r.data && r.data.text) || "", confidence: (r.data && r.data.confidence) || 0 }; });
+  }
+  // True when Tesseract was served from our vendor folder (so local asset paths apply).
+  function hasLocalTess() {
+    var s = document.querySelector('script[src="' + TESS_LOCAL + '"]');
+    return !!s;
   }
 
   /* ---------------------------------------- research unknown ingredients */
+  // Persisted across sessions so a fetched ingredient summary becomes
+  // effectively offline after the first lookup (hybrid mainly-offline).
+  var ING_TTL = 1000 * 60 * 60 * 24 * 90;
+  function ingredientCacheGet(term) {
+    try {
+      var raw = localStorage.getItem("cb_ingredient_" + norm(term)); if (!raw) return undefined;
+      var rec = JSON.parse(raw);
+      if (!rec || (Date.now() - (rec.ts || 0)) > ING_TTL) return undefined;
+      return rec.data || null;
+    } catch (e) { return undefined; }
+  }
+  function ingredientCacheSet(term, data) {
+    try { localStorage.setItem("cb_ingredient_" + norm(term), JSON.stringify({ ts: Date.now(), data: data || null })); } catch (e) {}
+  }
   function researchIngredient(term) {
     var bad = /^(and|or|contains|less than|of|the|other|color added|natural|artificial)$/i;
     var clean = String(term || "").trim();
     if (!clean || clean.length < 3 || bad.test(clean)) return Promise.resolve(null);
     var t = encodeURIComponent(clean.replace(/\s+/g, "_"));
-    return fetch(WIKI + t, { headers: { "Accept": "application/json" } })
-      .then(function (r) { return r.ok ? r.json() : null; })
+    return fetchJson(WIKI + t)
       .then(function (j) {
         if (!j || j.type === "disambiguation" || !j.extract) return null;
         return { extract: j.extract, description: j.description || "",
@@ -514,10 +521,17 @@
       state.research = { term: term, loading: false, data: cached, error: !cached };
       render(); return;
     }
+    var stored = ingredientCacheGet(term);
+    if (stored !== undefined) {
+      researchCache[term] = stored;
+      state.research = { term: term, loading: false, data: stored, error: !stored };
+      render(); return;
+    }
     state.research = { term: term, loading: true, data: null, error: false };
     render();
     researchIngredient(term).then(function (d) {
       researchCache[term] = d || null;
+      ingredientCacheSet(term, d || null);
       state.research = { term: term, loading: false, data: d, error: !d };
       render();
     });
@@ -597,7 +611,7 @@
       '<header class="hd hd-brand">' + brandLogo(42) + '<div><div class="logo">NutriCheck</div>' +
       '<div class="sub">Scan food. See what\'s really inside.</div></div></header>' +
       '<div class="searchbar"><input id="q" class="text-input search-input" placeholder="Search a product or brand…" />' +
-      '<button class="search-go" data-act="searchGo">' + icon("search") + '</button></div>' +
+      '<button class="search-go" data-act="searchGo" aria-label="Search">' + icon("search") + '</button></div>' +
       '<button class="big-btn" data-act="scan">' + icon("scan") + ' Scan a barcode</button>' +
       '<div class="dual"><button class="ghost-btn" data-act="addPhoto">' + icon("tag") + ' Add by photo</button>' +
       '<button class="ghost-btn" data-act="manual">' + icon("keypad") + ' Enter code</button></div>' +
@@ -651,7 +665,7 @@
     }).join("");
     return '<div class="screen">' + backBar("Search") +
       '<div class="searchbar"><input id="q" class="text-input search-input" value="' + esc(state.searchQuery) + '" placeholder="Search a product or brand…" />' +
-      '<button class="search-go" data-act="searchGo">' + icon("search") + '</button></div>' + sortChips + rows + '</div>';
+      '<button class="search-go" data-act="searchGo" aria-label="Search">' + icon("search") + '</button></div>' + sortChips + rows + '</div>';
   }
 
   function viewManual() {
@@ -684,7 +698,8 @@
           (p.image ? '<img class="phead-img" src="' + esc(p.image) + '" alt="">' : '<div class="phead-img ph">🥫</div>') +
           '<div class="phead-txt"><div class="phead-name">' + esc(p.name) + '</div>' +
           '<div class="phead-brand">' + esc(p.brand || "") + '</div>' +
-          '<div class="phead-src">via ' + esc(p.source) + '</div></div>' +
+          '<div class="phead-src">via ' + esc(p.source) + '</div>' +
+          prodTypeBadge(p.productType) + '</div>' +
         '</div>' +
         '<div class="score-wrap">' +
           '<div class="score-glow"></div>' +
@@ -694,10 +709,12 @@
           '<button class="why-btn" data-act="toggleScore">' + (state.scoreOpen ? "Hide score details" : "How is this scored?") + '</button>' +
         '</div>' +
       '</div>' +
-      '<div class="logseg">' +
-        '<button class="seg-btn' + (p.logged === "eaten" ? " on ate" : "") + '" data-log="eaten">' + icon("fork") + ' I ate this</button>' +
-        '<button class="seg-btn' + (p.logged !== "eaten" ? " on" : "") + '" data-log="checked">' + icon("search") + ' Just checking</button>' +
-      '</div>' +
+      (p.isFood ?
+        '<div class="logseg">' +
+          '<button class="seg-btn' + (p.logged === "eaten" ? " on ate" : "") + '" data-log="eaten">' + icon("fork") + ' I ate this</button>' +
+          '<button class="seg-btn' + (p.logged !== "eaten" ? " on" : "") + '" data-log="checked">' + icon("search") + ' Just checking</button>' +
+        '</div>' : "") +
+      (p.isFood ? portionBlock(p) : "") +
       whyBlock(p) +
       (alerts.length ? ('<div class="alerts">' + alerts.map(function (a) {
         return '<div class="alert">⚠️ <b>' + esc(cap(a.key)) + '</b>: contains ' + esc(a.hits.join(", ")) + '</div>';
@@ -710,6 +727,27 @@
       '<div class="legend">Tap any ingredient for details</div>' +
       (p.classified.length ? groupsHtml : '<div class="empty small">No ingredient list available for this product.</div>') +
       '</div></div>';
+  }
+  // Serving stepper + per-portion kcal/macros. Only meaningful for food where
+  // OFF gave us nutriments; otherwise show nothing.
+  function portionBlock(p) {
+    var k = scaledKcal(p);
+    if (k == null && !p.macros) return "";
+    var por = p.portion || 1;
+    var pretty = (por === Math.round(por)) ? String(por) : por.toFixed(2).replace(/0$/, "");
+    var macros = p.macros ? '<div class="macros">' +
+      ['protein', 'carbs', 'fat'].map(function (key) {
+        var v = scaledMacro(p, key);
+        return '<div class="macro"><div class="macro-num">' + (v == null ? "—" : v + "g") + '</div>' +
+          '<div class="macro-lbl">' + (key === "carbs" ? "Carbs" : cap(key)) + '</div></div>';
+      }).join("") + '</div>' : "";
+    return '<div class="panel glass portion"><div class="panel-h">Serving' +
+      '<span class="cnt">' + (k == null ? "" : "≈" + k + " kcal") + '</span></div>' +
+      '<div class="portion-row">' +
+        '<button class="step-btn" data-portion="-0.25" aria-label="Decrease serving">−</button>' +
+        '<div class="portion-val"><span class="pv-num">' + pretty + '×</span><span class="pv-lbl">serving</span></div>' +
+        '<button class="step-btn" data-portion="0.25" aria-label="Increase serving">+</button>' +
+      '</div>' + macros + '</div>';
   }
   function whyBlock(p) {
     if (!state.scoreOpen) return "";
@@ -812,6 +850,7 @@
       '<button class="chip' + (eatenMode ? " on" : "") + '" data-ins="eaten">🍽 Eaten (' + eatenCount + ')</button></div>';
     var s = computeInsights(source);
     var today = todayCard();
+    var trends = trendsCard();
     if (!s.n) return '<div class="screen"><header class="hd"><div class="logo">Insights</div>' +
       '<div class="sub">Your diet & scanning habits</div></header>' + today + chips +
       '<div class="empty">' + illus(eatenMode ? "heart" : "chart") + (eatenMode ? "Mark products as “I ate this” on the result screen to track your diet here." : "Scan a few products and your stats show up here.") + '</div></div>';
@@ -821,7 +860,7 @@
       return '<div class="lrow"><div class="row-main"><div class="row-title">' + esc(f.name) + '</div></div><div class="status-tag caution">' + f.count + '×</div></div>';
     }).join("") : '<div class="lrow"><div class="row-main"><div class="row-sub">No flagged additives yet 🎉</div></div></div>';
     return '<div class="screen">' +
-      '<header class="hd"><div class="logo">Insights</div><div class="sub">Your diet & scanning habits</div></header>' + today + chips +
+      '<header class="hd"><div class="logo">Insights</div><div class="sub">Your diet & scanning habits</div></header>' + today + trends + chips +
       '<div class="stat-grid">' +
         '<div class="stat card"><div class="stat-num">' + s.n + '</div><div class="stat-lbl">' + (eatenMode ? "Foods eaten" : "Products scanned") + '</div></div>' +
         '<div class="stat card"><div class="stat-num" style="color:' + scoreColor(bandFor(s.avg, false).cls) + '">' + s.avg + '</div><div class="stat-lbl">Average score</div></div>' +
@@ -918,7 +957,7 @@
     }).join("");
     return '<div class="screen">' + backBar("Ingredient encyclopedia") +
       '<div class="searchbar"><input id="encq" class="text-input search-input" value="' + esc(state.encQuery) + '" placeholder="Search ' + DATA.additives.length + ' additives…" />' +
-      '<button class="search-go" data-act="encGo">' + icon("search") + '</button></div>' +
+      '<button class="search-go" data-act="encGo" aria-label="Search ingredients">' + icon("search") + '</button></div>' +
       '<div class="panel glass">' + (rows || '<div class="lrow"><div class="row-main"><div class="row-sub">No matches.</div></div></div>') + '</div></div>';
   }
   function exportData() {
@@ -946,7 +985,7 @@
   }
 
   function backBar(title) {
-    return '<div class="backbar"><button class="back" data-act="back">‹</button>' +
+    return '<div class="backbar"><button class="back" data-act="back" aria-label="Go back">‹</button>' +
       (title ? '<div class="bb-title">' + esc(title) + '</div>' : '') + '</div>';
   }
   function tabBar() {
@@ -982,10 +1021,11 @@
 
   /* --------------------------------------------------------- events */
   function onClick(e) {
-    var t = e.target.closest("[data-act],[data-nav],[data-open],[data-ingidx],[data-tab],[data-toggle],[data-research],[data-search-idx],[data-alt],[data-fav],[data-hist],[data-log],[data-ins],[data-theme],[data-enc],[data-sort]");
+    var t = e.target.closest("[data-act],[data-nav],[data-open],[data-ingidx],[data-tab],[data-toggle],[data-research],[data-search-idx],[data-alt],[data-fav],[data-hist],[data-log],[data-portion],[data-ins],[data-theme],[data-enc],[data-sort]");
     if (!t) return;
     if (t.dataset.fav != null) { toggleFav(state.product); render(); return; }
     if (t.dataset.log != null) { setLogged(t.dataset.log); return; }
+    if (t.dataset.portion != null) { setPortion(+t.dataset.portion); return; }
     if (t.dataset.ins != null) { state.insightsFilter = t.dataset.ins; render(); return; }
     if (t.dataset.hist != null) { state.historyFilter = t.dataset.hist; render(); return; }
     if (t.dataset.theme != null) { state.settings.theme = t.dataset.theme; saveSettings(); applyTheme(); render(); return; }

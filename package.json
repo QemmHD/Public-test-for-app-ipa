@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "description": "NutriCheck - scan food and check every ingredient",
   "scripts": {
-    "build": "echo 'static'"
+    "build": "echo 'static'",
+    "test": "node --test"
   },
   "dependencies": {
     "@capacitor/core": "^6.0.0",

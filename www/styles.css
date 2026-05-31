@@ -133,6 +133,9 @@ body::before {
 .phead-name { font-size: 20px; font-weight: 850; line-height: 1.18; }
 .phead-brand { color: var(--mut); font-size: 14px; margin-top: 3px; }
 .phead-src { color: var(--mut); font-size: 12px; margin-top: 2px; opacity: 0.8; }
+.ptype-badge { display: inline-block; margin-top: 7px; padding: 4px 10px; border-radius: 999px;
+  background: var(--glass2); border: 1px solid var(--brd); color: var(--mut);
+  font-size: 12px; font-weight: 700; }
 
 .score-wrap { display: flex; flex-direction: column; align-items: center; padding: 22px 0 2px; position: relative; }
 .score-glow { position: absolute; top: 6px; width: 150px; height: 150px; border-radius: 50%; background: var(--c); filter: blur(46px); opacity: 0.38; }
@@ -309,8 +312,40 @@ body::before {
 .macros { display: flex; gap: 10px; padding: 14px; }
 .macro { flex: 1; background: var(--glass2); border: 1px solid var(--brd); border-radius: 14px; padding: 13px 6px; }
 .macro-num { font-weight: 800; font-size: 18px; }
+.macro-num .mg { color: var(--mut); font-size: 12px; font-weight: 600; }
 .macro-lbl { color: var(--mut); font-size: 12px; margin-top: 3px; }
 .goal-card .ghost-btn { margin: 4px 12px 12px; width: calc(100% - 24px); }
+
+/* macro-vs-target tracks (today card) */
+.today-macros { padding: 4px 16px 14px; }
+.mtrack { height: 6px; border-radius: 999px; background: rgba(255,255,255,0.10); margin: 7px 0 0; overflow: hidden; }
+.mfill { height: 100%; border-radius: 999px; transition: width 0.4s ease; }
+.mfill.protein { background: #5ec8ff; }
+.mfill.carbs { background: #ffd166; }
+.mfill.fat { background: #ff8fab; }
+.por-tag { font-size: 11px; font-weight: 700; color: var(--mut); background: var(--glass2);
+  border-radius: 6px; padding: 1px 6px; margin-left: 4px; }
+
+/* serving / portion stepper */
+.portion-row { display: flex; align-items: center; justify-content: center; gap: 18px; padding: 6px 16px 4px; }
+.step-btn { width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--brd);
+  background: var(--glass2); color: var(--txt); font-size: 24px; font-weight: 700; line-height: 1;
+  display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.portion-val { min-width: 86px; text-align: center; }
+.portion-val .pv-num { display: block; font-size: 22px; font-weight: 850; }
+.portion-val .pv-lbl { color: var(--mut); font-size: 12px; }
+
+/* 7-day trend chart */
+.trend-chart { position: relative; display: flex; align-items: flex-end; gap: 8px;
+  height: 110px; padding: 12px 16px 10px; }
+.trend-col { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; justify-content: flex-end; }
+.trend-bar-wrap { width: 100%; flex: 1; display: flex; align-items: flex-end; }
+.trend-bar { width: 100%; min-height: 2px; border-radius: 6px 6px 3px 3px;
+  background: linear-gradient(180deg, var(--accent), var(--accent2)); transition: height 0.4s ease; }
+.trend-bar.over { background: linear-gradient(180deg, var(--bad), #b53b3b); }
+.trend-day { color: var(--mut); font-size: 11px; font-weight: 700; margin-top: 5px; }
+.trend-goal { position: absolute; left: 16px; right: 16px; height: 0;
+  border-top: 1px dashed rgba(255,255,255,0.32); pointer-events: none; }
 
 /* today tracker */
 .today-cal { display: flex; align-items: baseline; justify-content: space-between; padding: 8px 16px 10px; }
@@ -335,3 +370,24 @@ body.theme-light .tbar, body.theme-light .distbar { background: rgba(0,0,0,0.08)
 body.theme-light .score-ring { background: radial-gradient(closest-side, #fff 71%, transparent 72%), conic-gradient(var(--c) calc(var(--p,0)*3.6deg), rgba(0,0,0,0.10) 0); }
 body.theme-light .cancel-btn { background: #16161d; color: #fff; }
 body.theme-light .cnt { background: rgba(0,0,0,0.08); }
+
+/* ============ accessibility & polish ============ */
+/* Visible keyboard focus ring (does not show on mouse/touch). */
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 8px; }
+button:focus:not(:focus-visible) { outline: none; }
+
+/* Guarantee comfortable tap targets on interactive controls. */
+button, .chip, .tab, .tabitem, .seg-btn, .back, .step-btn, .search-go, [role="button"] {
+  min-height: 44px;
+}
+.chip, .tab { min-height: 36px; } /* small inline pills: still finger-friendly */
+
+/* Respect users who prefer less motion: disable transitions/animations. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

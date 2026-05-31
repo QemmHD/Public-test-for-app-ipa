@@ -11,7 +11,7 @@
  * Citations are summaries of real sources (IARC, EFSA, FDA, peer-reviewed
  * studies). They are starting points, not medical advice.
  */
-window.CB_DATA = (function () {
+var CB_DATA = (function () {
   const additives = [
     {
       id: "red40", names: ["red 40", "allura red", "red dye 40", "fd&c red no. 40", "e129"], enumber: "E129",
@@ -820,3 +820,7 @@ window.CB_DATA = (function () {
     cleanIngredients: cleanIngredients, allergenMap: allergenMap, eNumbers: eNumbers
   };
 })();
+// UMD-style export: browser global + Node require (for engine unit tests).
+if (typeof module === "object" && module.exports) module.exports = CB_DATA;
+if (typeof window !== "undefined") window.CB_DATA = CB_DATA;
+else if (typeof globalThis !== "undefined") globalThis.CB_DATA = CB_DATA;
