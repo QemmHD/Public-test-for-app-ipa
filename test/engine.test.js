@@ -163,3 +163,152 @@ test("personalAlerts flags an allergen token match", () => {
   // Only asserts the function runs and returns an array; allergenMap is data-driven.
   assert.ok(Array.isArray(alerts));
 });
+
+/* -------------------------------------------- expanded E-number coverage */
+test("DB expansion: eNumbers table grew to the full E100–E1525 range", () => {
+  assert.ok(Array.isArray(global.window.CB_DATA.eNumbers));
+  assert.ok(global.window.CB_DATA.eNumbers.length >= 250,
+    "expected hundreds of E-number tuples after expansion, got " + global.window.CB_DATA.eNumbers.length);
+});
+
+test("newly-added E-numbers classify with the right risk", () => {
+  const cases = [
+    ["e171", "avoid"],   // titanium dioxide
+    ["e250", "avoid"],   // sodium nitrite
+    ["e320", "avoid"],   // BHA
+    ["e102", "caution"], // tartrazine
+    ["e211", "caution"], // sodium benzoate
+    ["e621", "limit"],   // MSG
+  ];
+  cases.forEach(([code, risk]) => {
+    const c = engine.classify(engine.norm(code), code, "food");
+    assert.strictEqual(c.status, risk, code + " should classify as " + risk + ", got " + c.status);
+  });
+});
+
+/* ----------------------------- REGRESSION: whole foods must read as clean */
+test("REGRESSION: basic whole foods classify as clean (extraClean merge)", () => {
+  // Bug: `extraClean` (potato, wheat, broccoli, …) was defined but never merged
+  // into cleanIngredients, so scanning a potato returned "unknown". Lock it in.
+  ["potato", "potatoes", "sweet potato", "broccoli", "wheat", "barley", "olive oil"].forEach((food) => {
+    const c = engine.classify(engine.norm(food), food, "food");
+    assert.strictEqual(c.group, "clean", food + " should be a clean whole food, got group=" + c.group);
+  });
+});
+
+/* ----------------------------- expanded cosmetic INCI coverage */
+test("newly-added cosmetic ingredients classify as flagged", () => {
+  const cases = [
+    ["Triclosan", "avoid"],
+    ["DMDM Hydantoin", "caution"],
+    ["Quaternium-15", "caution"],
+    ["Methylisothiazolinone", "caution"],
+  ];
+  cases.forEach(([name, risk]) => {
+    const c = engine.classify(engine.norm(name), name.toLowerCase(), "beauty");
+    assert.strictEqual(c.status, risk, name + " should classify as " + risk + ", got " + c.status);
+  });
+});
+
+/* ----------------------------------------------------- diffProducts (A vs B) */
+function mkProduct(score, negLabels, posLabels, classified) {
+  return {
+    score: score,
+    classified: classified || [],
+    nutrition: {
+      negatives: (negLabels || []).map((l) => ({ label: l.label, sev: "bad", value: l.value })),
+      positives: (posLabels || []).map((l) => ({ label: l.label, sev: "good", value: l.value })),
+    },
+  };
+}
+
+test("diffProducts picks the higher-scoring product and reports the delta", () => {
+  const a = mkProduct(72, [{ label: "Sugar", value: "30 g" }], []);
+  const b = mkProduct(58, [{ label: "Salt", value: "2 g" }], []);
+  const d = engine.diffProducts(a, b);
+  assert.strictEqual(d.better, "a");
+  assert.strictEqual(d.scoreDelta, 14);
+});
+
+test("diffProducts ties when scores are equal", () => {
+  const d = engine.diffProducts(mkProduct(60, [], []), mkProduct(60, [], []));
+  assert.strictEqual(d.better, "tie");
+  assert.strictEqual(d.scoreDelta, 0);
+});
+
+test("diffProducts splits negatives into aOnly / bOnly / shared", () => {
+  const a = mkProduct(70, [{ label: "Sugar", value: "30 g" }, { label: "Salt", value: "2 g" }], []);
+  const b = mkProduct(65, [{ label: "Salt", value: "1 g" }, { label: "Saturated fat", value: "5 g" }], []);
+  const d = engine.diffProducts(a, b);
+  assert.deepStrictEqual(d.negatives.aOnly, ["Sugar"]);
+  assert.deepStrictEqual(d.negatives.bOnly, ["Saturated fat"]);
+  assert.deepStrictEqual(d.negatives.shared, ["Salt"]);
+});
+
+test("diffProducts emits per-shared-nutrient deltas and counts flagged additives", () => {
+  const a = mkProduct(70, [{ label: "Sugar", value: "30 g" }], [],
+    [{ status: "avoid" }, { status: "caution" }, { status: "ok" }]);
+  const b = mkProduct(65, [{ label: "Sugar", value: "12 g" }], [], [{ status: "caution" }]);
+  const d = engine.diffProducts(a, b);
+  assert.strictEqual(d.nutrition.Sugar.a, 30);
+  assert.strictEqual(d.nutrition.Sugar.b, 12);
+  assert.strictEqual(d.nutrition.Sugar.delta, 18);
+  assert.strictEqual(d.additiveCount.a, 2); // avoid + caution count; ok ignored
+  assert.strictEqual(d.additiveCount.b, 1);
+});
+
+/* ------------------------------------------ expanded E-number coverage */
+test("expanded eNumbers tuple resolves a long-tail code (E160a)", () => {
+  const c = engine.classify(engine.norm("e160a"), "e160a", "food");
+  assert.strictEqual(c.status, "ok");
+  assert.strictEqual(c.enumber, "E160a");
+});
+
+test("expanded eNumbers classify an emulsifier as caution (E466)", () => {
+  const c = engine.classify(engine.norm("e466"), "e466", "food");
+  assert.strictEqual(c.status, "caution");
+});
+
+test("high-interest E-number is a rich avoid entry (E171 titanium dioxide)", () => {
+  const c = engine.classify(engine.norm("e171"), "e171", "food");
+  assert.strictEqual(c.status, "avoid");
+});
+
+/* ------------------------------- expanded cosmetic concern-bucket fallback */
+test("new siliconeOther bucket catches a long-tail silicone", () => {
+  const c = engine.classify(engine.norm("cyclohexasiloxane"), "cyclohexasiloxane", "beauty");
+  assert.strictEqual(c.status, "limit");
+  assert.strictEqual(c.group, "siliconeOther");
+});
+
+test("formaldehyde-releaser bucket catches imidazolidinyl urea", () => {
+  const c = engine.classify(engine.norm("imidazolidinyl urea"), "imidazolidinyl urea", "beauty");
+  assert.strictEqual(c.status, "caution");
+  assert.strictEqual(c.group, "formaldehydeReleaser");
+});
+
+/* ----------------------------------------------- compare (diffProducts) */
+test("diffProducts reports the better product and score delta", () => {
+  const A = { name: "A", score: 70, flaggedCount: 1,
+    nutrition: { negatives: [{ label: "Sugar", sev: "bad", value: "20 g" }, { label: "Salt", sev: "bad", value: "1.5 g" }],
+      positives: [{ label: "Fiber", sev: "good", value: "6 g" }] } };
+  const B = { name: "B", score: 55, flaggedCount: 3,
+    nutrition: { negatives: [{ label: "Sugar", sev: "bad", value: "30 g" }, { label: "Saturated fat", sev: "bad", value: "8 g" }],
+      positives: [{ label: "Protein", sev: "good", value: "10 g" }] } };
+  const d = engine.diffProducts(A, B);
+  assert.strictEqual(d.better, "a");
+  assert.strictEqual(d.scoreDelta, 15);
+  assert.deepStrictEqual(d.negatives.shared, ["Sugar"]);
+  assert.deepStrictEqual(d.negatives.aOnly, ["Salt"]);
+  assert.deepStrictEqual(d.negatives.bOnly, ["Saturated fat"]);
+  assert.deepStrictEqual(d.additiveCount, { a: 1, b: 3 });
+  assert.strictEqual(d.nutrition.Sugar.delta, -10);
+});
+
+test("diffProducts is symmetric on a tie", () => {
+  const A = { name: "A", score: 60, nutrition: { negatives: [], positives: [] } };
+  const B = { name: "B", score: 60, nutrition: { negatives: [], positives: [] } };
+  const d = engine.diffProducts(A, B);
+  assert.strictEqual(d.better, "tie");
+  assert.strictEqual(d.scoreDelta, 0);
+});

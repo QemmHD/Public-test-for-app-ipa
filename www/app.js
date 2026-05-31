@@ -40,6 +40,7 @@
     history: [], favorites: [], profile: {}, health: {}, settings: { theme: "dark" }, pending: null, ocrPending: null,
     searchResults: null, searchRaw: null, searchQuery: "", searchSort: "rel", historyFilter: "all",
     alts: { forId: "", loading: false, list: null }, scoreOpen: false, onboarded: true,
+    compareB: null, compareCands: [],
     insightsFilter: "all", editHealth: false, encQuery: "", ingFrom: "result",
     research: { term: "", loading: false, data: null, error: false },
     busy: false, statusMsg: ""
@@ -305,9 +306,19 @@
         if ((o.barcode && o.barcode === p.barcode) || seen[key]) return;
         seen[key] = 1;
         var prod = buildProduct(o);
-        if (prod.score >= p.score + 8) alts.push(prod);
+        if (prod.score < p.score + 8) return;
+        // Blend the raw health score with how well the product fits the user's
+        // diet/allergen profile: every personal alert (e.g. contains an allergen
+        // the user flagged) docks the fit so cleaner-for-this-user options rank up.
+        var alerts = personalAlerts(prod.classified || []);
+        prod.fitBonus = -12 * alerts.length;
+        prod.fitScore = prod.score + prod.fitBonus;
+        alts.push(prod);
       });
-      alts.sort(function (a, b) { return b.score - a.score; });
+      alts.sort(function (a, b) {
+        if (b.fitScore !== a.fitScore) return b.fitScore - a.fitScore;
+        return b.score - a.score;
+      });
       return alts.slice(0, 4);
     }).catch(function () { return []; });
   }
@@ -991,6 +1002,7 @@
           '<button class="seg-btn' + (p.logged !== "eaten" ? " on" : "") + '" data-log="checked">' + icon("search") + ' Just checking</button>' +
         '</div>' : "") +
       (p.isFood ? portionBlock(p) : "") +
+      '<button class="ghost-btn cmp-btn" data-act="comparePick">⇄ Compare with another product</button>' +
       altsBlock(p) +
       nutritionTable(p) +
       '<div class="panel glass"><div class="panel-h">Ingredients <span class="cnt">' + p.classified.length + '</span></div>' +
@@ -1043,6 +1055,89 @@
         '<div class="mini-score" style="background:' + scoreColor(prod.badge.cls) + '">' + prod.score + '</div></div>';
     }).join("");
     return '<div class="panel glass"><div class="panel-h pos"><span>↑</span> Better choices in this category</div>' + rows + '</div>';
+  }
+  // Candidates to compare the current product against: everything the user has
+  // seen (history + favorites) plus any loaded alternatives, minus the product
+  // itself. De-duped by id/barcode. Stored on state so clicks resolve by index.
+  function compareCandidates(p) {
+    var pool = state.history.concat(state.favorites);
+    if (state.alts && state.alts.list) pool = pool.concat(state.alts.list);
+    var seen = {}, out = [];
+    pool.forEach(function (o) {
+      if (!o || !o.badge) return;
+      if (o.id === p.id || (o.barcode && p.barcode && o.barcode === p.barcode)) return;
+      var key = o.barcode || o.id || o.name;
+      if (seen[key]) return; seen[key] = 1;
+      out.push(o);
+    });
+    return out;
+  }
+  function viewComparePick() {
+    var p = state.product; if (!p) return viewHome();
+    var cands = compareCandidates(p); state.compareCands = cands;
+    var rows = cands.length ? cands.map(function (o, i) {
+      return '<div class="lrow tappable" data-cmp="' + i + '">' +
+        (o.image ? '<img class="srch-img" src="' + esc(o.image) + '" alt="">' : '<div class="srch-img ph">🥫</div>') +
+        '<div class="row-main"><div class="row-title">' + esc(o.name) + '</div><div class="row-sub">' + esc(o.brand || "") + '</div></div>' +
+        '<div class="mini-score" style="background:' + scoreColor(o.badge.cls) + '">' + o.score + '</div></div>';
+    }).join("") : '<div class="empty small">Scan or save another product first, then come back to compare it here.</div>';
+    return '<div class="screen">' + backBar("Compare") +
+      '<div class="panel glass"><div class="panel-h">Compare <b>' + esc(p.name) + '</b> with…</div>' + rows + '</div></div>';
+  }
+  function compareCol(p, mark) {
+    var c = scoreColor(p.badge.cls);
+    return '<div class="cmp-col' + (mark ? " win" : "") + '">' +
+      (mark ? '<div class="cmp-crown">' + mark + '</div>' : '') +
+      (p.image ? '<img class="cmp-img" src="' + esc(p.image) + '" alt="">' : '<div class="cmp-img ph">🥫</div>') +
+      '<div class="cmp-name">' + esc(p.name) + '</div>' +
+      '<div class="score-ring cmp-ring" style="--c:' + c + ';--p:' + p.score + '"><div class="score-num">' + p.score + '</div></div>' +
+      '<div class="badge ' + p.badge.cls + '">' + esc(p.badge.label) + '</div>' +
+      prodTypeBadge(p.productType) + '</div>';
+  }
+  function chipList(labels, cls) {
+    if (!labels || !labels.length) return '<span class="cmp-none">—</span>';
+    return labels.map(function (l) { return '<span class="cmp-chip ' + (cls || "") + '">' + esc(l) + '</span>'; }).join("");
+  }
+  function viewCompare() {
+    var a = state.product, b = state.compareB;
+    if (!a || !b) return viewResult();
+    var d = ENG.diffProducts(a, b);
+    var verdict = d.better === "tie"
+      ? "Both score the same (" + a.score + ")."
+      : '<b>' + esc((d.better === "a" ? a : b).name) + '</b> is the better pick — ' +
+        Math.abs(d.scoreDelta) + ' point' + (Math.abs(d.scoreDelta) === 1 ? "" : "s") + ' higher.';
+
+    // Per-nutrient winner direction (lower-is-better vs higher-is-better).
+    var lowerBetter = { Calories: 1, Sugar: 1, Salt: 1, "Saturated fat": 1 };
+    var nutRows = Object.keys(d.nutrition).map(function (k) {
+      var v = d.nutrition[k], better;
+      if (v.a === v.b) better = "tie";
+      else if (lowerBetter[k]) better = v.a < v.b ? "a" : "b";
+      else better = v.a > v.b ? "a" : "b";
+      return '<div class="lrow"><div class="row-main"><div class="row-title">' + esc(k) + '</div></div>' +
+        '<div class="cmp-vals"><span class="' + (better === "a" ? "cmp-good" : "") + '">' + v.a + '</span>' +
+        '<span class="cmp-vs">vs</span><span class="' + (better === "b" ? "cmp-good" : "") + '">' + v.b + '</span></div></div>';
+    }).join("");
+
+    return '<div class="screen result">' + backBar("Comparison") +
+      '<div class="cmp-cols">' +
+        compareCol(a, d.better === "a" ? "♔" : "") +
+        '<div class="cmp-vs-badge">VS</div>' +
+        compareCol(b, d.better === "b" ? "♔" : "") +
+      '</div>' +
+      '<div class="panel glass"><div class="panel-h">Verdict</div>' +
+        '<div class="cmp-verdict">' + verdict + '</div>' +
+        '<div class="lrow"><div class="row-main"><div class="row-title">Flagged additives</div></div>' +
+        '<div class="cmp-vals"><span class="' + (d.additiveCount.a < d.additiveCount.b ? "cmp-good" : "") + '">' + d.additiveCount.a + '</span>' +
+        '<span class="cmp-vs">vs</span><span class="' + (d.additiveCount.b < d.additiveCount.a ? "cmp-good" : "") + '">' + d.additiveCount.b + '</span></div></div>' +
+      '</div>' +
+      '<div class="panel glass"><div class="panel-h neg"><span>⚠</span> Negatives</div>' +
+        '<div class="lrow"><div class="row-main"><div class="row-title">Only ' + esc(a.name) + '</div></div><div class="cmp-chips">' + chipList(d.negatives.aOnly, "neg") + '</div></div>' +
+        '<div class="lrow"><div class="row-main"><div class="row-title">Only ' + esc(b.name) + '</div></div><div class="cmp-chips">' + chipList(d.negatives.bOnly, "neg") + '</div></div>' +
+        '<div class="lrow"><div class="row-main"><div class="row-title">In both</div></div><div class="cmp-chips">' + chipList(d.negatives.shared, "neg") + '</div></div>' +
+      '</div>' +
+      (nutRows ? '<div class="panel glass"><div class="panel-h">Nutrition (per 100g)</div>' + nutRows + '</div>' : "") +
+    '</div>';
   }
   function nutritionTable(p) {
     var nu = p.nutriments; if (!nu) return "";
@@ -1294,6 +1389,8 @@
     else if (v === "profile") html = viewProfile();
     else if (v === "addPhoto") html = viewAddPhoto();
     else if (v === "encyclopedia") html = viewEncyclopedia();
+    else if (v === "comparePick") html = viewComparePick();
+    else if (v === "compare") html = viewCompare();
     else if (v === "onboard") html = viewOnboard();
     else html = viewHome();
 
@@ -1315,7 +1412,7 @@
 
   /* --------------------------------------------------------- events */
   function onClick(e) {
-    var t = e.target.closest("[data-act],[data-nav],[data-open],[data-ingidx],[data-tab],[data-toggle],[data-research],[data-search-idx],[data-alt],[data-fav],[data-hist],[data-log],[data-portion],[data-ins],[data-theme],[data-enc],[data-sort]");
+    var t = e.target.closest("[data-act],[data-nav],[data-open],[data-ingidx],[data-tab],[data-toggle],[data-research],[data-search-idx],[data-alt],[data-cmp],[data-fav],[data-hist],[data-log],[data-portion],[data-ins],[data-theme],[data-enc],[data-sort]");
     if (!t) return;
     if (t.dataset.fav != null) { toggleFav(state.product); render(); return; }
     if (t.dataset.log != null) { setLogged(t.dataset.log); return; }
@@ -1331,6 +1428,7 @@
       return;
     }
     if (t.dataset.alt != null) { var ap = state.alts.list && state.alts.list[+t.dataset.alt]; if (ap) openResult(ap); return; }
+    if (t.dataset.cmp != null) { var cb = state.compareCands && state.compareCands[+t.dataset.cmp]; if (cb) { state.compareB = cb; go("compare"); } return; }
     if (t.dataset.research != null) { doResearch(t.dataset.research); return; }
     if (t.dataset.searchIdx != null) {
       var o = state.searchResults && state.searchResults[+t.dataset.searchIdx];
@@ -1369,7 +1467,8 @@
       state.ocrPending = null; state.pending = null; showProduct(product);
     }
     else if (act === "manual") go("manual");
-    else if (act === "back") go(state.view === "ingredient" ? state.ingFrom : "home");
+    else if (act === "comparePick") go("comparePick");
+    else if (act === "back") go(state.view === "ingredient" ? state.ingFrom : (state.view === "compare" ? "comparePick" : (state.view === "comparePick" ? "result" : "home")));
     else if (act === "manualGo") { var el = document.getElementById("bc"); if (el && el.value.trim()) handleBarcode(el.value.trim()); }
     else if (act === "searchGo") { var qe = document.getElementById("q"); if (qe && qe.value.trim()) runSearch(qe.value.trim()); }
     else if (act === "toggleScore") { state.scoreOpen = !state.scoreOpen; render(); }

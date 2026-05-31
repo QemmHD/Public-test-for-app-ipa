@@ -396,29 +396,53 @@ window.CB_DATA_COSMETICS = (function () {
   const concernLists = {
     endocrine: [
       "resorcinol", "benzophenone", "homosalate", "octocrylene", "avobenzone",
-      "butylphenyl methylpropional", "lilial", "cyclomethicone", "bpa", "bisphenol"
+      "butylphenyl methylpropional", "lilial", "cyclomethicone", "bpa", "bisphenol",
+      "benzophenone-1", "benzophenone-2", "benzophenone-4", "ethylhexyl salicylate",
+      "4-methylbenzylidene camphor", "3-benzylidene camphor", "genistein",
+      "benzophenone-1", "benzophenone-2", "benzophenone-4", "4-methylbenzylidene camphor",
+      "ethylhexyl salicylate", "octyl salicylate", "propyl gallate", "genistein"
     ],
     formaldehydeReleaser: [
       "imidazolidinyl urea", "diazolidinyl urea", "sodium hydroxymethylglycinate",
-      "bronopol", "2-bromo-2-nitropropane-1,3-diol", "polyoxymethylene urea"
+      "bronopol", "2-bromo-2-nitropropane-1,3-diol", "polyoxymethylene urea",
+      "methenamine", "hexamethylenetetramine", "glyoxal", "benzylhemiformal",
+      "5-bromo-5-nitro-1,3-dioxane", "tris(hydroxymethyl) nitromethane",
+      "methenamine", "benzylhemiformal", "glyoxal", "tris(hydroxymethyl) nitromethane"
     ],
     sulfate: [
       "ammonium lauryl sulfate", "ammonium laureth sulfate", "sodium myreth sulfate",
-      "tea-lauryl sulfate", "sodium coco sulfate"
+      "tea-lauryl sulfate", "sodium coco sulfate", "sodium lauryl sulfoacetate",
+      "magnesium lauryl sulfate", "sodium cetearyl sulfate", "sodium c14-16 olefin sulfonate", "magnesium lauryl sulfate",
+      "sodium c14-16 olefin sulfonate", "sodium xylenesulfonate", "ammonium xylenesulfonate"
     ],
     fragranceAllergen: [
       "limonene", "linalool", "citronellol", "geraniol", "eugenol", "coumarin",
-      "cinnamal", "benzyl benzoate", "benzyl salicylate", "hexyl cinnamal", "amyl cinnamal", "farnesol"
+      "cinnamal", "benzyl benzoate", "benzyl salicylate", "hexyl cinnamal", "amyl cinnamal", "farnesol",
+      "citral", "isoeugenol", "cinnamyl alcohol", "anise alcohol",
+      "alpha-isomethyl ionone", "hydroxycitronellal", "evernia prunastri", "evernia furfuracea",
+      "isoeugenol", "citral", "anise alcohol", "benzyl cinnamate", "hydroxycitronellal",
+      "alpha-isomethyl ionone", "methyl 2-octynoate", "evernia prunastri", "evernia furfuracea",
+      "oakmoss extract", "cinnamyl alcohol", "butylphenyl methylpropional"
     ],
     sensitizer: [
       "methyldibromo glutaronitrile", "iodopropynyl butylcarbamate", "chlorphenesin",
-      "propolis", "colophonium", "balsam of peru"
+      "propolis", "colophonium", "balsam of peru", "cocamidopropyl betaine",
+      "lanolin", "thimerosal", "neomycin", "cocamidopropyl betaine",
+      "chloroxylenol", "climbazole", "octylisothiazolinone", "benzisothiazolinone"
     ],
     alcoholDrying: [
-      "alcohol denat", "denatured alcohol", "sd alcohol", "isopropyl alcohol", "ethanol"
+      "alcohol denat", "denatured alcohol", "sd alcohol", "isopropyl alcohol", "ethanol",
+      "sd alcohol 40", "isopropanol"
+    ],
+    siliconeOther: [
+      "cyclohexasiloxane", "phenyl trimethicone", "amodimethicone", "trimethicone",
+      "dimethiconol", "trimethylsiloxysilicate", "cetyl dimethicone", "stearyl dimethicone",
+      "behenoxy dimethicone", "bis-aminopropyl dimethicone"
     ],
     dye: [
-      "lead acetate", "carbon black", "ci 77266"
+      "lead acetate", "carbon black", "ci 77266", "ci 19140", "ci 16035", "ci 42090",
+      "ci 15985", "ci 17200", "ci 45380", "ci 45410", "chromium oxide greens", "ferric ferrocyanide", "p-aminophenol",
+      "toluene-2,5-diamine", "basic brown 17", "hc blue", "ci 12490", "4-amino-2-hydroxytoluene"
     ]
   };
 
@@ -429,6 +453,7 @@ window.CB_DATA_COSMETICS = (function () {
     fragranceAllergen: { status: "caution", reason: "Known fragrance allergen" },
     sensitizer: { status: "caution", reason: "Skin sensitizer / allergen" },
     alcoholDrying: { status: "limit", reason: "Drying alcohol" },
+    siliconeOther: { status: "limit", reason: "Silicone (buildup / non-biodegradable)" },
     dye: { status: "caution", reason: "Colorant of concern" }
   };
 
@@ -479,6 +504,14 @@ window.CB_DATA_COSMETICS = (function () {
       whatIs: "Denatured/SD/isopropyl alcohols are quick-evaporating solvents used for a light feel.",
       whyFlagged: "Fine in small amounts, but high concentrations can dry and irritate skin over time.",
       effects: "Dryness and barrier disruption with heavy use; not a serious hazard.",
+      studies: []
+    },
+    siliconeOther: {
+      category: "Silicone", status: "limit",
+      summary: "A silicone conditioning agent that can build up and is poorly biodegradable.",
+      whatIs: "Silicones give a smooth, slippery feel and seal the hair or skin surface.",
+      whyFlagged: "Generally low-irritation, but heavier silicones can build up on hair and most do not biodegrade.",
+      effects: "Possible buildup with frequent use; environmental persistence. Not a serious health hazard.",
       studies: []
     },
     dye: {

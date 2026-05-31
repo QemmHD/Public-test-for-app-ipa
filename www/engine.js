@@ -329,6 +329,68 @@
       return { protein: p == null ? null : Math.round(p), carbs: c == null ? null : Math.round(c), fat: f == null ? null : Math.round(f) };
     }
 
+    /* --------------------------------------------------- compare two products
+     * Pure structural diff over two analyzed product objects. Each product is
+     * expected to carry { name, score, classified[], nutrition{negatives,positives},
+     * flaggedCount? }. No DOM, fully unit-testable.                            */
+    function numFromValue(v) {
+      var m = String(v == null ? "" : v).match(/-?\d+(\.\d+)?/);
+      return m ? parseFloat(m[0]) : null;
+    }
+    function negLabelSet(p) {
+      var set = {};
+      var rows = (p && p.nutrition && p.nutrition.negatives) || [];
+      rows.forEach(function (r) { if (r.sev === "bad") set[r.label] = true; });
+      return set;
+    }
+    function posLabelSet(p) {
+      var set = {};
+      var rows = (p && p.nutrition && p.nutrition.positives) || [];
+      rows.forEach(function (r) { if (r.sev === "good") set[r.label] = true; });
+      return set;
+    }
+    function splitSets(sa, sb) {
+      var aOnly = [], bOnly = [], shared = [];
+      Object.keys(sa).forEach(function (k) { (sb[k] ? shared : aOnly).push(k); });
+      Object.keys(sb).forEach(function (k) { if (!sa[k]) bOnly.push(k); });
+      return { aOnly: aOnly, bOnly: bOnly, shared: shared };
+    }
+    function additiveCount(p) {
+      if (p && typeof p.flaggedCount === "number") return p.flaggedCount;
+      var n = 0;
+      ((p && p.classified) || []).forEach(function (c) {
+        if (c.status === "avoid" || c.status === "caution") n++;
+      });
+      return n;
+    }
+    function nutritionDeltas(a, b) {
+      function rowMap(p) {
+        var m = {};
+        var rows = ((p && p.nutrition && p.nutrition.negatives) || [])
+          .concat((p && p.nutrition && p.nutrition.positives) || []);
+        rows.forEach(function (r) { var n = numFromValue(r.value); if (n != null) m[r.label] = n; });
+        return m;
+      }
+      var ma = rowMap(a), mb = rowMap(b), out = {};
+      Object.keys(ma).forEach(function (k) {
+        if (mb[k] != null) out[k] = { a: ma[k], b: mb[k], delta: Math.round((ma[k] - mb[k]) * 10) / 10 };
+      });
+      return out;
+    }
+    function diffProducts(a, b) {
+      a = a || {}; b = b || {};
+      var sa = typeof a.score === "number" ? a.score : 0;
+      var sb = typeof b.score === "number" ? b.score : 0;
+      return {
+        better: sa > sb ? "a" : sb > sa ? "b" : "tie",
+        scoreDelta: sa - sb,
+        negatives: splitSets(negLabelSet(a), negLabelSet(b)),
+        positives: splitSets(posLabelSet(a), posLabelSet(b)),
+        nutrition: nutritionDeltas(a, b),
+        additiveCount: { a: additiveCount(a), b: additiveCount(b) }
+      };
+    }
+
     return {
       DATA: {
         additives: foodAdditives, cosmetics: cosmeticAdditives, all: allAdditives,
@@ -341,7 +403,8 @@
       tokenize: tokenize, phraseInTokens: phraseInTokens, isFoodType: isFoodType,
       parseIngredients: parseIngredients, classify: classify, ingredientDetail: ingredientDetail,
       evalNutrition: evalNutrition, analyze: analyze, bandFor: bandFor, personalAlerts: personalAlerts,
-      computeTargets: computeTargets, computeKcal: computeKcal, computeMacros: computeMacros
+      computeTargets: computeTargets, computeKcal: computeKcal, computeMacros: computeMacros,
+      diffProducts: diffProducts
     };
   }
 
