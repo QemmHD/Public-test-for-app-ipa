@@ -261,7 +261,10 @@ test("diffProducts emits per-shared-nutrient deltas and counts flagged additives
 test("expanded eNumbers tuple resolves a long-tail code (E160a)", () => {
   const c = engine.classify(engine.norm("e160a"), "e160a", "food");
   assert.strictEqual(c.status, "ok");
-  assert.strictEqual(c.enumber, "E160a");
+  // Resolves either via the lightweight tuple (enumber) or a promoted rich
+  // additive entry (additive.enumber) — both are correct.
+  const en = c.enumber || (c.additive && c.additive.enumber);
+  assert.strictEqual(en, "E160a");
 });
 
 test("expanded eNumbers classify an emulsifier as caution (E466)", () => {
@@ -387,4 +390,30 @@ test("glycerin stays benign (not caught by a new bucket)", () => {
   const c = engine.classify(engine.norm("Glycerin"), "glycerin", "beauty");
   assert.notStrictEqual(c.status, "avoid");
   assert.notStrictEqual(c.status, "caution");
+});
+
+/* -------------------- false-detection filter (non-ingredient OCR noise) */
+test("parseIngredients keeps real ingredients from a noisy label", () => {
+  const label = "INGREDIENTS: Water, Sugar, Salt, Sodium Benzoate, Citric Acid. " +
+    "Nutrition Facts. Serving Size 1 cup. Calories 120. Total Fat 2g. Sodium 200mg. " +
+    "Total Sugars 20g. Distributed by ACME Foods. Best by 12/2026. www.acme.com";
+  const got = engine.parseIngredients(label).map((x) => x.norm);
+  ["water", "sugar", "salt", "sodium benzoate", "citric acid"].forEach((n) => {
+    assert.ok(got.includes(n), "expected to keep ingredient: " + n);
+  });
+});
+
+test("parseIngredients drops nutrition-panel and contact noise", () => {
+  const label = "Water, Salt. Serving Size 1 cup. Calories 120. Total Fat 2g. " +
+    "Sodium 200mg. Daily Value. Distributed by ACME. www.acme.com";
+  const got = engine.parseIngredients(label).map((x) => x.norm);
+  ["calories", "serving size", "total fat 2g", "sodium 200mg", "daily value", "distributed by acme"]
+    .forEach((j) => { assert.ok(!got.includes(j), "should have dropped noise: " + j); });
+});
+
+test("parseIngredients does not drop legitimate look-alikes (iron, milk fat)", () => {
+  const got = engine.parseIngredients("Enriched Flour, Iron, Palm Oil, Milk Fat, Salt").map((x) => x.norm);
+  ["iron", "palm oil", "milk fat", "salt"].forEach((n) => {
+    assert.ok(got.includes(n), "expected to keep: " + n);
+  });
 });

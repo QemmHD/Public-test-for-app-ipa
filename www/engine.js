@@ -53,9 +53,25 @@
   }
 
   /* ----------------------------------------------------- ingredient parsing */
+  // High-confidence markers for text that is NOT an ingredient: nutrition-facts
+  // panel rows, net-weight / contact / storage lines, marketing claims and URLs.
+  // These phrases never appear inside a real ingredient name, so dropping a
+  // fragment that contains one (or exactly equals a nutrition-panel word) keeps
+  // OCR noise out of the result without discarding genuine ingredients such as
+  // salt, water, sugar, iron or sodium benzoate.
+  var NON_INGREDIENT_RE = /\b(daily value|per serving|per container|serving size|servings|amount per|nutrition facts|calories|total fat|saturated fat|trans fat|polyunsaturated fat|monounsaturated fat|total carbohydrate|dietary fiber|total sugars|added sugars|cholesterol|distributed by|manufactured|net wt|net weight|fl oz|best before|best by|use by|sell by|exp date|questions|comments|satisfaction|refrigerat|produced in|made in|product of|packaged|facility|contains less than|may contain|www|http)\b/;
+  // A standalone number followed by a measurement unit (e.g. "200mg", "2 g",
+  // "120 kcal") is a nutrition value, not an ingredient.
+  var NUTRITION_VALUE_RE = /\b\d+(\.\d+)?\s?(mg|mcg|g|kg|kcal|iu|ml|oz)\b/;
+  function isNonIngredient(n) {
+    return NON_INGREDIENT_RE.test(n) || NUTRITION_VALUE_RE.test(n);
+  }
   function parseIngredients(text) {
     if (!text) return [];
     var cleaned = text
+      .replace(/\b(?:https?:\/\/|www\.)\S+/gi, " ")
+      .replace(/\S+@\S+\.\S+/g, " ")
+      .replace(/\b[\w.-]+\.(?:com|net|org|co|us)\b/gi, " ")
       .replace(/ingredients?:?/i, " ")
       .replace(/contains( 2% or less of| less than 2% of)?:?/ig, ",")
       .replace(/[\[\]{}]/g, ",").replace(/\band\b/gi, ",");
@@ -65,6 +81,7 @@
       if (!raw) continue;
       var n = norm(raw);
       if (!n || n.length < 2) continue;
+      if (isNonIngredient(n)) continue;
       if (out.length && out[out.length - 1].norm === n) continue;
       out.push({ raw: raw.replace(/\s+/g, " ").trim(), norm: n });
       if (out.length > 80) break;

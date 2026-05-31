@@ -141,6 +141,10 @@
     var m = PROD_TYPE_LABEL[t] || PROD_TYPE_LABEL.household;
     return '<div class="ptype-badge" data-ptype="' + esc(t || "food") + '">' + m[0] + ' ' + m[1] + '</div>';
   }
+  // Certified-only kosher chip (shown only when Open*Facts carries a kosher label).
+  function kosherBadge() {
+    return '<div class="kosher-badge" title="Certified kosher per product label data">\u2721 Certified Kosher</div>';
+  }
 
   // Ingredient-detail / nutrition / scoring all live in the engine now.
   function ingredientDetail(item) { return ENG.ingredientDetail(item); }
@@ -185,7 +189,17 @@
   function fetchJson(url, opts) { return fetchWithTimeout(url, opts).then(function (r) { return r.ok ? r.json() : null; }); }
 
   /* -------------------------------------------------- Open*Facts family */
-  var OFF_FIELDS = "code,product_name,brands,image_front_small_url,image_front_url,ingredients_text,ingredients_text_en,additives_tags,categories_tags,serving_quantity,nova_group,nutriscore_grade,nutriments";
+  var OFF_FIELDS = "code,product_name,brands,image_front_small_url,image_front_url,ingredients_text,ingredients_text_en,additives_tags,categories_tags,labels_tags,serving_quantity,nova_group,nutriscore_grade,nutriments";
+  // Certified-only kosher detection: trust an official Open*Facts kosher label
+  // (e.g. "en:kosher", "en:ou-kosher"). We never guess kosher status from
+  // ingredients — only report a certification the product data actually carries.
+  function detectKosher(p) {
+    var labels = (p && p.labels_tags) || [];
+    for (var i = 0; i < labels.length; i++) {
+      if (/kosher/i.test(labels[i])) return true;
+    }
+    return false;
+  }
   function mapOff(p, code, src) {
     if (!p) return null;
     var cats = p.categories_tags || [], catTag = "";
@@ -195,6 +209,7 @@
       image: p.image_front_small_url || p.image_front_url || "", category: catTag, serving_quantity: p.serving_quantity,
       ingredientsText: p.ingredients_text_en || p.ingredients_text || "",
       productType: (src && src.type) || "food", source: (src && src.label) || "Open Food Facts",
+      kosher: detectKosher(p),
       nova_group: p.nova_group, nutriscore_grade: p.nutriscore_grade, nutriments: p.nutriments || {} };
   }
   // Best-available calories per portion (engine).
@@ -271,7 +286,7 @@
       name: (off && off.name) || opts.name || "Scanned product", brand: (off && off.brand) || "",
       image: (off && off.image) || "", category: (off && off.category) || "", photoKey: opts.photoKey || "", ingredientsText: text,
       source: opts.source || (off && off.source) || (off ? "Open Food Facts" : "Photo / OCR"),
-      productType: ptype, isFood: food,
+      productType: ptype, isFood: food, kosher: !!(off && off.kosher),
       nutriments: food ? ((off && off.nutriments) || null) : null,
       kcal: food ? computeKcal(off) : null,
       macros: food ? ENG.computeMacros(off) : null,
@@ -992,7 +1007,7 @@
           '<div class="phead-txt"><div class="phead-name">' + esc(p.name) + '</div>' +
           '<div class="phead-brand">' + esc(p.brand || "") + '</div>' +
           '<div class="phead-src">via ' + esc(p.source) + '</div>' +
-          prodTypeBadge(p.productType) + '</div>' +
+          prodTypeBadge(p.productType) + (p.kosher ? kosherBadge() : "") + '</div>' +
         '</div>' +
         '<div class="score-wrap">' +
           '<div class="score-glow"></div>' +
