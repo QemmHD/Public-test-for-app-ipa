@@ -99,6 +99,7 @@ body::before {
 .row-main { flex: 1; min-width: 0; }
 .row-title { font-weight: 650; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row-sub { color: var(--mut); font-size: 13px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.srch-type { color: var(--ink2, #9aa3b2); font-weight: 700; }
 .tappable { cursor: pointer; transition: transform 0.08s ease, background 0.12s ease; }
 .tappable:active { transform: scale(0.99); background: var(--glass2); }
 .empty { text-align: center; color: var(--mut); padding: 50px 14px; line-height: 1.6; }

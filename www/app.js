@@ -234,14 +234,31 @@
     return tryAt(0);
   }
   function searchProducts(query) {
-    var url = "https://world.openfoodfacts.org/cgi/search.pl?search_terms=" + encodeURIComponent(query) +
-      "&search_simple=1&action=process&json=1&page_size=24&fields=" + OFF_FIELDS;
-    return fetchJson(url)
-      .then(function (j) {
-        var arr = (j && j.products) || [];
-        return arr.map(function (p) { return mapOff(p, "", OFF_SOURCES[0]); })
-          .filter(function (o) { return o && o.name && o.name !== "Unknown product"; });
+    // Search every Open*Facts database (food, beauty, household, pet food) in
+    // parallel so ANY product type is findable by name — not just food. Each
+    // source tags its results with the right productType via mapOff(src), so
+    // opening a result builds it through the correct (food vs cosmetic) path.
+    // A single source failing (timeout / down) must not sink the whole search.
+    var jobs = OFF_SOURCES.map(function (src) {
+      var host = src.base.split("/api/")[0];
+      var url = host + "/cgi/search.pl?search_terms=" + encodeURIComponent(query) +
+        "&search_simple=1&action=process&json=1&page_size=20&fields=" + OFF_FIELDS;
+      return fetchJson(url).then(function (j) {
+        return ((j && j.products) || []).map(function (p) { return mapOff(p, "", src); });
+      }).catch(function () { return []; });
+    });
+    return Promise.all(jobs).then(function (lists) {
+      var seen = {}, out = [];
+      lists.forEach(function (arr) {
+        arr.forEach(function (o) {
+          if (!o || !o.name || o.name === "Unknown product") return;
+          var key = o.barcode || (o.name + "|" + o.brand);
+          if (seen[key]) return; seen[key] = 1;
+          out.push(o);
+        });
       });
+      return out;
+    });
   }
   function buildProduct(off, ingredientsText, opts) {
     opts = opts || {};
@@ -928,10 +945,15 @@
     if (state.searchRaw == null) rows = '<div class="empty small">Searching…</div>';
     else if (!list.length) rows = '<div class="empty">No products found for “' + esc(state.searchQuery) + '”.<br>Try a different name or scan the barcode.</div>';
     else rows = list.map(function (o, i) {
+      // Results can now be any product type (food / beauty / household / pet
+      // food); show a small type tag on non-food rows so mixed results read clearly.
+      var tl = o.productType && o.productType !== "food" && PROD_TYPE_LABEL[o.productType];
+      var typeTag = tl ? '<span class="srch-type">' + tl[0] + ' ' + esc(tl[1]) + '</span>' : "";
+      var sub = esc(o.brand || (o.ingredientsText ? "" : "No ingredient data"));
       return '<div class="row card tappable" data-search-idx="' + i + '">' +
         (o.image ? '<img class="srch-img" src="' + esc(o.image) + '" alt="">' : '<div class="srch-img ph">🥫</div>') +
         '<div class="row-main"><div class="row-title">' + esc(o.name) + '</div>' +
-        '<div class="row-sub">' + esc(o.brand || (o.ingredientsText ? "" : "No ingredient data")) + '</div></div>' +
+        '<div class="row-sub">' + typeTag + (typeTag && sub ? " · " : "") + sub + '</div></div>' +
         '<div class="chev">›</div></div>';
     }).join("");
     return '<div class="screen">' + backBar("Search") +
