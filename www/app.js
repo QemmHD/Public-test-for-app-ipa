@@ -37,7 +37,7 @@
   var state = {
     view: "home", prev: "home",
     product: null, ingDetail: null, ingTab: "what",
-    history: [], favorites: [], profile: {}, health: {}, settings: { theme: "dark" }, pending: null,
+    history: [], favorites: [], profile: {}, health: {}, settings: { theme: "dark" }, pending: null, ocrPending: null,
     searchResults: null, searchRaw: null, searchQuery: "", searchSort: "rel", historyFilter: "all",
     alts: { forId: "", loading: false, list: null }, scoreOpen: false, onboarded: true,
     insightsFilter: "all", editHealth: false, encQuery: "", ingFrom: "result",
@@ -425,15 +425,31 @@
       hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,
         [F.UPC_A, F.UPC_E, F.EAN_13, F.EAN_8, F.CODE_128, F.CODE_39, F.ITF]);
       hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-      zxingReader = new ZXing.BrowserMultiFormatReader(hints, 100);
-      var constraints = { video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } } };
-      setStatus("Center the barcode in the box");
-      zxingReader.decodeFromConstraints(constraints, video, function (res, err) {
-        if (res) { var code = res.getText(); stopScanner(); handleBarcode(code); }
-      });
-    }).catch(function () {
+      zxingReader = new ZXing.BrowserMultiFormatReader(hints, 120);
+      setStatus("Point the back camera at the barcode");
+      var onDecode = function (res) { if (res) { stopScanner(); handleBarcode(res.getText()); } };
+      // facingMode:{ideal} is only a soft hint — iOS may hand back the FRONT
+      // camera, so the barcode is never in frame and nothing ever decodes.
+      // Force the rear camera at a high resolution (thin UPC bars need the
+      // detail) and fall back progressively if the device rejects it.
+      var tries = [
+        { video: { facingMode: { exact: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } } },
+        { video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } } },
+        { video: true }
+      ];
+      function attempt(i) {
+        return zxingReader.decodeFromConstraints(tries[i], video, onDecode).catch(function (e) {
+          if (i + 1 < tries.length) return attempt(i + 1);
+          throw e;
+        });
+      }
+      return attempt(0);
+    }).catch(function (e) {
       setStatus("");
-      alert("Camera/scanner unavailable. Enter the barcode manually.");
+      var msg = "Camera unavailable. Enter the barcode manually.";
+      if (e && e.name === "NotAllowedError") msg = "Camera access is blocked. Allow camera for this site in Settings, then retry — or enter the barcode manually.";
+      else if (e && e.name === "NotFoundError") msg = "No camera was found. Enter the barcode manually.";
+      alert(msg);
       go("manual");
     });
   }
@@ -469,6 +485,55 @@
   /* ------------------------------------------------------------ OCR */
   function fileToDataUrl(file) {
     return new Promise(function (res, rej) { var fr = new FileReader(); fr.onload = function () { res(fr.result); }; fr.onerror = rej; fr.readAsDataURL(file); });
+  }
+  // Boost OCR accuracy on phone photos: upscale small captures so thin
+  // lettering survives, convert to grayscale, then stretch contrast. Any
+  // failure falls back to the original image so OCR still runs.
+  function preprocessImage(dataUrl) {
+    return new Promise(function (resolve) {
+      try {
+        var img = new Image();
+        img.onload = function () {
+          var w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+          if (!w || !h) { resolve(dataUrl); return; }
+          var minEdge = Math.min(w, h), scale = 1;
+          if (minEdge < 1000) scale = 1000 / minEdge;
+          var maxEdge = Math.max(w, h) * scale;
+          if (maxEdge > 2200) scale *= 2200 / maxEdge;
+          var cw = Math.max(1, Math.round(w * scale)), ch = Math.max(1, Math.round(h * scale));
+          var cv = document.createElement("canvas"); cv.width = cw; cv.height = ch;
+          var ctx = cv.getContext("2d");
+          if (!ctx) { resolve(dataUrl); return; }
+          ctx.drawImage(img, 0, 0, cw, ch);
+          var id = ctx.getImageData(0, 0, cw, ch), d = id.data, i, lum, min = 255, max = 0;
+          for (i = 0; i < d.length; i += 4) {
+            lum = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) | 0;
+            d[i] = d[i + 1] = d[i + 2] = lum;
+            if (lum < min) min = lum;
+            if (lum > max) max = lum;
+          }
+          var range = (max - min) || 1;
+          for (i = 0; i < d.length; i += 4) {
+            var v = (d[i] - min) * 255 / range;
+            v = v < 0 ? 0 : v > 255 ? 255 : v;
+            d[i] = d[i + 1] = d[i + 2] = v;
+          }
+          ctx.putImageData(id, 0, 0);
+          resolve(cv.toDataURL("image/png"));
+        };
+        img.onerror = function () { resolve(dataUrl); };
+        img.src = dataUrl;
+      } catch (e) { resolve(dataUrl); }
+    });
+  }
+  // Editable OCR result so the user can fix misreads before scoring.
+  function ocrReviewBlock(text, conf, low) {
+    return '<div class="panel glass ocr-review"><div class="panel-h">Check the scanned text' +
+      '<span class="cnt">' + Math.round(conf || 0) + '% read</span></div>' +
+      (low ? '<div class="ocr-warn">Hard to read — fix any wrong or missing words below, or retake a closer, well-lit photo of just the ingredients.</div>'
+           : '<div class="ocr-tip">Tap to fix anything the scan got wrong, then analyze.</div>') +
+      '<textarea id="ocrText" class="text-input ocr-text" rows="7" placeholder="Ingredients…">' + esc(text || "") + '</textarea>' +
+      '<button class="big-btn" data-act="analyzeOcr">Analyze ingredients</button></div>';
   }
   function runOCR(dataUrl) {
     setStatus("Reading label…");
@@ -1065,6 +1130,15 @@
     if (act === "scan") go("scanner");
     else if (act === "home") go("home");
     else if (act === "addPhoto") go("addPhoto");
+    else if (act === "analyzeOcr") {
+      var ta = document.getElementById("ocrText");
+      var txt = ta ? ta.value.trim() : "";
+      if (txt.replace(/\s/g, "").length < 6) { alert("Please enter or fix the ingredients text first."); return; }
+      var ctx = state.ocrPending || {};
+      var product = buildProduct(ctx.off || null, txt, { photoKey: ctx.photoKey, source: "Photo / OCR", name: ctx.name || "Scanned product" });
+      if (ctx.barcode) product.barcode = ctx.barcode;
+      state.ocrPending = null; state.pending = null; showProduct(product);
+    }
     else if (act === "manual") go("manual");
     else if (act === "back") go(state.view === "ingredient" ? state.ingFrom : "home");
     else if (act === "manualGo") { var el = document.getElementById("bc"); if (el && el.value.trim()) handleBarcode(el.value.trim()); }
@@ -1108,18 +1182,24 @@
       busy(true, "Reading label…");
       fileToDataUrl(file).then(function (durl) {
         var key = "ph" + Date.now(); savePhoto(key, durl);
-        return runOCR(durl).then(function (ocr) {
+        // Preprocess (grayscale + upscale + contrast) only for the OCR pass;
+        // the original photo is what we keep for display.
+        return preprocessImage(durl).then(runOCR).then(function (ocr) {
           busy(false, "");
-          if (!ocr.text || ocr.text.replace(/\s/g, "").length < 12 || ocr.confidence < 35) {
-            var prev = document.getElementById("ocrPreview");
-            if (prev) prev.innerHTML = '<div class="empty small">Couldn\'t read that clearly (confidence ' +
-              Math.round(ocr.confidence) + '%). Please retake a <b>closer, well-lit</b> photo of just the ingredients list.</div>';
-            return;
-          }
+          var prev = document.getElementById("ocrPreview");
           var off = state.pending && state.pending.off ? state.pending.off : null;
-          var product = buildProduct(off, ocr.text, { photoKey: key, source: "Photo / OCR", name: off && off.name ? off.name : "Scanned product" });
-          if (state.pending && state.pending.barcode) product.barcode = state.pending.barcode;
-          state.pending = null; showProduct(product);
+          // OCR on curved, glossy labels is never perfect — always let the user
+          // review and fix the text before we analyze it.
+          state.ocrPending = {
+            off: off, photoKey: key,
+            barcode: state.pending && state.pending.barcode ? state.pending.barcode : null,
+            name: off && off.name ? off.name : "Scanned product"
+          };
+          var text = (ocr.text || "").trim();
+          var low = ocr.confidence < 60 || text.replace(/\s/g, "").length < 12;
+          if (prev) prev.innerHTML = ocrReviewBlock(text, ocr.confidence, low);
+          var ta = document.getElementById("ocrText");
+          if (ta) { try { ta.focus(); } catch (e) {} }
         });
       }).catch(function () { busy(false, ""); alert("Couldn't process that image. Try again."); });
     }
