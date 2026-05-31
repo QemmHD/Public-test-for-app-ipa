@@ -787,19 +787,28 @@
           '<button class="why-btn" data-act="toggleScore">' + (state.scoreOpen ? "Hide score details" : "How is this scored?") + '</button>' +
         '</div>' +
       '</div>' +
+      whyBlock(p) +
+      // Yuka-style: the verdict detail (what's bad / what's good) comes FIRST,
+      // right under the score — that's the core of the result screen.
+      // Bobby-Approved-better: surface the actual flagged INGREDIENT names as
+      // tappable red-flag rows at the top of Negatives, then the nutrition
+      // negatives (minus the vague aggregate "Additives" row).
+      (function () {
+        var negHtml = concernRows(p) +
+          (n.negatives || []).filter(function (r) { return r.label !== "Additives"; }).map(brkRow).join("");
+        return negHtml ? '<div class="panel glass"><div class="panel-h neg"><span>⚠</span> Negatives</div>' + negHtml + '</div>' : "";
+      })() +
+      (n.positives && n.positives.length ? '<div class="panel glass"><div class="panel-h pos"><span>✓</span> Positives</div>' + n.positives.map(brkRow).join("") + '</div>' : "") +
+      (alerts.length ? ('<div class="alerts">' + alerts.map(function (a) {
+        return '<div class="alert">⚠️ <b>' + esc(cap(a.key)) + '</b>: contains ' + esc(a.hits.join(", ")) + '</div>';
+      }).join("") + '</div>') : "") +
       (p.isFood ?
         '<div class="logseg">' +
           '<button class="seg-btn' + (p.logged === "eaten" ? " on ate" : "") + '" data-log="eaten">' + icon("fork") + ' I ate this</button>' +
           '<button class="seg-btn' + (p.logged !== "eaten" ? " on" : "") + '" data-log="checked">' + icon("search") + ' Just checking</button>' +
         '</div>' : "") +
       (p.isFood ? portionBlock(p) : "") +
-      whyBlock(p) +
-      (alerts.length ? ('<div class="alerts">' + alerts.map(function (a) {
-        return '<div class="alert">⚠️ <b>' + esc(cap(a.key)) + '</b>: contains ' + esc(a.hits.join(", ")) + '</div>';
-      }).join("") + '</div>') : "") +
       altsBlock(p) +
-      (n.negatives && n.negatives.length ? '<div class="panel glass"><div class="panel-h neg"><span>⚠</span> Negatives</div>' + n.negatives.map(brkRow).join("") + '</div>' : "") +
-      (n.positives && n.positives.length ? '<div class="panel glass"><div class="panel-h pos"><span>✓</span> Positives</div>' + n.positives.map(brkRow).join("") + '</div>' : "") +
       nutritionTable(p) +
       '<div class="panel glass"><div class="panel-h">Ingredients <span class="cnt">' + p.classified.length + '</span></div>' +
       '<div class="legend">Tap any ingredient for details</div>' +
@@ -872,6 +881,21 @@
       '<div class="row-main"><div class="row-title">' + esc(r.label) + '</div>' +
       '<div class="row-sub">' + esc(r.note || "") + '</div></div>' +
       '<div class="brk-val ' + r.sev + '">' + esc(r.value) + '</div></div>';
+  }
+  // Bobby-Approved-style: each flagged ingredient is its own tappable red-flag
+  // row in Negatives, so the user sees exactly WHAT is concerning, not a count.
+  function concernRows(p) {
+    var order = { avoid: 0, caution: 1, limit: 2 };
+    var flagged = [];
+    (p.classified || []).forEach(function (c, i) { if (order[c.status] != null) flagged.push({ c: c, i: i }); });
+    flagged.sort(function (a, b) { return order[a.c.status] - order[b.c.status]; });
+    return flagged.map(function (f) {
+      var sev = f.c.status === "limit" ? "mid" : "bad";
+      return '<div class="lrow brk tappable" data-ingidx="' + f.i + '">' + dot(statusColor(f.c.status)) +
+        '<div class="row-main"><div class="row-title">' + esc(titleCase(f.c.raw)) + '</div>' +
+        '<div class="row-sub">' + esc(f.c.reason || STATUS_LABEL[f.c.status]) + '</div></div>' +
+        '<div class="brk-val ' + sev + '">' + STATUS_LABEL[f.c.status] + ' ›</div></div>';
+    }).join("");
   }
   function ingredientRow(c, idx) {
     return '<div class="lrow ing-row tappable" data-ingidx="' + idx + '">' + dot(statusColor(c.status)) +
