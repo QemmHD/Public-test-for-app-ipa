@@ -416,10 +416,14 @@
   /* ------------------------------------------------------- scanner */
   var zxingReader = null;
   function startScanner() {
+    if (state.view !== "scanner") return;
     setStatus("Loading scanner…");
     var p = window.ZXing ? Promise.resolve() : loadScriptLocalFirst(ZXING_LOCAL, ZXING_URL);
     p.then(function () {
       var video = document.getElementById("cam");
+      // A re-render may have navigated us away before this resolved; bail quietly
+      // instead of alerting "camera unavailable".
+      if (state.view !== "scanner") return;
       if (!video || !window.ZXing) throw new Error("scanner unavailable");
       var hints = new Map(), F = ZXing.BarcodeFormat;
       hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,
@@ -454,6 +458,23 @@
     });
   }
   function stopScanner() { try { if (zxingReader) zxingReader.reset(); } catch (e) {} zxingReader = null; }
+  // Reliable fallback for iOS: decode a barcode from a single still photo taken
+  // with the native camera (full autofocus + resolution), instead of the live
+  // stream which often can't focus on dense UPC bars in WKWebView.
+  function decodeBarcodeFromImage(dataUrl) {
+    var p = window.ZXing ? Promise.resolve() : loadScriptLocalFirst(ZXING_LOCAL, ZXING_URL);
+    return p.then(function () {
+      if (!window.ZXing) throw new Error("scanner unavailable");
+      var hints = new Map(), F = ZXing.BarcodeFormat;
+      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,
+        [F.UPC_A, F.UPC_E, F.EAN_13, F.EAN_8, F.CODE_128, F.CODE_39, F.ITF]);
+      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+      var reader = new ZXing.BrowserMultiFormatReader(hints);
+      return reader.decodeFromImageUrl(dataUrl).then(function (res) {
+        return res ? res.getText() : null;
+      }).catch(function () { return null; });
+    });
+  }
 
   function runSearch(query) {
     query = String(query || "").trim();
@@ -710,8 +731,12 @@
       '<video id="cam" playsinline autoplay muted></video>' +
       '<div class="scan-frame"></div>' +
       '<div class="scan-status" id="status">' + esc(state.statusMsg) + '</div>' +
-      '<div class="scan-actions"><button class="link-btn" data-act="manual">Enter code manually</button>' +
-      '<button class="cancel-btn" data-act="home">Cancel</button></div>' +
+      '<div class="scan-hint">Trouble scanning? Tap below to snap a photo of the barcode — sharper and more reliable.</div>' +
+      '<div class="scan-actions">' +
+        '<label class="big-btn photo-cap"><input id="bcphoto" type="file" accept="image/*" capture="environment" hidden> 📷 Take a photo of the barcode</label>' +
+        '<button class="link-btn" data-act="manual">Enter code manually</button>' +
+        '<button class="cancel-btn" data-act="home">Cancel</button>' +
+      '</div>' +
       '</div>';
   }
   function viewSearch() {
@@ -1222,6 +1247,21 @@
         } catch (err) { alert("That backup file couldn't be read."); }
       };
       fr.readAsText(e.target.files[0]); return;
+    }
+    if (e.target && e.target.id === "bcphoto" && e.target.files && e.target.files[0]) {
+      var bfile = e.target.files[0];
+      busy(true, "Reading barcode…");
+      fileToDataUrl(bfile).then(function (durl) {
+        return decodeBarcodeFromImage(durl);
+      }).then(function (code) {
+        busy(false, "");
+        if (code) { stopScanner(); handleBarcode(code); }
+        else alert("Couldn't read a barcode in that photo. Fill the frame with the barcode, hold steady so it's sharp, and try again — or enter the code manually.");
+      }).catch(function () {
+        busy(false, "");
+        alert("Couldn't read a barcode in that photo. Try again or enter the code manually.");
+      });
+      return;
     }
     if (e.target && e.target.id === "photo" && e.target.files && e.target.files[0]) {
       var file = e.target.files[0];

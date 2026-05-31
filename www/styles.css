@@ -120,6 +120,8 @@ body::before {
 .scan-actions { position: absolute; bottom: calc(var(--safe-bot) + 34px); left: 0; right: 0; display: flex; flex-direction: column; align-items: center; gap: 14px; }
 .link-btn { background: none; border: none; color: #fff; text-decoration: underline; font-size: 15px; }
 .cancel-btn { padding: 13px 38px; border-radius: 999px; border: none; background: #fff; color: #111; font-weight: 750; font-size: 16px; }
+.scan-hint { position: absolute; left: 0; right: 0; bottom: calc(var(--safe-bot) + 210px); text-align: center; color: rgba(255,255,255,0.92); font-size: 13px; line-height: 1.4; padding: 0 28px; text-shadow: 0 1px 6px #000; }
+.scan-actions .photo-cap { width: auto; max-width: 340px; margin: 0; padding: 15px 26px; font-size: 16px; }
 
 /* back bar */
 .backbar { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; min-height: 42px; }
