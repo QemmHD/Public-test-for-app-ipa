@@ -9,11 +9,18 @@
 
   var WIKI = "https://en.wikipedia.org/api/rest_v1/page/summary/";
 
+  var PROFILE_OPTS = [
+    ["gluten", "Gluten-free"], ["dairy", "Dairy-free"], ["egg", "Egg-free"], ["soy", "Soy-free"],
+    ["peanut", "Peanut-free"], ["treenut", "Tree-nut-free"], ["shellfish", "Shellfish-free"], ["fish", "Fish-free"],
+    ["sesame", "Sesame-free"], ["vegan", "Vegan"], ["vegetarian", "Vegetarian"], ["keto", "Low-carb / Keto"]
+  ];
+
   var state = {
     view: "home", prev: "home",
     product: null, ingDetail: null, ingTab: "what",
-    history: [], profile: {}, pending: null,
-    searchResults: null, searchQuery: "",
+    history: [], favorites: [], profile: {}, pending: null,
+    searchResults: null, searchQuery: "", historyFilter: "all",
+    alts: { forId: "", loading: false, list: null }, scoreOpen: false, onboarded: true,
     research: { term: "", loading: false, data: null, error: false },
     busy: false, statusMsg: ""
   };
@@ -23,10 +30,20 @@
   /* ------------------------------------------------------------- storage */
   function loadLocal() {
     try { state.history = JSON.parse(localStorage.getItem("cb_history") || "[]"); } catch (e) { state.history = []; }
+    try { state.favorites = JSON.parse(localStorage.getItem("cb_favs") || "[]"); } catch (e) { state.favorites = []; }
     try { state.profile = JSON.parse(localStorage.getItem("cb_profile") || "{}"); } catch (e) { state.profile = {}; }
+    state.onboarded = localStorage.getItem("cb_onboarded") === "1";
   }
   function saveHistory() { try { localStorage.setItem("cb_history", JSON.stringify(state.history.slice(0, 100))); } catch (e) {} }
+  function saveFavs() { try { localStorage.setItem("cb_favs", JSON.stringify(state.favorites.slice(0, 100))); } catch (e) {} }
   function saveProfile() { try { localStorage.setItem("cb_profile", JSON.stringify(state.profile)); } catch (e) {} }
+  function isFav(id) { return state.favorites.some(function (f) { return f.id === id; }); }
+  function toggleFav(p) {
+    if (!p) return;
+    if (isFav(p.id)) state.favorites = state.favorites.filter(function (f) { return f.id !== p.id; });
+    else state.favorites.unshift(p);
+    saveFavs();
+  }
 
   var dbp = null;
   function idb() {
@@ -187,30 +204,35 @@
         additive: c.additive || null, group: c.group || null, name: c.name || it.raw, enumber: c.enumber || "" };
     });
 
-    var score = 100;
+    var avoidN = 0, cautN = 0, limitN = 0;
     classified.forEach(function (c) {
-      if (c.status === "avoid") score -= 22;
-      else if (c.status === "caution") score -= 10;
-      else if (c.status === "limit") score -= 4;
+      if (c.status === "avoid") avoidN++; else if (c.status === "caution") cautN++; else if (c.status === "limit") limitN++;
     });
+    var score = 100 - avoidN * 22 - cautN * 10 - limitN * 4;
+    var reasons = [];
+    if (avoidN) reasons.push({ d: -22 * avoidN, t: avoidN + " ingredient" + (avoidN > 1 ? "s" : "") + " to avoid" });
+    if (cautN) reasons.push({ d: -10 * cautN, t: cautN + " ingredient" + (cautN > 1 ? "s" : "") + " of concern" });
+    if (limitN) reasons.push({ d: -4 * limitN, t: limitN + " ingredient" + (limitN > 1 ? "s" : "") + " to limit" });
 
     var nutrition = evalNutrition(off);
     if (off) {
-      if (off.nova_group === 4) score -= 8;
+      if (off.nova_group === 4) { score -= 8; reasons.push({ d: -8, t: "Ultra-processed (NOVA group 4)" }); }
       var ns = String(off.nutriscore_grade || "").toLowerCase();
-      if (ns === "e") score -= 12; else if (ns === "d") score -= 7; else if (ns === "a") score += 5;
-      nutrition.negatives.forEach(function (r) { if (r.sev === "bad") score -= 4; });
+      if (ns === "e") { score -= 12; reasons.push({ d: -12, t: "Nutri-Score E" }); }
+      else if (ns === "d") { score -= 7; reasons.push({ d: -7, t: "Nutri-Score D" }); }
+      else if (ns === "a") { score += 5; reasons.push({ d: 5, t: "Nutri-Score A" }); }
+      nutrition.negatives.forEach(function (r) { if (r.sev === "bad") { score -= 4; reasons.push({ d: -4, t: "High " + r.label.toLowerCase() }); } });
     }
 
-    var hasAvoid = classified.some(function (c) { return c.status === "avoid"; });
+    var hasAvoid = avoidN > 0;
     score = Math.max(0, Math.min(100, Math.round(score)));
-    if (hasAvoid && score >= 40) score = 39;
+    if (hasAvoid && score >= 40) { score = 39; reasons.push({ d: 0, t: "Capped: contains an avoid-grade ingredient" }); }
 
-    var flaggedCount = classified.filter(function (c) { return c.status === "avoid" || c.status === "caution"; }).length;
+    var flaggedCount = avoidN + cautN;
     if (flaggedCount > 0) nutrition.negatives.unshift({ label: "Additives", value: flaggedCount + " to watch", sev: "bad", note: "Contains additives of concern" });
     else if (classified.length) nutrition.positives.unshift({ label: "Additives", value: "None", sev: "good", note: "No risky additives" });
 
-    return { classified: classified, score: score, badge: bandFor(score, hasAvoid), nutrition: nutrition, flaggedCount: flaggedCount };
+    return { classified: classified, score: score, badge: bandFor(score, hasAvoid), nutrition: nutrition, flaggedCount: flaggedCount, scoreReasons: reasons };
   }
 
   function bandFor(score, hasAvoid) {
@@ -236,11 +258,14 @@
   }
 
   /* -------------------------------------------------- Open Food Facts */
-  var OFF_FIELDS = "code,product_name,brands,image_front_small_url,image_front_url,ingredients_text,ingredients_text_en,additives_tags,nova_group,nutriscore_grade,nutriments";
+  var OFF_FIELDS = "code,product_name,brands,image_front_small_url,image_front_url,ingredients_text,ingredients_text_en,additives_tags,categories_tags,nova_group,nutriscore_grade,nutriments";
   function mapOff(p, code) {
     if (!p) return null;
+    var cats = p.categories_tags || [], catTag = "";
+    for (var i = cats.length - 1; i >= 0; i--) { if (/^en:/.test(cats[i]) && cats[i].length > 5) { catTag = cats[i].slice(3); break; } }
+    if (!catTag && cats.length) catTag = String(cats[cats.length - 1]).replace(/^[a-z]{2}:/, "");
     return { barcode: code || p.code || "", name: p.product_name || "Unknown product", brand: p.brands || "",
-      image: p.image_front_small_url || p.image_front_url || "",
+      image: p.image_front_small_url || p.image_front_url || "", category: catTag,
       ingredientsText: p.ingredients_text_en || p.ingredients_text || "",
       nova_group: p.nova_group, nutriscore_grade: p.nutriscore_grade, nutriments: p.nutriments || {} };
   }
@@ -268,17 +293,73 @@
     return {
       id: (off && off.barcode) || ("p" + Date.now()), barcode: (off && off.barcode) || "",
       name: (off && off.name) || opts.name || "Scanned product", brand: (off && off.brand) || "",
-      image: (off && off.image) || "", photoKey: opts.photoKey || "", ingredientsText: text,
+      image: (off && off.image) || "", category: (off && off.category) || "", photoKey: opts.photoKey || "", ingredientsText: text,
       source: opts.source || (off ? "Open Food Facts" : "Photo / OCR"),
-      score: r.score, badge: r.badge, classified: r.classified, nutrition: r.nutrition, flaggedCount: r.flaggedCount, ts: Date.now()
+      score: r.score, badge: r.badge, classified: r.classified, nutrition: r.nutrition,
+      flaggedCount: r.flaggedCount, scoreReasons: r.scoreReasons, ts: Date.now()
     };
   }
+  function searchByCategory(cat) {
+    var url = "https://world.openfoodfacts.org/cgi/search.pl?action=process&json=1&page_size=40" +
+      "&tagtype_0=categories&tag_contains_0=contains&tag_0=" + encodeURIComponent(cat) + "&fields=" + OFF_FIELDS;
+    return fetch(url, { headers: { "Accept": "application/json" } }).then(function (r) { return r.json(); })
+      .then(function (j) {
+        return ((j && j.products) || []).map(function (p) { return mapOff(p); })
+          .filter(function (o) { return o && o.ingredientsText && o.name !== "Unknown product"; });
+      });
+  }
+  function findAlternatives(p) {
+    if (!p.category) return Promise.resolve([]);
+    return searchByCategory(p.category).then(function (offs) {
+      var seen = {}, alts = [];
+      offs.forEach(function (o) {
+        var key = o.barcode || o.name;
+        if ((o.barcode && o.barcode === p.barcode) || seen[key]) return;
+        seen[key] = 1;
+        var prod = buildProduct(o);
+        if (prod.score >= p.score + 8) alts.push(prod);
+      });
+      alts.sort(function (a, b) { return b.score - a.score; });
+      return alts.slice(0, 4);
+    }).catch(function () { return []; });
+  }
+  function maybeLoadAlternatives(p) {
+    if (!p || !p.category || p.score >= 75) { state.alts = { forId: p ? p.id : "", loading: false, list: [] }; return; }
+    state.alts = { forId: p.id, loading: true, list: null }; render();
+    findAlternatives(p).then(function (list) {
+      if (state.product && state.product.id === p.id) { state.alts = { forId: p.id, loading: false, list: list }; render(); }
+    });
+  }
+  function openResult(product) {
+    state.product = product; state.scoreOpen = false;
+    state.alts = { forId: product.id, loading: false, list: null };
+    go("result");
+    maybeLoadAlternatives(product);
+  }
   function showProduct(product) {
-    state.product = product;
     state.history = state.history.filter(function (h) { return !(h.barcode && h.barcode === product.barcode) && h.id !== product.id; });
     state.history.unshift(product);
     saveHistory();
-    go("result");
+    openResult(product);
+  }
+  function computeInsights(h) {
+    var sum = 0, dist = { exc: 0, good: 0, mid: 0, bad: 0 }, flags = {}, best = null, worst = null;
+    h.forEach(function (p) {
+      sum += p.score || 0;
+      if (dist[p.badge.cls] != null) dist[p.badge.cls]++;
+      if (!best || p.score > best.score) best = p;
+      if (!worst || p.score < worst.score) worst = p;
+      var local = {};
+      (p.classified || []).forEach(function (c) {
+        if (c.status === "avoid" || c.status === "caution") {
+          var nm = c.additive ? titleCase(c.additive.names[0]) : titleCase(c.name || c.raw);
+          if (!local[nm]) { local[nm] = 1; flags[nm] = (flags[nm] || 0) + 1; }
+        }
+      });
+    });
+    var top = Object.keys(flags).map(function (k) { return { name: k, count: flags[k] }; })
+      .sort(function (a, b) { return b.count - a.count; }).slice(0, 6);
+    return { n: h.length, avg: h.length ? Math.round(sum / h.length) : 0, dist: dist, top: top, best: best, worst: worst };
   }
 
   /* ------------------------------------------------------- scanner */
@@ -468,8 +549,10 @@
     });
 
     var c = scoreColor(p.badge.cls);
+    var fav = isFav(p.id);
     return '<div class="screen result">' + backBar("") +
       '<div class="hero glass" style="--c:' + c + '">' +
+        '<button class="fav-btn' + (fav ? " on" : "") + '" data-fav="1" aria-label="Favorite">' + (fav ? "★" : "☆") + '</button>' +
         '<div class="product-head">' +
           (p.image ? '<img class="phead-img" src="' + esc(p.image) + '" alt="">' : '<div class="phead-img ph">🥫</div>') +
           '<div class="phead-txt"><div class="phead-name">' + esc(p.name) + '</div>' +
@@ -481,17 +564,45 @@
           '<div class="score-ring" style="--c:' + c + ';--p:' + p.score + '">' +
           '<div class="score-num">' + p.score + '</div><div class="score-of">out of 100</div></div>' +
           '<div class="badge ' + p.badge.cls + '">' + esc(p.badge.label) + '</div>' +
+          '<button class="why-btn" data-act="toggleScore">' + (state.scoreOpen ? "Hide score details" : "How is this scored?") + '</button>' +
         '</div>' +
       '</div>' +
+      whyBlock(p) +
       (alerts.length ? ('<div class="alerts">' + alerts.map(function (a) {
         return '<div class="alert">⚠️ <b>' + esc(cap(a.key)) + '</b>: contains ' + esc(a.hits.join(", ")) + '</div>';
       }).join("") + '</div>') : "") +
+      altsBlock(p) +
       (n.negatives && n.negatives.length ? '<div class="panel glass"><div class="panel-h neg"><span>⚠</span> Negatives</div>' + n.negatives.map(brkRow).join("") + '</div>' : "") +
       (n.positives && n.positives.length ? '<div class="panel glass"><div class="panel-h pos"><span>✓</span> Positives</div>' + n.positives.map(brkRow).join("") + '</div>' : "") +
       '<div class="panel glass"><div class="panel-h">Ingredients <span class="cnt">' + p.classified.length + '</span></div>' +
       '<div class="legend">Tap any ingredient for details</div>' +
       (p.classified.length ? groupsHtml : '<div class="empty small">No ingredient list available for this product.</div>') +
       '</div></div>';
+  }
+  function whyBlock(p) {
+    if (!state.scoreOpen) return "";
+    var rows = '<div class="lrow"><div class="row-main"><div class="row-title">Base score</div></div><div class="brk-val">100</div></div>';
+    (p.scoreReasons || []).forEach(function (r) {
+      var cls = r.d < 0 ? "bad" : r.d > 0 ? "good" : "";
+      var val = r.d > 0 ? "+" + r.d : (r.d < 0 ? "" + r.d : "—");
+      rows += '<div class="lrow"><div class="row-main"><div class="row-title">' + esc(r.t) + '</div></div><div class="brk-val ' + cls + '">' + val + '</div></div>';
+    });
+    rows += '<div class="lrow"><div class="row-main"><div class="row-title"><b>Final score</b></div></div><div class="brk-val"><b>' + p.score + '</b></div></div>';
+    return '<div class="panel glass"><div class="panel-h">How this score is calculated</div>' + rows + '</div>';
+  }
+  function altsBlock(p) {
+    var a = state.alts;
+    if (!a || a.forId !== p.id) return "";
+    if (a.loading) return '<div class="panel glass"><div class="panel-h pos"><span>↑</span> Better choices</div>' +
+      '<div class="lrow"><div class="spinner small"></div><div class="row-main"><div class="row-sub">Finding healthier options in this category…</div></div></div></div>';
+    if (!a.list || !a.list.length) return "";
+    var rows = a.list.map(function (prod, i) {
+      return '<div class="lrow tappable" data-alt="' + i + '">' +
+        (prod.image ? '<img class="srch-img" src="' + esc(prod.image) + '" alt="">' : '<div class="srch-img ph">🥫</div>') +
+        '<div class="row-main"><div class="row-title">' + esc(prod.name) + '</div><div class="row-sub">' + esc(prod.brand || "") + '</div></div>' +
+        '<div class="mini-score" style="background:' + scoreColor(prod.badge.cls) + '">' + prod.score + '</div></div>';
+    }).join("");
+    return '<div class="panel glass"><div class="panel-h pos"><span>↑</span> Better choices in this category</div>' + rows + '</div>';
   }
   function brkRow(r) {
     return '<div class="lrow brk">' + dot(sevColor(r.sev)) +
@@ -533,20 +644,63 @@
   }
 
   function viewHistory() {
+    var fav = state.historyFilter === "fav";
+    var list = fav ? state.favorites : state.history;
+    var chips = '<div class="chips">' +
+      '<button class="chip' + (!fav ? " on" : "") + '" data-hist="all">Recent</button>' +
+      '<button class="chip' + (fav ? " on" : "") + '" data-hist="fav">★ Favorites</button></div>';
+    var body = list.length ? list.map(historyRow).join("") +
+      (!fav ? '<button class="ghost-btn danger" data-act="clearHist">Clear history</button>' : "") :
+      '<div class="empty">' + (fav ? "No favorites yet.<br>Tap ☆ on a product to save it." : "Nothing scanned yet.") + '</div>';
+    return '<div class="screen"><header class="hd"><div class="logo">History</div></header>' + chips + body + '</div>';
+  }
+
+  function viewInsights() {
+    var s = computeInsights(state.history);
+    if (!s.n) return '<div class="screen"><header class="hd"><div class="logo">Insights</div></header>' +
+      '<div class="empty">Scan a few products and your stats show up here 📊</div></div>';
+    function seg(cls, v) { return v ? '<div class="seg ' + cls + '" style="flex:' + v + '"></div>' : ""; }
+    var bar = '<div class="distbar">' + seg("exc", s.dist.exc) + seg("good", s.dist.good) + seg("mid", s.dist.mid) + seg("bad", s.dist.bad) + '</div>';
+    var topHtml = s.top.length ? s.top.map(function (f) {
+      return '<div class="lrow"><div class="row-main"><div class="row-title">' + esc(f.name) + '</div></div><div class="status-tag caution">' + f.count + '×</div></div>';
+    }).join("") : '<div class="lrow"><div class="row-main"><div class="row-sub">No flagged additives yet 🎉</div></div></div>';
     return '<div class="screen">' +
-      '<header class="hd"><div class="logo">History</div></header>' +
-      (state.history.length ? state.history.map(historyRow).join("") +
-        '<button class="ghost-btn danger" data-act="clearHist">Clear history</button>' :
-        '<div class="empty">Nothing scanned yet.</div>') + '</div>';
+      '<header class="hd"><div class="logo">Insights</div><div class="sub">Your scanning habits</div></header>' +
+      '<div class="stat-grid">' +
+        '<div class="stat card"><div class="stat-num">' + s.n + '</div><div class="stat-lbl">Products scanned</div></div>' +
+        '<div class="stat card"><div class="stat-num" style="color:' + scoreColor(bandFor(s.avg, false).cls) + '">' + s.avg + '</div><div class="stat-lbl">Average score</div></div>' +
+      '</div>' +
+      '<div class="panel glass"><div class="panel-h">Verdict mix</div><div class="lrow" style="display:block">' + bar +
+        '<div class="distlegend"><b class="exc">●</b> ' + s.dist.exc + ' Excellent &nbsp; <b class="good">●</b> ' + s.dist.good + ' Good &nbsp; <b class="mid">●</b> ' + s.dist.mid + ' Poor &nbsp; <b class="bad">●</b> ' + s.dist.bad + ' Bad</div></div></div>' +
+      '<div class="panel glass"><div class="panel-h neg">Most-seen flagged ingredients</div>' + topHtml + '</div>' +
+      (s.best ? '<div class="section-title">Your healthiest scan</div>' + historyRow(s.best) : "") +
+      (s.worst && s.worst !== s.best ? '<div class="section-title">Worst offender</div>' + historyRow(s.worst) : "") +
+      '</div>';
+  }
+
+  function viewOnboard() {
+    var toggles = PROFILE_OPTS.map(function (o) {
+      var on = !!state.profile[o[0]];
+      return '<div class="row card toggle-row tappable" data-toggle="' + o[0] + '"><div class="row-title">' + o[1] + '</div>' +
+        '<div class="switch ' + (on ? "on" : "") + '"><span></span></div></div>';
+    }).join("");
+    return '<div class="screen onboard">' +
+      '<div class="ob-hero"><div class="ob-logo">🥗</div><div class="logo">NutriCheck</div>' +
+      '<div class="sub">Scan any food and instantly see what\'s really inside — every additive rated, explained and researched.</div></div>' +
+      '<div class="ob-feats">' +
+        '<div class="ob-feat">📷 <span>Scan or search any product</span></div>' +
+        '<div class="ob-feat">🚦 <span>0–100 score with a clear verdict</span></div>' +
+        '<div class="ob-feat">🧪 <span>Every ingredient explained, with studies</span></div>' +
+        '<div class="ob-feat">↑ <span>Better choices when a product scores low</span></div>' +
+      '</div>' +
+      '<div class="section-title">Any diet needs? (optional)</div>' + toggles +
+      '<button class="big-btn" data-act="finishOnboard">Start scanning →</button></div>';
   }
 
   function viewProfile() {
-    var opts = [["gluten", "Gluten-free"], ["dairy", "Dairy-free"], ["egg", "Egg-free"], ["soy", "Soy-free"],
-      ["peanut", "Peanut-free"], ["treenut", "Tree-nut-free"], ["shellfish", "Shellfish-free"], ["fish", "Fish-free"],
-      ["sesame", "Sesame-free"], ["vegan", "Vegan"], ["vegetarian", "Vegetarian"], ["keto", "Low-carb / Keto"]];
     return '<div class="screen">' +
       '<header class="hd"><div class="logo">My profile</div><div class="sub">Get a personal ⚠️ alert when a product conflicts</div></header>' +
-      opts.map(function (o) {
+      PROFILE_OPTS.map(function (o) {
         var on = !!state.profile[o[0]];
         return '<div class="row card toggle-row tappable" data-toggle="' + o[0] + '"><div class="row-title">' + o[1] + '</div>' +
           '<div class="switch ' + (on ? "on" : "") + '"><span></span></div></div>';
@@ -570,8 +724,8 @@
       (title ? '<div class="bb-title">' + esc(title) + '</div>' : '') + '</div>';
   }
   function tabBar() {
-    var items = [["home", "Scan", "📷"], ["history", "History", "🕘"], ["profile", "Profile", "👤"]];
-    var active = state.view === "history" ? "history" : state.view === "profile" ? "profile" : "home";
+    var items = [["home", "Scan", "📷"], ["history", "History", "🕘"], ["insights", "Insights", "📊"], ["profile", "Profile", "👤"]];
+    var active = state.view === "history" ? "history" : state.view === "insights" ? "insights" : state.view === "profile" ? "profile" : "home";
     return '<nav class="tabbar">' + items.map(function (i) {
       return '<button class="tabitem' + (active === i[0] ? " on" : "") + '" data-nav="' + i[0] + '">' +
         '<div class="ti-ico">' + i[2] + '</div><div class="ti-lbl">' + i[1] + '</div></button>';
@@ -586,11 +740,13 @@
     else if (v === "result") html = viewResult();
     else if (v === "ingredient") html = viewIngredient();
     else if (v === "history") html = viewHistory();
+    else if (v === "insights") html = viewInsights();
     else if (v === "profile") html = viewProfile();
     else if (v === "addPhoto") html = viewAddPhoto();
+    else if (v === "onboard") html = viewOnboard();
     else html = viewHome();
 
-    var showTabs = (v === "home" || v === "history" || v === "profile");
+    var showTabs = (v === "home" || v === "history" || v === "insights" || v === "profile");
     app.innerHTML = '<div class="app-body">' + html + '</div>' + (showTabs ? tabBar() : "");
     if (state.busy) app.insertAdjacentHTML("beforeend",
       '<div class="overlay"><div class="spinner"></div><div class="ov-msg">' + esc(state.statusMsg || "Working…") + '</div></div>');
@@ -598,8 +754,11 @@
 
   /* --------------------------------------------------------- events */
   function onClick(e) {
-    var t = e.target.closest("[data-act],[data-nav],[data-open],[data-ingidx],[data-tab],[data-toggle],[data-research],[data-search-idx]");
+    var t = e.target.closest("[data-act],[data-nav],[data-open],[data-ingidx],[data-tab],[data-toggle],[data-research],[data-search-idx],[data-alt],[data-fav],[data-hist]");
     if (!t) return;
+    if (t.dataset.fav != null) { toggleFav(state.product); render(); return; }
+    if (t.dataset.hist != null) { state.historyFilter = t.dataset.hist; render(); return; }
+    if (t.dataset.alt != null) { var ap = state.alts.list && state.alts.list[+t.dataset.alt]; if (ap) openResult(ap); return; }
     if (t.dataset.research != null) { doResearch(t.dataset.research); return; }
     if (t.dataset.searchIdx != null) {
       var o = state.searchResults && state.searchResults[+t.dataset.searchIdx];
@@ -607,8 +766,8 @@
     }
     if (t.dataset.nav) { go(t.dataset.nav); return; }
     if (t.dataset.open) {
-      var p = state.history.filter(function (h) { return h.id === t.dataset.open; })[0];
-      if (p) { state.product = p; go("result"); } return;
+      var p = state.history.concat(state.favorites).filter(function (h) { return h.id === t.dataset.open; })[0];
+      if (p) openResult(p); return;
     }
     if (t.dataset.ingidx != null) {
       var item = state.product && state.product.classified[+t.dataset.ingidx];
@@ -632,6 +791,8 @@
     else if (act === "back") go(state.view === "ingredient" ? "result" : "home");
     else if (act === "manualGo") { var el = document.getElementById("bc"); if (el && el.value.trim()) handleBarcode(el.value.trim()); }
     else if (act === "searchGo") { var qe = document.getElementById("q"); if (qe && qe.value.trim()) runSearch(qe.value.trim()); }
+    else if (act === "toggleScore") { state.scoreOpen = !state.scoreOpen; render(); }
+    else if (act === "finishOnboard") { try { localStorage.setItem("cb_onboarded", "1"); } catch (e) {} state.onboarded = true; go("home"); }
     else if (act === "clearHist") { if (confirm("Clear all scan history?")) { state.history = []; saveHistory(); render(); } }
   }
 
@@ -666,6 +827,7 @@
   function init() {
     app = document.getElementById("app");
     loadLocal();
+    if (!state.onboarded) state.view = "onboard";
     document.addEventListener("click", onClick);
     document.addEventListener("change", onChange);
     document.addEventListener("keydown", onKey);

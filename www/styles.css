@@ -210,6 +210,39 @@ body::before {
 .ti-ico { font-size: 22px; }
 .ti-lbl { font-size: 11px; margin-top: 3px; font-weight: 650; }
 
+/* favorite star */
+.fav-btn { position: absolute; top: 14px; right: 14px; z-index: 2; width: 42px; height: 42px; border-radius: 50%; border: 1px solid var(--brd); background: rgba(0,0,0,0.25); color: #ffd24a; font-size: 21px; line-height: 0; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.fav-btn.on { background: rgba(255,210,74,0.16); border-color: rgba(255,210,74,0.5); }
+
+/* why-score button */
+.why-btn { margin-top: 14px; background: none; border: none; color: var(--accent); font-size: 14px; font-weight: 650; }
+
+/* chips */
+.chips { display: flex; gap: 8px; margin: 2px 0 14px; }
+.chip { padding: 9px 18px; border-radius: 999px; border: 1px solid var(--brd); background: var(--glass); color: var(--mut); font-weight: 650; font-size: 14px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+.chip.on { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; border-color: transparent; }
+
+/* insights */
+.stat-grid { display: flex; gap: 12px; margin: 4px 0; }
+.stat { flex: 1; padding: 18px 14px; text-align: center; border-radius: 18px; }
+.stat-num { font-size: 36px; font-weight: 850; line-height: 1; }
+.stat-lbl { color: var(--mut); font-size: 13px; margin-top: 6px; }
+.distbar { display: flex; height: 16px; border-radius: 999px; overflow: hidden; background: rgba(255,255,255,0.06); margin: 4px 0 12px; }
+.seg.exc { background: #34d27b; } .seg.good { background: #8fd94e; } .seg.mid { background: var(--mid); } .seg.bad { background: var(--bad); }
+.distlegend { font-size: 12.5px; color: var(--mut); line-height: 1.7; }
+.distlegend b.exc { color: #34d27b; } .distlegend b.good { color: #8fd94e; } .distlegend b.mid { color: var(--mid); } .distlegend b.bad { color: var(--bad); }
+
+/* onboarding */
+.onboard { padding-top: calc(var(--safe-top) + 36px); }
+.ob-hero { text-align: center; margin-bottom: 26px; }
+.ob-logo { font-size: 60px; }
+.ob-hero .logo { font-size: 34px; margin-top: 6px; }
+.ob-hero .sub { font-size: 15px; line-height: 1.5; margin: 10px auto 0; max-width: 340px; }
+.ob-feats { display: flex; flex-direction: column; gap: 10px; margin: 8px 0 6px; }
+.ob-feat { display: flex; align-items: center; gap: 12px; font-size: 15px; background: var(--glass); border: 1px solid var(--brd); border-radius: 14px; padding: 14px 16px; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+.ob-feat span { color: var(--txt); }
+.onboard .big-btn { margin-top: 22px; }
+
 /* overlay */
 .overlay { position: fixed; inset: 0; background: rgba(6,6,10,0.74); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 50; backdrop-filter: blur(6px); }
 .ov-msg { margin-top: 16px; color: var(--txt); font-weight: 650; }
