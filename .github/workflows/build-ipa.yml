@@ -41,6 +41,11 @@ jobs:
             || /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryUsageDescription 'NutriCheck can read ingredient labels from your photos.'" "$PLIST"
           echo "== Info.plist camera keys ==" && /usr/libexec/PlistBuddy -c "Print :NSCameraUsageDescription" "$PLIST"
 
+      # Generate the custom NutriCheck app icon from assets/logo.png into the
+      # iOS AppIcon set. Non-fatal: if it fails the build still ships.
+      - name: Generate app icon
+        run: npx --yes @capacitor/assets@3 generate --ios --assetPath assets || echo "icon generation skipped"
+
       - name: Install CocoaPods dependencies
         run: |
           cd ios/App

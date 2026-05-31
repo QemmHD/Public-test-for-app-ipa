@@ -18,8 +18,9 @@
 * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body {
   height: 100%; background: var(--bg); color: var(--txt);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font-family: "Plus Jakarta Sans", ui-rounded, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   -webkit-font-smoothing: antialiased; overscroll-behavior: none;
+  letter-spacing: -0.01em;
 }
 body::before {
   content: ""; position: fixed; inset: -25%; z-index: -2; pointer-events: none;
@@ -209,6 +210,16 @@ body::before {
 .tabitem.on { color: var(--accent); }
 .ti-ico { font-size: 22px; }
 .ti-lbl { font-size: 11px; margin-top: 3px; font-weight: 650; }
+
+/* brand logo + headers */
+.hd-brand { display: flex; align-items: center; gap: 13px; }
+.brandlogo { border-radius: 13px; box-shadow: 0 8px 22px -6px rgba(90,110,255,0.6); display: block; }
+.logo { font-weight: 800; letter-spacing: -0.04em; }
+
+/* illustrations / empty states */
+.illuswrap { display: flex; justify-content: center; margin-bottom: 18px; }
+.illus { width: 88px; height: 88px; color: rgba(255,255,255,0.16); }
+.empty { animation: fadeUp 0.4s ease; }
 
 /* svg icons */
 .ic { width: 20px; height: 20px; flex-shrink: 0; vertical-align: -4px; }
