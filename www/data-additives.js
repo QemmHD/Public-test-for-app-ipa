@@ -1479,7 +1479,9 @@ var CB_DATA = (function () {
   }
 
   // More vague / undisclosed terms.
-  const extraVague = ["flavor", "flavors", "flavour", "flavours", "natural and artificial flavors", "seasoning", "seasonings", "smoke flavor", "natural smoke flavor", "natural flavor", "natural flavors", "artificial flavor", "artificial flavors", "natural flavoring", "spices", "spice", "spice extract", "flavoring", "flavorings", "natural flavour", "artificial flavour"];
+  const extraVague = ["flavor", "flavors", "flavour", "flavours", "natural and artificial flavors", "seasoning", "seasonings", "smoke flavor", "natural smoke flavor", "natural flavor", "natural flavors", "artificial flavor", "artificial flavors", "natural flavoring", "spices", "spice", "spice extract", "flavoring", "flavorings", "natural flavour", "artificial flavour",
+    // word-form variants seen on real labels ("ARTIFICIALLY FLAVORED PINK LEMONADE")
+    "artificially flavored", "artificially flavoured", "artificial flavored", "natural flavored", "naturally flavored", "naturally flavoured", "artificially colored", "artificially coloured", "artificial flavors added", "flavored", "flavoured"];
   for (var v2 = 0; v2 < extraVague.length; v2++) {
     if (vagueTerms.indexOf(extraVague[v2]) === -1) vagueTerms.push(extraVague[v2]);
   }

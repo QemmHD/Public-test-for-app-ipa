@@ -63,8 +63,18 @@
   // A standalone number followed by a measurement unit (e.g. "200mg", "2 g",
   // "120 kcal") is a nutrition value, not an ingredient.
   var NUTRITION_VALUE_RE = /\b\d+(\.\d+)?\s?(mg|mcg|g|kg|kcal|iu|ml|oz)\b/;
+  // Bare nutrient-panel words that some sources (e.g. Open Food Facts) wrongly
+  // dump into the ingredient list. Only an EXACT match is dropped, so real
+  // ingredients like "soy protein" or "calcium propionate" are never affected.
+  var NUTRIENT_ONLY = {
+    "fiber": 1, "fibre": 1, "dietary fiber": 1, "soluble fiber": 1, "insoluble fiber": 1,
+    "protein": 1, "proteins": 1, "carbohydrate": 1, "carbohydrates": 1, "total carbohydrate": 1,
+    "sugar": 0, "sugars": 1, "total sugars": 1, "calories": 1, "energy": 1, "kilojoules": 1,
+    "potassium": 1, "sodium": 1, "cholesterol": 1, "phosphorus": 1, "magnesium": 1,
+    "fat": 1, "total fat": 1, "saturated fat": 1, "trans fat": 1, "calcium": 1
+  };
   function isNonIngredient(n) {
-    return NON_INGREDIENT_RE.test(n) || NUTRITION_VALUE_RE.test(n);
+    return NON_INGREDIENT_RE.test(n) || NUTRITION_VALUE_RE.test(n) || NUTRIENT_ONLY[n] === 1;
   }
   function parseIngredients(text) {
     if (!text) return [];
@@ -233,22 +243,32 @@
       var out = { hasData: false, negatives: [], positives: [] };
       if (!off || !off.nutriments) return out;
       var nu = off.nutriments;
-      function row(label, val, unit, sev, note) {
+      // `pen` is the score impact: a penalty for negatives, a bonus for positives.
+      function row(label, val, unit, sev, note, pen) {
         var v = (val == null) ? "—" : (Math.round(val * 10) / 10 + unit);
-        (sev === "good" ? out.positives : out.negatives).push({ label: label, value: v, sev: sev, note: note });
+        (sev === "good" ? out.positives : out.negatives).push({ label: label, value: v, sev: sev, note: note, pen: pen || 0 });
       }
       var kcal = num(nu["energy-kcal_100g"]);
-      if (kcal != null) row("Calories", kcal, " kcal", kcal <= 120 ? "good" : kcal <= 300 ? "mid" : "bad", kcal <= 120 ? "Low-calorie" : kcal <= 300 ? "Moderate" : "Calorie-dense");
+      if (kcal != null) row("Calories", kcal, " kcal", kcal <= 120 ? "good" : kcal <= 300 ? "mid" : "bad",
+        kcal <= 120 ? "Low-calorie" : kcal <= 300 ? "Moderate" : "Calorie-dense",
+        kcal <= 300 ? 0 : Math.min(12, Math.round((kcal - 300) / 40) + 2));
       var sat = num(nu["saturated-fat_100g"]);
-      if (sat != null) row("Saturated fat", sat, "g", sat <= 1.5 ? "good" : sat <= 5 ? "mid" : "bad", sat <= 1.5 ? "Low" : sat <= 5 ? "A bit high" : "High");
+      if (sat != null) row("Saturated fat", sat, "g", sat <= 1.5 ? "good" : sat <= 5 ? "mid" : "bad",
+        sat <= 1.5 ? "Low" : sat <= 5 ? "A bit high" : "High",
+        sat <= 5 ? 0 : Math.min(18, Math.round((sat - 5) * 1.5) + 3));
       var sug = num(nu["sugars_100g"]);
-      if (sug != null) row("Sugar", sug, "g", sug <= 5 ? "good" : sug <= 22.5 ? "mid" : "bad", sug <= 5 ? "Low" : sug <= 22.5 ? "Moderate" : "Too much sugar");
+      if (sug != null) row("Sugar", sug, "g", sug <= 5 ? "good" : sug <= 22.5 ? "mid" : "bad",
+        sug <= 5 ? "Low" : sug <= 22.5 ? "Moderate" : "Too much sugar",
+        // Sugar dominates: a product that is mostly sugar should score badly.
+        sug <= 22.5 ? (sug > 10 ? Math.round((sug - 10) * 0.4) : 0) : Math.min(50, Math.round((sug - 22.5) * 0.9) + 8));
       var salt = num(nu["salt_100g"]); if (salt == null && num(nu["sodium_100g"]) != null) salt = num(nu["sodium_100g"]) * 2.5;
-      if (salt != null) row("Salt", salt, "g", salt <= 0.3 ? "good" : salt <= 1.5 ? "mid" : "bad", salt <= 0.3 ? "Low" : salt <= 1.5 ? "Moderate" : "Too much salt");
+      if (salt != null) row("Salt", salt, "g", salt <= 0.3 ? "good" : salt <= 1.5 ? "mid" : "bad",
+        salt <= 0.3 ? "Low" : salt <= 1.5 ? "Moderate" : "Too much salt",
+        salt <= 1.5 ? 0 : Math.min(18, Math.round((salt - 1.5) * 6) + 3));
       var fib = num(nu["fiber_100g"]);
-      if (fib != null && fib >= 3) row("Fiber", fib, "g", "good", fib >= 6 ? "Excellent source" : "Good source");
+      if (fib != null && fib >= 3) row("Fiber", fib, "g", "good", fib >= 6 ? "Excellent source" : "Good source", fib >= 6 ? 5 : 3);
       var pro = num(nu["proteins_100g"]);
-      if (pro != null && pro >= 8) row("Protein", pro, "g", "good", "Good source");
+      if (pro != null && pro >= 8) row("Protein", pro, "g", "good", "Good source", 3);
       out.hasData = (out.negatives.length + out.positives.length) > 0;
       return out;
     }
@@ -283,12 +303,19 @@
       // Nutrition / processing adjustments apply to food only.
       var nutrition = isFood ? evalNutrition(off) : { hasData: false, negatives: [], positives: [] };
       if (isFood && off) {
-        if (off.nova_group === 4) { score -= 8; reasons.push({ d: -8, t: "Ultra-processed (NOVA group 4)" }); }
+        if (off.nova_group === 4) { score -= 10; reasons.push({ d: -10, t: "Ultra-processed (NOVA group 4)" }); }
         var ns = String(off.nutriscore_grade || "").toLowerCase();
         if (ns === "e") { score -= 12; reasons.push({ d: -12, t: "Nutri-Score E" }); }
         else if (ns === "d") { score -= 7; reasons.push({ d: -7, t: "Nutri-Score D" }); }
         else if (ns === "a") { score += 5; reasons.push({ d: 5, t: "Nutri-Score A" }); }
-        nutrition.negatives.forEach(function (r) { if (r.sev === "bad") { score -= 4; reasons.push({ d: -4, t: "High " + r.label.toLowerCase() }); } });
+        // Graduated nutrition impact: big sugar/salt/fat loads cost real points,
+        // strong fiber/protein gives a small bonus.
+        nutrition.negatives.forEach(function (r) {
+          if (r.pen) { score -= r.pen; reasons.push({ d: -r.pen, t: (r.note && r.sev === "bad") ? r.note : "High " + r.label.toLowerCase() }); }
+        });
+        nutrition.positives.forEach(function (r) {
+          if (r.pen) { score += r.pen; reasons.push({ d: r.pen, t: "Good source of " + r.label.toLowerCase() }); }
+        });
       }
 
       var hasAvoid = avoidN > 0;
