@@ -49,7 +49,7 @@ test("phraseInTokens matches consecutive whole tokens only", () => {
 /* ------------------------------------------------ word-boundary matching */
 test("classify finds a known additive by whole-word name", () => {
   const c = engine.classify(engine.norm("Red 40"), "red 40", "food");
-  assert.strictEqual(c.status, "caution");
+  assert.strictEqual(c.status, "avoid");
   assert.ok(c.additive, "should attach the additive record");
 });
 
@@ -176,7 +176,7 @@ test("newly-added E-numbers classify with the right risk", () => {
     ["e171", "avoid"],   // titanium dioxide
     ["e250", "avoid"],   // sodium nitrite
     ["e320", "avoid"],   // BHA
-    ["e102", "caution"], // tartrazine
+    ["e102", "avoid"],   // tartrazine (Yellow 5) — artificial dye
     ["e211", "caution"], // sodium benzoate
     ["e621", "limit"],   // MSG
   ];
@@ -468,11 +468,19 @@ test("BOBBY: olive oil is NOT swept into the seed-oil bucket", () => {
 test("BOBBY REGRESSION: evidence-backed strict flags are unchanged", () => {
   const strict = [
     ["potassium bromate", "avoid"], ["sodium nitrite", "avoid"], ["titanium dioxide", "avoid"],
-    ["red 40", "caution"], ["aspartame", "avoid"], ["carrageenan", "caution"], ["tbhq", "caution"]
+    ["red 40", "avoid"], ["aspartame", "avoid"], ["carrageenan", "caution"], ["tbhq", "caution"]
   ];
   strict.forEach(([name, exp]) => {
     const c = engine.classify(engine.norm(name), name, "food");
     assert.strictEqual(c.status, exp, name + " should be " + exp);
+  });
+});
+
+test("BOBBY: artificial dyes are banned (avoid)", () => {
+  ["red 40", "yellow 5", "yellow 6", "blue 1", "tartrazine", "allura red",
+   "quinoline yellow", "ponceau 4r", "carmine", "e129", "e102", "e133"].forEach((n) => {
+    const c = engine.classify(engine.norm(n), n, "food");
+    assert.strictEqual(c.status, "avoid", n + " should be avoid (banned dye)");
   });
 });
 
