@@ -503,7 +503,48 @@
   // fallback for when the vendored ZBar module failed to load.
   var zxingReader = null;
   var camStream = null, scanRAF = null, scanBusy = false, scanCanvas = null, scanCtx = null;
+  var camTrack = null, torchOn = false, scanTick = 0;
   function zbarReady() { return !!(window.zbarWasm && window.zbarWasm.scanImageData); }
+  // Tactile feedback: native Capacitor Haptics when available (real taps on the
+  // phone), with a navigator.vibrate fallback. Silent no-op if neither exists.
+  function haptic(kind) {
+    try {
+      var C = window.Capacitor, H = C && C.Plugins && C.Plugins.Haptics;
+      if (H) {
+        if (kind === "success" && H.notification) { H.notification({ type: "SUCCESS" }); return; }
+        if (kind === "error" && H.notification) { H.notification({ type: "ERROR" }); return; }
+        if (H.impact) { H.impact({ style: kind === "heavy" ? "HEAVY" : kind === "light" ? "LIGHT" : "MEDIUM" }); return; }
+      }
+    } catch (e) {}
+    try {
+      if (navigator.vibrate) navigator.vibrate(kind === "success" ? [10, 40, 14] : kind === "error" ? [28, 30, 28] : 9);
+    } catch (e) {}
+  }
+  // Quick white pulse over the camera to confirm a capture, like a shutter flash.
+  function scanFlash() {
+    var f = document.getElementById("scanFlash");
+    if (!f) return;
+    f.classList.remove("on"); void f.offsetWidth; f.classList.add("on");
+  }
+  // Show/wire the torch button only on devices that actually support it
+  // (Android Chrome). iOS WebViews don't expose torch, so the button stays hidden.
+  function setupTorch() {
+    torchOn = false; camTrack = null;
+    var btn = document.getElementById("torchBtn"); if (btn) btn.hidden = true;
+    try {
+      var tracks = camStream && camStream.getVideoTracks && camStream.getVideoTracks();
+      var track = tracks && tracks[0]; if (!track || !track.getCapabilities) return;
+      var caps = track.getCapabilities();
+      if (caps && caps.torch) { camTrack = track; if (btn) { btn.hidden = false; btn.classList.remove("on"); } }
+    } catch (e) {}
+  }
+  function toggleTorch() {
+    if (!camTrack) return;
+    torchOn = !torchOn;
+    try { camTrack.applyConstraints({ advanced: [{ torch: torchOn }] }); } catch (e) {}
+    var btn = document.getElementById("torchBtn"); if (btn) btn.classList.toggle("on", torchOn);
+    haptic("light");
+  }
   // Decode any barcode ZBar finds in a canvas; return the first decoded text.
   function zbarDecodeCanvas(canvas) {
     if (!zbarReady()) return Promise.resolve(null);
@@ -528,8 +569,11 @@
     setStatus("Starting camera…");
     // facingMode:{ideal} is only a soft hint — iOS may hand back the FRONT
     // camera, so try an exact environment lock first and fall back progressively.
+    // Request the sharpest feasible back-camera frame (1080p) so dense UPC bars
+    // resolve; iOS hands back what it can and we fall back progressively.
     var tries = [
-      { video: { facingMode: { exact: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } } },
+      { video: { facingMode: { exact: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } } },
+      { video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } } },
       { video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } } },
       { video: true }
     ];
@@ -550,6 +594,7 @@
       video.setAttribute("playsinline", "");
       var pl = video.play();
       if (pl && pl.catch) pl.catch(function () {});
+      setupTorch();
       scanCanvas = document.createElement("canvas");
       scanCtx = scanCanvas.getContext("2d", { willReadFrequently: true });
       if (!zbarReady()) return startScannerZXing(video);
@@ -573,8 +618,13 @@
     if (!scanBusy && video.readyState >= 2 && video.videoWidth) {
       scanBusy = true;
       var vw = video.videoWidth, vh = video.videoHeight;
-      var cropH = Math.round(vh * 0.6), sy = Math.round((vh - cropH) / 2);
-      var scale = Math.min(1, 960 / vw);
+      // Alternate between a tight centred band (fast, where the guide sits) and
+      // the full frame every few passes, so an off-centre or angled code is still
+      // caught without slowing the common case. Downscale to ~1100px for sharpness.
+      scanTick++;
+      var fullPass = (scanTick % 4 === 0);
+      var cropH = fullPass ? vh : Math.round(vh * 0.55), sy = Math.round((vh - cropH) / 2);
+      var scale = Math.min(1, 1100 / vw);
       var dw = Math.max(1, Math.round(vw * scale)), dh = Math.max(1, Math.round(cropH * scale));
       scanCanvas.width = dw; scanCanvas.height = dh;
       scanCtx.drawImage(video, 0, sy, vw, cropH, 0, 0, dw, dh);
@@ -583,6 +633,7 @@
         if (!code || state.view !== "scanner") return;
         // Ignore noise / partial reads — a real EAN/UPC is 8+ digits.
         if (String(code).replace(/\D/g, "").length < 8) return;
+        scanFlash(); haptic("success");
         stopScanner();
         handleBarcode(code);
       });
@@ -611,6 +662,8 @@
     scanBusy = false;
     try { if (zxingReader) zxingReader.reset(); } catch (e) {}
     zxingReader = null;
+    if (torchOn && camTrack) { try { camTrack.applyConstraints({ advanced: [{ torch: false }] }); } catch (e) {} }
+    torchOn = false; camTrack = null;
     if (camStream) { try { camStream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {} camStream = null; }
     var v = document.getElementById("cam");
     if (v) { try { v.srcObject = null; } catch (e) {} }
@@ -973,9 +1026,13 @@
   function viewScanner() {
     return '<div class="screen scanner">' +
       '<video id="cam" playsinline autoplay muted></video>' +
-      '<div class="scan-frame"></div>' +
+      '<div class="scan-frame"><span class="scan-corner tl"></span><span class="scan-corner tr"></span>' +
+        '<span class="scan-corner bl"></span><span class="scan-corner br"></span>' +
+        '<div class="scan-laser"></div></div>' +
+      '<div class="scan-flash" id="scanFlash"></div>' +
+      '<button class="torch-btn" id="torchBtn" data-act="torch" aria-label="Toggle flashlight" hidden>🔦</button>' +
       '<div class="scan-status" id="status">' + esc(state.statusMsg) + '</div>' +
-      '<div class="scan-hint">Trouble scanning? Tap below to snap a photo of the barcode — sharper and more reliable.</div>' +
+      '<div class="scan-hint">Hold steady — the barcode scans automatically. Trouble? Snap a photo below for a sharper read.</div>' +
       '<div class="scan-actions">' +
         '<label class="big-btn photo-cap"><input id="bcphoto" type="file" accept="image/*" capture="environment" hidden> 📷 Take a photo of the barcode</label>' +
         '<button class="link-btn" data-act="manual">Enter code manually</button>' +
@@ -1495,7 +1552,7 @@
     var t = e.target.closest("[data-act],[data-nav],[data-open],[data-ingidx],[data-tab],[data-toggle],[data-research],[data-search-idx],[data-alt],[data-cmp],[data-fav],[data-hist],[data-log],[data-portion],[data-ins],[data-theme],[data-enc],[data-sort]");
     if (!t) return;
     if (t.dataset.fav != null) { toggleFav(state.product); render(); return; }
-    if (t.dataset.log != null) { setLogged(t.dataset.log); return; }
+    if (t.dataset.log != null) { haptic("light"); setLogged(t.dataset.log); return; }
     if (t.dataset.portion != null) { setPortion(+t.dataset.portion); return; }
     if (t.dataset.ins != null) { state.insightsFilter = t.dataset.ins; render(); return; }
     if (t.dataset.hist != null) { state.historyFilter = t.dataset.hist; render(); return; }
@@ -1534,7 +1591,8 @@
     if (t.dataset.toggle) { var k = t.dataset.toggle; state.profile[k] = !state.profile[k]; saveProfile(); render(); return; }
 
     var act = t.dataset.act;
-    if (act === "scan") go("scanner");
+    if (act === "torch") { toggleTorch(); return; }
+    if (act === "scan") { haptic("light"); go("scanner"); }
     else if (act === "home") go("home");
     else if (act === "addPhoto") go("addPhoto");
     else if (act === "analyzeOcr") {
@@ -1634,10 +1692,21 @@
     else if (e.target.id === "bc" && e.target.value.trim()) { e.preventDefault(); handleBarcode(e.target.value.trim()); }
     else if (e.target.id === "encq") { e.preventDefault(); state.encQuery = e.target.value.trim(); render(); }
   }
+  // Keep the app right-side-up. Info.plist already locks the native shell to
+  // portrait; this is a best-effort web-layer lock for any browser context.
+  function lockPortrait() {
+    try {
+      if (screen.orientation && screen.orientation.lock) {
+        var pr = screen.orientation.lock("portrait");
+        if (pr && pr.catch) pr.catch(function () {});
+      }
+    } catch (e) {}
+  }
   function init() {
     app = document.getElementById("app");
     loadLocal();
     applyTheme();
+    lockPortrait();
     if (!state.onboarded) state.view = "onboard";
     document.addEventListener("click", onClick);
     document.addEventListener("change", onChange);

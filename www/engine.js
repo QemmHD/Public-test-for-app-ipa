@@ -82,22 +82,27 @@
       .replace(/\b(?:https?:\/\/|www\.)\S+/gi, " ")
       .replace(/\S+@\S+\.\S+/g, " ")
       .replace(/\b[\w.-]+\.(?:com|net|org|co|us)\b/gi, " ")
-      .replace(/ingredients?:?/i, " ")
+      .replace(/ingredients?(\s+list)?:?/i, " ")
       .replace(/contains( 2% or less of| less than 2% of)?:?/ig, ",")
       // Expand parenthetical / bracketed sub-ingredients into their own items so
       // hidden flags inside a parent (e.g. "enriched flour (niacin, reduced iron)",
       // "color (red 40)") are detected instead of being thrown away.
-      .replace(/[\[\]{}()]/g, ",").replace(/\band\b/gi, ",");
-    var parts = cleaned.split(/[,;.]+/), out = [];
+      .replace(/[\[\]{}()]/g, ",").replace(/\band\/or\b/gi, ",").replace(/\band\b/gi, ",");
+    // Split on the full range of real-world separators: commas, semicolons,
+    // newlines, bullets/middots, pipes, slashes and asterisks — plus a period
+    // that is NOT part of a decimal number. This catches labels that wrap lines
+    // or use dots/bullets between ingredients so we read the WHOLE list.
+    var parts = cleaned.split(/[,;\n\r•·‣▪●∙|/*]+|\.(?!\d)/), out = [], seen = {};
     for (var i = 0; i < parts.length; i++) {
       var raw = parts[i].replace(/\([^)]*\)/g, "").trim();
       if (!raw) continue;
       var n = norm(raw);
       if (!n || n.length < 2) continue;
       if (isNonIngredient(n)) continue;
-      if (out.length && out[out.length - 1].norm === n) continue;
+      if (seen[n]) continue;            // global de-dup (not just adjacent repeats)
+      seen[n] = 1;
       out.push({ raw: raw.replace(/\s+/g, " ").trim(), norm: n });
-      if (out.length > 80) break;
+      if (out.length > 150) break;      // raised cap so long labels aren't truncated
     }
     return out;
   }

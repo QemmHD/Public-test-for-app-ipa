@@ -1,17 +1,22 @@
 :root {
   color-scheme: dark;
-  --bg: #07070b;
-  --ink: #0d0d14;
-  --txt: #f6f6fa;
-  --mut: #9a9aac;
-  --accent: #4f8bff;
-  --accent2: #8a5bff;
-  --good: #34d27b;
+  --bg: #06080a;
+  --ink: #0c0f12;
+  --txt: #f4f7f6;
+  --mut: #93a09c;
+  /* Distinctive fresh teal→emerald brand (deliberately NOT the generic
+     blue→purple "AI app" gradient) — reads as natural, food-forward, premium. */
+  --accent: #12b8a6;
+  --accent2: #2ad17f;
+  --accent-soft: rgba(18,184,166,0.16);
+  --good: #3ee07f;
   --mid: #ffb02e;
-  --bad: #ff4d4d;
-  --glass: rgba(255,255,255,0.055);
+  --bad: #ff5666;
+  --glass: rgba(255,255,255,0.05);
   --glass2: rgba(255,255,255,0.085);
   --brd: rgba(255,255,255,0.10);
+  --shadow: 0 14px 40px rgba(0,0,0,0.42);
+  --r-lg: 22px; --r-md: 16px; --r-sm: 12px;
   --safe-top: env(safe-area-inset-top);
   --safe-bot: env(safe-area-inset-bottom);
 }
@@ -26,18 +31,34 @@ html, body {
 body::before {
   content: ""; position: fixed; inset: -25%; z-index: -2; pointer-events: none;
   background:
-    radial-gradient(38% 32% at 18% 12%, rgba(79,139,255,0.30), transparent 60%),
-    radial-gradient(40% 34% at 86% 16%, rgba(138,91,255,0.26), transparent 62%),
-    radial-gradient(55% 45% at 50% 108%, rgba(52,210,123,0.12), transparent 60%);
-  filter: blur(26px); animation: drift 20s ease-in-out infinite alternate;
+    radial-gradient(38% 32% at 16% 10%, rgba(18,184,166,0.28), transparent 60%),
+    radial-gradient(42% 36% at 88% 14%, rgba(42,209,127,0.22), transparent 62%),
+    radial-gradient(60% 48% at 50% 112%, rgba(120,220,180,0.10), transparent 60%);
+  filter: blur(30px); animation: drift 22s ease-in-out infinite alternate;
+}
+/* Subtle film-grain/noise so flat dark areas feel crafted, not generic-flat. */
+body::after {
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 @keyframes drift { to { transform: translateY(-4%) scale(1.06); } }
 #app { height: 100%; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
 /* min-height:0 lets the flex child actually scroll instead of growing #app
    (which used to push the bottom tab bar off-screen). */
 .app-body { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-.app-body > .screen { animation: fadeUp 0.3s cubic-bezier(.2,.7,.2,1); }
+.app-body > .screen { animation: screenIn 0.42s cubic-bezier(.16,.84,.28,1); }
+@keyframes screenIn { from { opacity: 0; transform: translateY(14px) scale(0.985); } to { opacity: 1; transform: none; } }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+/* Staggered rise for stacked cards/rows so a screen "assembles" itself. */
+.app-body > .screen > * { animation: riseIn 0.5s cubic-bezier(.16,.84,.28,1) both; }
+.app-body > .screen > *:nth-child(1){animation-delay:.02s}
+.app-body > .screen > *:nth-child(2){animation-delay:.06s}
+.app-body > .screen > *:nth-child(3){animation-delay:.10s}
+.app-body > .screen > *:nth-child(4){animation-delay:.14s}
+.app-body > .screen > *:nth-child(5){animation-delay:.18s}
+.app-body > .screen > *:nth-child(6){animation-delay:.22s}
+.app-body > .screen > *:nth-child(n+7){animation-delay:.26s}
+@keyframes riseIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 .screen { padding: calc(var(--safe-top) + 18px) 18px 30px; max-width: 600px; margin: 0 auto; }
 
 /* glass surfaces */
@@ -50,7 +71,7 @@ body::before {
 /* header */
 .hd { padding: 4px 2px 14px; }
 .logo { font-size: 30px; font-weight: 850; letter-spacing: -0.03em;
-  background: linear-gradient(120deg, #fff, #c8d4ff 60%, #d9c8ff);
+  background: linear-gradient(120deg, #fff, #bdf3e4 55%, #c9f0d4);
   -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
 .sub { color: var(--mut); font-size: 14px; margin-top: 5px; }
 
@@ -417,6 +438,81 @@ button, .chip, .tab, .tabitem, .seg-btn, .back, .step-btn, .search-go, [role="bu
     scroll-behavior: auto !important;
   }
 }
+
+/* ============================================================
+   Premium polish: depth, motion, crafted scanner — the "feel" pass
+   ============================================================ */
+
+/* Cards lift and press like physical objects (spatial depth). */
+.card, .glass, .panel.glass, .row.card {
+  transition: transform .18s cubic-bezier(.2,.7,.2,1), box-shadow .18s ease, border-color .18s ease;
+}
+.row.card.tappable:active, .lrow.tappable:active {
+  transform: scale(0.985) translateY(1px);
+}
+/* Buttons: gradient sheen sweep + springy press. */
+.big-btn, .search-go { position: relative; overflow: hidden; transition: transform .14s cubic-bezier(.2,.7,.2,1), box-shadow .2s ease, filter .2s ease; }
+.big-btn::after {
+  content: ""; position: absolute; top: 0; left: -60%; width: 45%; height: 100%;
+  background: linear-gradient(100deg, transparent, rgba(255,255,255,0.28), transparent);
+  transform: skewX(-18deg); animation: sheen 5.5s ease-in-out infinite; pointer-events: none;
+}
+@keyframes sheen { 0%,72% { left: -60%; } 88%,100% { left: 130%; } }
+.big-btn:active { transform: scale(0.97); filter: brightness(1.05); }
+.ghost-btn, .chip, .tab, .seg-btn { transition: transform .12s ease, background .16s ease, border-color .16s ease, color .16s ease; }
+.ghost-btn:active, .chip:active, .seg-btn:active { transform: scale(0.97); }
+/* Tab bar items pop when active. */
+.tabitem .ti-ico { transition: transform .2s cubic-bezier(.2,.8,.2,1); }
+.tabitem.on .ti-ico { transform: translateY(-2px) scale(1.12); }
+
+/* Score number count-up gets a gentle pop. */
+.score-ring { animation: ringPop .6s cubic-bezier(.18,.9,.3,1.1) both; }
+@keyframes ringPop { from { transform: scale(.9); opacity: .4; } to { transform: none; opacity: 1; } }
+
+/* ---- crafted scanner ---- */
+.scan-frame { background: transparent; }
+.scan-corner { position: absolute; width: 30px; height: 30px; border: 3px solid #fff; }
+.scan-corner.tl { top: -3px; left: -3px; border-right: 0; border-bottom: 0; border-radius: 14px 0 0 0; }
+.scan-corner.tr { top: -3px; right: -3px; border-left: 0; border-bottom: 0; border-radius: 0 14px 0 0; }
+.scan-corner.bl { bottom: -3px; left: -3px; border-right: 0; border-top: 0; border-radius: 0 0 0 14px; }
+.scan-corner.br { bottom: -3px; right: -3px; border-left: 0; border-top: 0; border-radius: 0 0 14px 0; }
+.scan-laser { position: absolute; left: 6%; right: 6%; top: 0; height: 3px; border-radius: 3px;
+  background: linear-gradient(90deg, transparent, var(--accent2), var(--accent), transparent);
+  box-shadow: 0 0 14px 2px rgba(42,209,127,0.7); animation: laser 2.4s cubic-bezier(.5,0,.5,1) infinite; }
+@keyframes laser { 0% { top: 4%; opacity: .3; } 50% { top: 96%; opacity: 1; } 100% { top: 4%; opacity: .3; } }
+.scan-flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+.scan-flash.on { animation: shutter .45s ease-out; }
+@keyframes shutter { 0% { opacity: 0; } 18% { opacity: .85; } 100% { opacity: 0; } }
+.torch-btn { position: absolute; top: calc(var(--safe-top) + 14px); right: 16px; z-index: 3;
+  width: 50px; height: 50px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.35);
+  background: rgba(0,0,0,0.4); color: #fff; font-size: 22px; backdrop-filter: blur(8px); }
+.torch-btn.on { background: rgba(255,214,74,0.9); color: #222; border-color: #ffd64a; box-shadow: 0 0 24px rgba(255,214,74,0.7); }
+
+/* ---- landscape guard (web contexts that still rotate) ---- */
+.rotate-guard { display: none; }
+@media (orientation: landscape) and (max-height: 540px) {
+  .rotate-guard { display: flex; position: fixed; inset: 0; z-index: 999;
+    flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+    background: var(--bg); color: var(--txt); text-align: center; padding: 24px; }
+  .rotate-guard .ri { font-size: 52px; animation: rockt 1.6s ease-in-out infinite; }
+  @keyframes rockt { 0%,100%{transform:rotate(0)} 50%{transform:rotate(-90deg)} }
+  .app-body, .tabbar { filter: blur(2px); }
+}
+
+/* ---- skeleton shimmer for loading states ---- */
+.skel { position: relative; overflow: hidden; background: var(--glass); border-radius: var(--r-md); }
+.skel::after { content: ""; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
+  transform: translateX(-100%); animation: shimmer 1.3s infinite; }
+@keyframes shimmer { to { transform: translateX(100%); } }
+.skel-row { height: 64px; margin: 9px 0; }
+.skel-line { height: 13px; margin: 8px 0; }
+
+/* ---- openFDA consumer-reports callout ---- */
+.fda-note { display: flex; align-items: center; gap: 10px; border-radius: 14px; padding: 12px 14px; margin: 10px 0;
+  background: rgba(255,176,46,0.10); border: 1px solid rgba(255,176,46,0.28); }
+.fda-note .fn-num { font-size: 20px; font-weight: 850; color: var(--mid); }
+.fda-note .fn-lbl { font-size: 12.5px; color: var(--mut); line-height: 1.35; }
 
 /* ---------------------------------------------------- compare (A vs B) */
 .cmp-cols { display: flex; align-items: flex-start; gap: 8px; margin: 8px 0 4px; }
