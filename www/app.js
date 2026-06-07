@@ -189,7 +189,7 @@
   function fetchJson(url, opts) { return fetchWithTimeout(url, opts).then(function (r) { return r.ok ? r.json() : null; }); }
 
   /* -------------------------------------------------- Open*Facts family */
-  var OFF_FIELDS = "code,product_name,brands,image_front_small_url,image_front_url,ingredients_text,ingredients_text_en,additives_tags,categories_tags,labels_tags,serving_quantity,nova_group,nutriscore_grade,nutriments";
+  var OFF_FIELDS = "code,product_name,brands,image_front_small_url,image_front_url,ingredients_text,ingredients_text_en,ingredients_text_with_allergens,ingredients,additives_tags,categories_tags,labels_tags,serving_quantity,nova_group,nutriscore_grade,nutriments";
   // Certified-only kosher detection: trust an official Open*Facts kosher label
   // (e.g. "en:kosher", "en:ou-kosher"). We never guess kosher status from
   // ingredients — only report a certification the product data actually carries.
@@ -200,6 +200,29 @@
     }
     return false;
   }
+  // Best-available ingredient text: prefer English, then default text, then
+  // reconstruct from Open Food Facts' structured `ingredients` array so a
+  // product with no free-text list still resolves automatically (no photo).
+  function offIngredientsText(p) {
+    var txt = p.ingredients_text_en || p.ingredients_text || p.ingredients_text_with_allergens || "";
+    if ((!txt || txt.replace(/\s/g, "").length < 3) && Array.isArray(p.ingredients) && p.ingredients.length) {
+      txt = p.ingredients.map(function (x) {
+        return (x && x.text) || (x && x.id && String(x.id).replace(/^[a-z]{2}:/, "").replace(/-/g, " ")) || "";
+      }).filter(Boolean).join(", ");
+    }
+    return txt;
+  }
+  // Additive E-numbers Open Food Facts detected for this product (e.g. "en:e102").
+  // These are available even when the ingredient text is incomplete, so we use
+  // them to fill gaps and flag additives the text alone would miss.
+  function offAdditiveCodes(p) {
+    var tags = (p && p.additives_tags) || [], out = [];
+    tags.forEach(function (t) {
+      var code = String(t).split(":").pop().toLowerCase().replace(/\s/g, "");
+      if (/^e\d{3,4}[a-z]?$/.test(code)) out.push(code);
+    });
+    return out;
+  }
   function mapOff(p, code, src) {
     if (!p) return null;
     var cats = p.categories_tags || [], catTag = "";
@@ -207,7 +230,7 @@
     if (!catTag && cats.length) catTag = String(cats[cats.length - 1]).replace(/^[a-z]{2}:/, "");
     return { barcode: code || p.code || "", name: p.product_name || "Unknown product", brand: p.brands || "",
       image: p.image_front_small_url || p.image_front_url || "", category: catTag, serving_quantity: p.serving_quantity,
-      ingredientsText: p.ingredients_text_en || p.ingredients_text || "",
+      ingredientsText: offIngredientsText(p), additiveCodes: offAdditiveCodes(p),
       productType: (src && src.type) || "food", source: (src && src.label) || "Open Food Facts",
       kosher: detectKosher(p),
       nova_group: p.nova_group, nutriscore_grade: p.nutriscore_grade, nutriments: p.nutriments || {} };
@@ -275,12 +298,27 @@
       return out;
     });
   }
+  // Fold in any additives Open Food Facts detected (by E-number) that our own
+  // parse of the ingredient text didn't already catch — so flagged additives
+  // are found even when the printed ingredient list is incomplete.
+  function enrichWithAdditives(text, off, ptype) {
+    var codes = (off && off.additiveCodes) || [];
+    if (!codes.length) return text;
+    var have = {};
+    analyze(off, text, ptype).classified.forEach(function (c) {
+      if (c.enumber) have[String(c.enumber).toLowerCase().replace(/\s/g, "")] = 1;
+      if (c.additive && c.additive.enumber) have[String(c.additive.enumber).toLowerCase()] = 1;
+    });
+    var add = codes.filter(function (code) { return !have[code]; });
+    if (!add.length) return text;
+    return text ? (text + ", " + add.join(", ")) : add.join(", ");
+  }
   function buildProduct(off, ingredientsText, opts) {
     opts = opts || {};
     var text = ingredientsText || (off && off.ingredientsText) || "";
     var ptype = opts.productType || (off && off.productType) || "food";
     var food = ENG.isFoodType(ptype);
-    var r = analyze(off, text, ptype);
+    var r = analyze(off, enrichWithAdditives(text, off, ptype), ptype);
     return {
       id: (off && off.barcode) || ("p" + Date.now()), barcode: (off && off.barcode) || "",
       name: (off && off.name) || opts.name || "Scanned product", brand: (off && off.brand) || "",
@@ -687,9 +725,14 @@
       busy(false, ""); state.searchRaw = results; render();
     }).catch(function () { busy(false, ""); state.searchRaw = []; render(); });
   }
+  // Enough to score automatically (no photo) when we have a printed ingredient
+  // list OR Open Food Facts already detected the product's additives.
+  function offHasIngredients(off) {
+    return !!(off && (off.ingredientsText || (off.additiveCodes && off.additiveCodes.length)));
+  }
   function openOff(off) {
     if (!off) return;
-    if (!off.ingredientsText) { state.pending = { barcode: off.barcode, off: off }; go("addPhoto"); return; }
+    if (!offHasIngredients(off)) { state.pending = { barcode: off.barcode, off: off }; go("addPhoto"); return; }
     showProduct(buildProduct(off));
   }
 
@@ -699,7 +742,7 @@
     busy(true, "Looking up product…");
     lookupBarcode(code).then(function (off) {
       busy(false, "");
-      if (!off || !off.ingredientsText) { state.pending = { barcode: code, off: off }; go("addPhoto"); return; }
+      if (!offHasIngredients(off)) { state.pending = { barcode: code, off: off }; go("addPhoto"); return; }
       showProduct(buildProduct(off));
     }).catch(function () { busy(false, ""); alert("Network error reaching the food database. Check your connection."); });
   }
