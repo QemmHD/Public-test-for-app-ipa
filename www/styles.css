@@ -59,6 +59,11 @@ body::after {
 .app-body > .screen > *:nth-child(6){animation-delay:.22s}
 .app-body > .screen > *:nth-child(n+7){animation-delay:.26s}
 @keyframes riseIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+/* CRITICAL: a CSS transform on an ANCESTOR of a live <video> makes the camera
+   feed render blank/gray in iOS WKWebView. The scanner must never sit under a
+   transformed parent, so it (and its children) opt out of the entrance motion. */
+.app-body > .screen.scanner,
+.app-body > .screen.scanner > * { animation: none !important; }
 .screen { padding: calc(var(--safe-top) + 18px) 18px 30px; max-width: 600px; margin: 0 auto; }
 
 /* glass surfaces */
@@ -134,11 +139,11 @@ body::after {
 .pill.mid { color: var(--mid); background: rgba(255,176,46,0.16); }
 .pill.bad { color: var(--bad); background: rgba(255,77,77,0.16); }
 
-/* scanner */
-.scanner { padding: 0; position: relative; height: 100vh; background: #000; max-width: none; }
-#cam { width: 100%; height: 100%; object-fit: cover; }
+/* scanner — full-bleed, edge to edge */
+.scanner { padding: 0; position: relative; height: 100vh; height: 100dvh; background: #000; max-width: none; }
+#cam { width: 100%; height: 100%; object-fit: cover; background: #000; }
 .scan-frame { position: absolute; top: 46%; left: 50%; width: 78%; height: 26%; transform: translate(-50%,-50%); border: 3px solid rgba(255,255,255,0.92); border-radius: 20px; box-shadow: 0 0 0 9999px rgba(0,0,0,0.55), 0 0 40px rgba(79,139,255,0.4) inset; }
-.scan-status { position: absolute; left: 0; right: 0; top: 13%; text-align: center; color: #fff; font-weight: 650; text-shadow: 0 1px 8px #000; padding: 0 22px; }
+.scan-status { position: absolute; left: 0; right: 0; top: calc(var(--safe-top) + 56px); text-align: center; color: #fff; font-weight: 650; text-shadow: 0 1px 8px #000; padding: 0 22px; }
 .scan-actions { position: absolute; bottom: calc(var(--safe-bot) + 34px); left: 0; right: 0; display: flex; flex-direction: column; align-items: center; gap: 14px; }
 .link-btn { background: none; border: none; color: #fff; text-decoration: underline; font-size: 15px; }
 .cancel-btn { padding: 13px 38px; border-radius: 999px; border: none; background: #fff; color: #111; font-weight: 750; font-size: 16px; }
