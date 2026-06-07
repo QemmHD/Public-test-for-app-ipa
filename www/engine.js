@@ -74,7 +74,10 @@
       .replace(/\b[\w.-]+\.(?:com|net|org|co|us)\b/gi, " ")
       .replace(/ingredients?:?/i, " ")
       .replace(/contains( 2% or less of| less than 2% of)?:?/ig, ",")
-      .replace(/[\[\]{}]/g, ",").replace(/\band\b/gi, ",");
+      // Expand parenthetical / bracketed sub-ingredients into their own items so
+      // hidden flags inside a parent (e.g. "enriched flour (niacin, reduced iron)",
+      // "color (red 40)") are detected instead of being thrown away.
+      .replace(/[\[\]{}()]/g, ",").replace(/\band\b/gi, ",");
     var parts = cleaned.split(/[,;.]+/), out = [];
     for (var i = 0; i < parts.length; i++) {
       var raw = parts[i].replace(/\([^)]*\)/g, "").trim();
@@ -129,6 +132,7 @@
     var addedSugarsT = tokList(DATA.addedSugars);
     var sweetenersT = tokList(DATA.artificialSweeteners);
     var vagueT = tokList(DATA.vagueTerms);
+    var fortifiedT = tokList(DATA.fortifiedVitamins);
     var cleanT = tokList(DATA.cleanIngredients);
     // Cosmetic concern keyword buckets (optional).
     var cosmeticListsT = {};
@@ -190,14 +194,22 @@
         return { status: "unknown", group: "unknown", reason: "Not catalogued yet" };
       }
 
-      // Food path (preserves original precedence).
+      // Food path (Bobby-Approved-style strictness: industrial seed oils,
+      // undisclosed flavors and artificial sweeteners are flagged hard).
       var a = findInIndex(foodIndex, toks);
       if (a) return { status: a.risk, additive: a, name: a.names[0], reason: a.category };
-      if (listHitTok(sweetenersT, toks)) return { status: "caution", group: "sweetener", reason: "Artificial sweetener" };
-      if (listHitTok(seedOilsT, toks)) return { status: "limit", group: "seedOil", reason: "Industrial seed oil" };
-      if (listHitTok(vagueT, toks)) return { status: "limit", group: "vague", reason: "Undisclosed ingredient" };
+      if (listHitTok(sweetenersT, toks)) return { status: "avoid", group: "sweetener", reason: "Artificial sweetener" };
+      if (listHitTok(seedOilsT, toks)) return { status: "avoid", group: "seedOil", reason: "Industrial seed oil" };
+      var vh = listHitTok(vagueT, toks);
+      if (vh) {
+        // Undisclosed flavorings are flagged hardest; vague spice/seasoning blends are a caution.
+        var isFlavor = /flavo/.test(vh);
+        return { status: isFlavor ? "avoid" : "caution", group: "vague",
+          reason: isFlavor ? "Undisclosed flavoring" : "Undisclosed ingredient" };
+      }
       var en = findENumberByName(toks) || findENumberByCode(raw);
       if (en) return { status: en.risk, group: egroup(en.risk), name: en.name, enumber: en.code, reason: "Food additive" + (en.code ? " · " + en.code : "") };
+      if (listHitTok(fortifiedT, toks)) return { status: "ok", group: "fortified", reason: "Added vitamin/mineral" };
       if (listHitTok(addedSugarsT, toks)) return { status: "limit", group: "addedSugar", reason: "Added sugar" };
       if (listHitTok(cleanT, toks)) return { status: "good", group: "clean", reason: "Whole-food ingredient" };
       if (/\be ?\d{3,4}[a-z]?\b/.test(String(raw || ""))) return { status: "caution", group: "eCaution", reason: "Unrecognized additive" };
@@ -414,7 +426,8 @@
         groups: groups, bannedMap: bannedMap, eNumbers: DATA.eNumbers || [],
         seedOils: DATA.seedOils || [], addedSugars: DATA.addedSugars || [],
         artificialSweeteners: DATA.artificialSweeteners || [], vagueTerms: DATA.vagueTerms || [],
-        cleanIngredients: DATA.cleanIngredients || [], allergenMap: DATA.allergenMap || {}
+        cleanIngredients: DATA.cleanIngredients || [], fortifiedVitamins: DATA.fortifiedVitamins || [],
+        allergenMap: DATA.allergenMap || {}
       },
       norm: norm, titleCase: titleCase, num: num, cap: cap,
       tokenize: tokenize, phraseInTokens: phraseInTokens, isFoodType: isFoodType,

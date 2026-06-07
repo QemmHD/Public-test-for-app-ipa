@@ -418,70 +418,104 @@ test("parseIngredients does not drop legitimate look-alikes (iron, milk fat)", (
   });
 });
 
-/* ---------------- evidence calibration (Yuka/Bobby reconciliation) ----------------
- * Seed/vegetable oils and vague flavor terms are calibrated to `limit`, not `caution`:
- * RCTs do not support the seed-oil "inflammation" claim, and undisclosed-flavor terms
- * are a transparency concern, not an established safety hazard. The strict,
- * evidence-backed flags below must stay exactly where they are. */
+/* ---------------- Bobby-Approved-style strict grading ----------------
+ * Industrial seed/vegetable oils, undisclosed flavorings and artificial
+ * sweeteners are flagged hard ("avoid"), matching the Bobby-Approved scanning
+ * philosophy the product is calibrated to. Whole-food fats (olive oil) must
+ * NOT be swept in, and the evidence-backed avoid flags must stay put. */
 ["canola oil", "vegetable oil", "soybean oil", "sunflower oil"].forEach((oil) => {
-  test("CALIBRATION: seed oil '" + oil + "' is limit, not caution", () => {
+  test("BOBBY: seed oil '" + oil + "' is avoid", () => {
     const c = engine.classify(engine.norm(oil), oil, "food");
-    assert.strictEqual(c.status, "limit");
+    assert.strictEqual(c.status, "avoid");
     assert.strictEqual(c.group, "seedOil");
   });
 });
 
-["spices", "artificial flavor", "natural flavoring"].forEach((term) => {
-  test("CALIBRATION: vague term '" + term + "' is limit, not caution", () => {
+test("BOBBY: undisclosed flavorings are avoid, vague spice blends are caution", () => {
+  // Flavor-type vague terms get the hardest flag.
+  ["artificial flavor", "natural flavoring", "flavoring"].forEach((term) => {
     const c = engine.classify(engine.norm(term), term, "food");
-    assert.strictEqual(c.status, "limit");
+    assert.strictEqual(c.status, "avoid", term + " should be avoid");
+  });
+  // Non-flavor vague terms (spices/seasoning) are a transparency caution.
+  ["spices", "seasoning"].forEach((term) => {
+    const c = engine.classify(engine.norm(term), term, "food");
+    assert.strictEqual(c.status, "caution", term + " should be caution");
+    assert.strictEqual(c.group, "vague");
   });
 });
 
-test("CALIBRATION: olive oil is NOT swept into the seed-oil bucket", () => {
+test("BOBBY: artificial sweeteners are avoid", () => {
+  ["aspartame", "sucralose", "acesulfame k", "saccharin", "neotame"].forEach((n) => {
+    const c = engine.classify(engine.norm(n), n, "food");
+    assert.strictEqual(c.status, "avoid", n + " should be avoid");
+  });
+});
+
+test("BOBBY: high fructose corn syrup / corn syrup are avoid", () => {
+  ["high fructose corn syrup", "corn syrup"].forEach((n) => {
+    const c = engine.classify(engine.norm(n), n, "food");
+    assert.strictEqual(c.status, "avoid", n + " should be avoid");
+  });
+});
+
+test("BOBBY: olive oil is NOT swept into the seed-oil bucket", () => {
   const c = engine.classify(engine.norm("Olive Oil"), "olive oil", "food");
-  assert.notStrictEqual(c.group, "seedOil");
-  assert.notStrictEqual(c.status, "caution");
-});
-
-test("CALIBRATION REGRESSION: evidence-backed strict flags are unchanged", () => {
-  const strict = [
-    ["potassium bromate", "avoid"], ["sodium nitrite", "avoid"], ["titanium dioxide", "avoid"],
-    ["red 40", "caution"], ["aspartame", "caution"], ["carrageenan", "caution"], ["tbhq", "caution"]
-  ];
-  strict.forEach(([name, exp]) => {
-    const c = engine.classify(engine.norm(name), name, "food");
-    assert.strictEqual(c.status, exp, name + " should stay " + exp);
-  });
-});
-
-/* --------------------- Yuka/Bobby evidence calibration (seed oils, vague) */
-test("seed/vegetable oils calibrate to limit (not caution)", () => {
-  ["canola oil", "vegetable oil", "soybean oil"].forEach((n) => {
-    const c = engine.classify(engine.norm(n), n, "food");
-    assert.strictEqual(c.status, "limit", n + " should be limit");
-    assert.strictEqual(c.group, "seedOil", n + " should hit seedOil group");
-  });
-});
-
-test("vague flavor terms calibrate to limit (transparency, not safety)", () => {
-  ["spices", "flavoring"].forEach((n) => {
-    const c = engine.classify(engine.norm(n), n, "food");
-    assert.strictEqual(c.status, "limit", n + " should be limit");
-    assert.strictEqual(c.group, "vague", n + " should hit vague group");
-  });
-});
-
-test("olive oil is not over-flagged as an industrial seed oil", () => {
-  const c = engine.classify(engine.norm("olive oil"), "olive oil", "food");
   assert.notStrictEqual(c.group, "seedOil");
   assert.ok(c.status === "good" || c.status === "ok", "olive oil should not be flagged");
 });
 
-test("evidence-backed avoid ratings remain unchanged after calibration", () => {
-  [["potassium bromate", "avoid"], ["sodium nitrite", "avoid"], ["titanium dioxide", "avoid"]]
-    .forEach(([n, exp]) => {
-      const c = engine.classify(engine.norm(n), n, "food");
-      assert.strictEqual(c.status, exp, n + " should stay " + exp);
-    });
+test("BOBBY REGRESSION: evidence-backed strict flags are unchanged", () => {
+  const strict = [
+    ["potassium bromate", "avoid"], ["sodium nitrite", "avoid"], ["titanium dioxide", "avoid"],
+    ["red 40", "caution"], ["aspartame", "avoid"], ["carrageenan", "caution"], ["tbhq", "caution"]
+  ];
+  strict.forEach(([name, exp]) => {
+    const c = engine.classify(engine.norm(name), name, "food");
+    assert.strictEqual(c.status, exp, name + " should be " + exp);
+  });
+});
+
+/* ---------------- newly-recognized "bad" ingredients (DB expansion) */
+test("newly-added bad ingredients classify as flagged", () => {
+  const cases = [
+    ["enriched flour", "caution"],
+    ["bioengineered", "caution"],
+    ["hydrolyzed soy protein", "caution"],
+    ["soy protein isolate", "caution"],
+    ["artificial color", "avoid"],
+    ["olestra", "avoid"],
+    ["vanillin", "caution"],
+  ];
+  cases.forEach(([name, exp]) => {
+    const c = engine.classify(engine.norm(name), name, "food");
+    assert.strictEqual(c.status, exp, name + " should be " + exp);
+  });
+});
+
+/* ---------------- fortification nutrients read as recognized (not unknown) */
+test("added vitamins/minerals classify as ok (not unknown)", () => {
+  ["folic acid", "reduced iron", "thiamine mononitrate", "niacinamide"].forEach((n) => {
+    const c = engine.classify(engine.norm(n), n, "food");
+    assert.notStrictEqual(c.group, "unknown", n + " should be recognized");
+    assert.strictEqual(c.status, "ok", n + " should be ok");
+  });
+});
+
+/* ---------------- expanded clean whole-food recognition */
+test("Bobby-approved whole foods classify as clean", () => {
+  ["grass-fed butter", "spirulina", "kimchi", "bone broth", "tempeh", "himalayan pink salt"].forEach((n) => {
+    const c = engine.classify(engine.norm(n), n, "food");
+    assert.strictEqual(c.group, "clean", n + " should be clean, got " + c.group);
+  });
+});
+
+/* ---------------- parser expands parenthetical sub-ingredients */
+test("parseIngredients extracts hidden sub-ingredients from parentheses", () => {
+  const got = engine.parseIngredients(
+    "Enriched Flour (Wheat Flour, Niacin, Reduced Iron), Sugar, Color (Red 40), Soybean Oil"
+  ).map((x) => x.norm);
+  ["enriched flour", "wheat flour", "niacin", "reduced iron", "red 40", "soybean oil"].forEach((n) => {
+    assert.ok(got.includes(n), "expected to extract: " + n);
+  });
 });
