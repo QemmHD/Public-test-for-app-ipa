@@ -253,6 +253,54 @@
   }
   // Query each Open*Facts source in order; first product with data wins. The
   // detected source sets productType (food / beauty / household / petfood).
+  // ---- USDA FoodData Central (public-domain UPC + ingredient source) ----
+  // Used to gap-fill when Open Food Facts has no ingredient list. A free
+  // data.gov key (Settings) raises limits; the shared DEMO_KEY works otherwise.
+  function usdaKey() { var s = state.settings || {}; return (s.usdaKey && s.usdaKey.trim()) || "DEMO_KEY"; }
+  function mapUsdaFood(f, code) {
+    if (!f) return null;
+    var nu = {};
+    (f.foodNutrients || []).forEach(function (n) {
+      var num = String(n.nutrientNumber || n.number || (n.nutrient && n.nutrient.number) || "");
+      var val = n.value != null ? n.value : (n.amount != null ? n.amount : null);
+      if (val == null) return;
+      if (num === "208") nu["energy-kcal_100g"] = val;
+      else if (num === "203") nu["proteins_100g"] = val;
+      else if (num === "269" || num === "2000") nu["sugars_100g"] = val;
+      else if (num === "606") nu["saturated-fat_100g"] = val;
+      else if (num === "291") nu["fiber_100g"] = val;
+      else if (num === "307") nu["sodium_100g"] = val / 1000; // mg -> g
+      else if (num === "205") nu["carbohydrates_100g"] = val;
+      else if (num === "204") nu["fat_100g"] = val;
+    });
+    return { barcode: code || f.gtinUpc || "", name: f.description || "Unknown product",
+      brand: f.brandName || f.brandOwner || "", image: "", category: (f.brandedFoodCategory || "").toLowerCase(),
+      ingredientsText: f.ingredients || "", additiveCodes: [], productType: "food",
+      source: "USDA FoodData Central", kosher: false, nutriments: nu };
+  }
+  function lookupUsda(code) {
+    var url = "https://api.nal.usda.gov/fdc/v1/foods/search?api_key=" + encodeURIComponent(usdaKey()) +
+      "&query=" + encodeURIComponent(code) + "&dataType=Branded&pageSize=5";
+    return fetchJson(url).then(function (j) {
+      var foods = (j && j.foods) || [];
+      var norm0 = function (x) { return String(x || "").replace(/^0+/, ""); };
+      var hit = foods.filter(function (f) { return norm0(f.gtinUpc) === norm0(code); })[0] || foods[0];
+      return hit ? mapUsdaFood(hit, code) : null;
+    }).catch(function () { return null; });
+  }
+  // Merge a USDA result into an Open Food Facts result, filling only the gaps.
+  function mergeSources(off, u) {
+    if (!off) return u || null;
+    if (!u) return off;
+    if (!off.ingredientsText && u.ingredientsText) {
+      off.ingredientsText = u.ingredientsText;
+      off.source = (off.source && off.source.indexOf("USDA") === -1) ? (off.source + " + USDA") : "USDA FoodData Central";
+    }
+    if ((!off.nutriments || !Object.keys(off.nutriments).length) && u.nutriments) off.nutriments = u.nutriments;
+    if (!off.name || off.name === "Unknown product") off.name = u.name;
+    if (!off.brand) off.brand = u.brand;
+    return off;
+  }
   function lookupBarcode(code) {
     var cached = cachedProduct(code);
     if (cached) return Promise.resolve(cached);
@@ -261,15 +309,35 @@
       var src = OFF_SOURCES[i];
       var url = src.base + encodeURIComponent(code) + ".json?fields=" + OFF_FIELDS;
       return fetchJson(url).then(function (j) {
-        if (j && j.status === 1 && j.product) {
-          var off = mapOff(j.product, code, src);
-          cacheProduct(code, off);
-          return off;
-        }
+        if (j && j.status === 1 && j.product) return mapOff(j.product, code, src);
         return tryAt(i + 1);
       }).catch(function () { return tryAt(i + 1); });
     }
-    return tryAt(0);
+    return tryAt(0).then(function (off) {
+      if (offHasIngredients(off)) { cacheProduct(code, off); return off; }
+      // Gap-fill from USDA when Open*Facts had nothing useful.
+      return lookupUsda(code).then(function (u) {
+        var merged = mergeSources(off, u);
+        if (merged) cacheProduct(code, merged);
+        return merged;
+      });
+    });
+  }
+  // ---- openFDA CAERS: count of consumer-reported reaction events mentioning a term ----
+  function fetchFdaReports(term) {
+    var s = state.settings || {};
+    if (s.openfda === false) return;
+    var key = norm(term);
+    state.fdaReports = state.fdaReports || {};
+    if (state.fdaReports[key] !== undefined) return; // already fetched/fetching
+    state.fdaReports[key] = null; // mark in-flight
+    var q = '"' + String(term).replace(/"/g, "") + '"';
+    var url = "https://api.fda.gov/food/event.json?search=" + encodeURIComponent(q) + "&limit=1";
+    fetchJson(url).then(function (j) {
+      var total = (j && j.meta && j.meta.results && j.meta.results.total) || 0;
+      state.fdaReports[key] = total;
+      if (state.view === "ingredient") render();
+    }).catch(function () { state.fdaReports[key] = 0; });
   }
   function searchProducts(query) {
     // Search every Open*Facts database (food, beauty, household, pet food) in
@@ -1319,8 +1387,20 @@
       '<div class="status-tag ' + c.status + '">' + STATUS_LABEL[c.status] + ' ›</div></div>';
   }
 
+  // openFDA consumer-report callout for an ingredient (lazy-loaded, optional).
+  function fdaNote(term) {
+    var s = state.settings || {};
+    if (s.openfda === false) return "";
+    var v = state.fdaReports && state.fdaReports[norm(term)];
+    if (v == null) return ""; // not loaded yet (or in-flight) — stay quiet
+    if (v <= 0) return "";
+    return '<div class="fda-note"><span class="fn-num">' + (v > 999 ? "999+" : v) + '</span>' +
+      '<span class="fn-lbl">consumer-reported reactions mention this in the FDA adverse-event database. ' +
+      'Reports aren’t medically verified — context, not proof.</span></div>';
+  }
   function viewIngredient() {
     var d = state.ingDetail; if (!d) return viewResult();
+    fetchFdaReports(d.title);
     var tabs = [["what", "What it is"], ["why", "Why flagged"], ["risk", "Health effects"], ["studies", "Studies"]];
     var body;
     if (state.ingTab === "what") body = '<p>' + esc(d.whatIs) + '</p>';
@@ -1337,6 +1417,7 @@
         '<div class="ing-summary">' + esc(d.summary) + '</div></div>' +
         '<div class="status-tag ' + d.status + '">' + STATUS_LABEL[d.status] + '</div></div>' +
       (d.banned ? '<div class="banned-note">🌍 <b>Banned / restricted:</b> ' + esc(d.banned) + '</div>' : "") +
+      fdaNote(d.title) +
       '<div class="tabs">' + tabs.map(function (t) {
         return '<button class="tab' + (state.ingTab === t[0] ? " on" : "") + '" data-tab="' + t[0] + '">' + t[1] + '</button>';
       }).join("") + '</div>' +
@@ -1445,6 +1526,15 @@
       '<div class="lrow tappable" data-act="exportData"><div class="row-main"><div class="row-title">Export my data</div><div class="row-sub">Download a backup file</div></div><div class="chev">›</div></div>' +
       '<label class="lrow tappable"><div class="row-main"><div class="row-title">Import data</div><div class="row-sub">Restore from a backup</div></div><input id="importfile" type="file" accept="application/json" hidden><div class="chev">›</div></label></div>';
 
+    var dataSrc = '<div class="section-title">Data sources</div><div class="panel glass">' +
+      '<div class="lrow"><div class="row-main"><div class="row-title">USDA FoodData Central</div>' +
+        '<div class="row-sub">Adds a public-domain UPC + ingredient source to fill gaps. Paste a free data.gov API key for higher limits — leave blank to use the shared demo key.</div></div></div>' +
+      '<div class="lrow"><input id="usdaKey" class="text-input" style="margin:0" placeholder="USDA API key (optional)" value="' + esc(s.usdaKey || "") + '">' +
+        '<button class="search-go" data-act="saveUsdaKey" style="margin-left:8px" aria-label="Save key">Save</button></div>' +
+      '<div class="lrow"><div class="row-main"><div class="row-title">openFDA reports</div>' +
+        '<div class="row-sub">Shows consumer-reported reaction counts on ingredient pages. Free, no key.</div></div>' +
+        '<div class="switch ' + (s.openfda !== false ? "on" : "") + '" data-act="toggleOpenfda"><span></span></div></div></div>';
+
     var allergens = '<div class="section-title">Diet & allergens</div>' + PROFILE_OPTS.map(function (o) {
       var on = !!state.profile[o[0]];
       return '<div class="row card toggle-row tappable" data-toggle="' + o[0] + '"><div class="row-title">' + o[1] + '</div>' +
@@ -1454,7 +1544,7 @@
     return '<div class="screen">' +
       '<header class="hd"><div class="logo">My profile</div><div class="sub">Health goal, diet & settings</div></header>' +
       '<div class="section-title">Health & calorie goal</div>' + health +
-      settings + allergens +
+      settings + dataSrc + allergens +
       '<div class="disclaimer">Stored only on this device. Calorie targets are estimates, not medical advice.</div></div>';
   }
 
@@ -1614,6 +1704,15 @@
     else if (act === "encGo") { var ec = document.getElementById("encq"); state.encQuery = ec ? ec.value.trim() : ""; render(); }
     else if (act === "editHealth") { state.editHealth = true; render(); }
     else if (act === "exportData") { exportData(); }
+    else if (act === "saveUsdaKey") {
+      var uk = document.getElementById("usdaKey");
+      state.settings.usdaKey = uk ? uk.value.trim() : "";
+      saveSettings(); haptic("success"); alert("USDA key saved.");
+    }
+    else if (act === "toggleOpenfda") {
+      state.settings.openfda = state.settings.openfda === false ? true : false;
+      saveSettings(); render();
+    }
     else if (act === "saveHealth") {
       var g = function (id) { var el = document.getElementById(id); return el ? el.value : ""; };
       var age = +g("h_age"), ft = +g("h_ft"), inch = +g("h_in"), lb = +g("h_lb");

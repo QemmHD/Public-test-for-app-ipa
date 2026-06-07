@@ -501,6 +501,36 @@ test("newly-added bad ingredients classify as flagged", () => {
   });
 });
 
+/* ---------------- more banned dyes + new flagged additives (DB growth) */
+test("expanded artificial dyes are avoid", () => {
+  ["fast green", "green 3", "orange b", "e143"].forEach((n) => {
+    const c = engine.classify(engine.norm(n), n, "food");
+    assert.strictEqual(c.status, "avoid", n + " should be avoid");
+  });
+});
+
+test("newly-added processing additives classify as flagged", () => {
+  [["l-cysteine", "caution"], ["magnesium stearate", "limit"],
+   ["microcrystalline cellulose", "limit"], ["sodium hexametaphosphate", "limit"]].forEach(([n, exp]) => {
+    const c = engine.classify(engine.norm(n), n, "food");
+    assert.strictEqual(c.status, exp, n + " should be " + exp);
+  });
+});
+
+/* ---------------- parser reads the WHOLE list (newlines / bullets / slashes) */
+test("parseIngredients splits on newlines, bullets and slashes", () => {
+  const label = "Water\nSugar • Soybean Oil | Salt / Citric Acid\nRed 40";
+  const got = engine.parseIngredients(label).map((x) => x.norm);
+  ["water", "sugar", "soybean oil", "salt", "citric acid", "red 40"].forEach((n) => {
+    assert.ok(got.includes(n), "expected to read: " + n);
+  });
+});
+
+test("parseIngredients keeps decimals intact (no split mid-number)", () => {
+  const got = engine.parseIngredients("Milk 2.5% fat, Sugar").map((x) => x.norm);
+  assert.ok(got.includes("sugar"), "should still read sugar after a decimal");
+});
+
 /* ---------------- fortification nutrients read as recognized (not unknown) */
 test("added vitamins/minerals classify as ok (not unknown)", () => {
   ["folic acid", "reduced iron", "thiamine mononitrate", "niacinamide"].forEach((n) => {

@@ -940,6 +940,69 @@ var CB_DATA = (function () {
       whyFlagged: "Inhaling diacetyl during manufacturing causes 'popcorn lung' (bronchiolitis obliterans). Safe to eat at food levels, but a marker of synthetic butter flavoring.",
       healthRisk: "Respiratory risk is occupational (inhalation); in food it is mainly a synthetic-flavor marker.",
       studies: [{ title: "Diacetyl and bronchiolitis obliterans in flavoring workers", source: "U.S. NIOSH", year: 2016 }]
+    },
+    {
+      id: "lcysteine", names: ["l-cysteine", "l cysteine", "cysteine", "cysteine hydrochloride", "e920"], enumber: "E920",
+      category: "Dough conditioner", risk: "caution",
+      summary: "Dough softener often derived from duck feathers or human hair.",
+      whatIs: "L-cysteine is an amino acid used to soften commercial dough and extend shelf life; it is frequently produced from feathers, hog hair or human hair.",
+      whyFlagged: "A marker of industrial baking with an off-putting sourcing story; unnecessary in real bread. Not vegetarian/halal/kosher when animal-derived.",
+      healthRisk: "Safe to eat as an amino acid; mainly a processing and sourcing concern.",
+      studies: [{ title: "Production sources of L-cysteine (E920) (review)", source: "Food Additives & Contaminants", year: 2013 }]
+    },
+    {
+      id: "magnesiumstearate", names: ["magnesium stearate", "vegetable magnesium stearate", "stearic acid magnesium salt"], enumber: "E470b",
+      category: "Anti-caking / flow agent", risk: "limit",
+      summary: "Lubricant filler used to keep powders flowing; a processing marker.",
+      whatIs: "Magnesium stearate is a manufacturing flow agent that stops powders sticking to machinery, common in supplements, powders and tablets.",
+      whyFlagged: "Generally recognized as safe, but a sign of an industrially formulated product and a common filler in supplements.",
+      healthRisk: "Benign at the tiny amounts used; mainly a processing marker.",
+      studies: [{ title: "Safety of magnesium salts of fatty acids as food additives", source: "EFSA Journal", year: 2018 }]
+    },
+    {
+      id: "microcellulose", names: ["microcrystalline cellulose", "powdered cellulose", "e460", "cellulose powder"], enumber: "E460",
+      category: "Bulking agent / filler", risk: "limit",
+      summary: "Refined wood-pulp fiber used as a cheap filler and anti-caking agent.",
+      whatIs: "Microcrystalline cellulose is purified cellulose (often from wood pulp) used to bulk up, bind and prevent caking in shredded cheese, supplements and baked goods.",
+      whyFlagged: "Inert and calorie-free, but a hallmark of cheapened, fillered processed food.",
+      healthRisk: "Considered safe and non-digestible; a processing/filler marker.",
+      studies: [{ title: "Re-evaluation of celluloses as food additives", source: "EFSA Journal", year: 2018 }]
+    },
+    {
+      id: "polyphosphates", names: ["sodium hexametaphosphate", "sodium tripolyphosphate", "tetrasodium pyrophosphate", "sodium acid pyrophosphate", "sapp", "e451", "e452", "e450"], enumber: "E452",
+      category: "Phosphate additive", risk: "limit",
+      summary: "Added phosphates that boost dietary phosphate load; limit intake.",
+      whatIs: "Polyphosphates retain moisture, emulsify and texturize processed meats, cheese and seafood.",
+      whyFlagged: "Added inorganic phosphates are absorbed far more than natural ones; high intake stresses kidneys and is linked to cardiovascular risk. A processed-food marker.",
+      healthRisk: "Excess phosphate intake; concern for kidney and heart health, especially with frequent consumption.",
+      studies: [{ title: "Phosphate additives in food and health (review)", source: "Deutsches Ärzteblatt International", year: 2012 }]
+    },
+    {
+      id: "polydextrose", names: ["polydextrose", "e1200"], enumber: "E1200",
+      category: "Synthetic fiber / bulking agent", risk: "limit",
+      summary: "Lab-made soluble fiber used to replace sugar/fat and add bulk.",
+      whatIs: "Polydextrose is a synthetic fiber made by polymerizing glucose, used to add bulk and fiber to low-sugar and low-fat processed foods.",
+      whyFlagged: "A synthetic ultra-processed ingredient; large amounts can cause bloating and gas.",
+      healthRisk: "Generally safe; GI upset in larger amounts; a processing marker.",
+      studies: [{ title: "Safety of polydextrose (E1200) as a food additive", source: "EFSA Journal", year: 2021 }]
+    },
+    {
+      id: "fastgreen", names: ["fast green", "fast green fcf", "green 3", "fd&c green no. 3", "e143"], enumber: "E143",
+      category: "Artificial color", risk: "avoid",
+      summary: "Synthetic green dye not permitted for food in the EU.",
+      whatIs: "Fast Green FCF (Green 3) is a synthetic dye used in some candy, drinks and canned vegetables in the U.S.",
+      whyFlagged: "A petroleum-derived cosmetic dye; not approved for food in the EU and part of the synthetic-dye group consumers increasingly avoid.",
+      healthRisk: "Limited safety data; possible bladder/testicular effects in early animal studies.",
+      studies: [{ title: "Toxicology review of synthetic food colorants", source: "California OEHHA report", year: 2021 }]
+    },
+    {
+      id: "orangeb", names: ["orange b"], enumber: "",
+      category: "Artificial color", risk: "avoid",
+      summary: "Synthetic orange dye historically limited to hot-dog casings.",
+      whatIs: "Orange B is a synthetic azo dye once approved only for sausage and hot-dog casings.",
+      whyFlagged: "A petroleum-derived azo dye in the group flagged for behavioral effects; effectively phased out.",
+      healthRisk: "Azo-dye class concerns; possible contamination with carcinogenic byproducts.",
+      studies: [{ title: "Synthetic azo dyes and health (review)", source: "California OEHHA report", year: 2021 }]
     }
   ];
 
@@ -1456,6 +1519,45 @@ var CB_DATA = (function () {
   ];
   for (var c5 = 0; c5 < extraClean5.length; c5++) {
     if (cleanIngredients.indexOf(extraClean5[c5]) === -1) cleanIngredients.push(extraClean5[c5]);
+  }
+
+  // Sixth pass: more everyday whole foods, herbs/spices, legumes and pantry
+  // basics so common real-world labels read as Clean rather than Unknown.
+  const extraClean6 = [
+    // produce
+    "shallots", "leeks", "scallion", "green onion", "bok choy", "napa cabbage",
+    "swiss chard", "collards", "mustard greens", "turnip greens", "beet greens",
+    "watercress", "endive", "radicchio", "frisee", "escarole", "sorrel",
+    "habanero", "scotch bonnet", "thai chili", "shishito", "banana pepper",
+    "delicata", "honeynut squash", "sugar pumpkin", "calabaza",
+    "persian cucumber", "english cucumber", "heirloom tomato", "roma tomato",
+    "grape tomato", "tomatillo", "nopales", "chayote", "bitter melon",
+    "horseradish root", "lotus root", "burdock root", "celeriac",
+    "blood orange", "cara cara", "kumquat", "calamansi", "yuzu", "finger lime",
+    "soursop", "cherimoya", "sapodilla", "mangosteen", "loquat", "feijoa",
+    // herbs & spices
+    "lemongrass", "kaffir lime leaves", "curry leaves", "epazote", "shiso",
+    "marjoram", "lovage", "chervil", "summer savory", "winter savory",
+    "grains of paradise", "sumac", "amchur", "asafoetida", "annatto seed",
+    "juniper berries", "long pepper", "aleppo pepper", "urfa pepper", "gochugaru",
+    // grains / legumes / nuts / seeds
+    "fonio", "job's tears", "purple barley", "red quinoa", "tricolor quinoa",
+    "black beluga lentils", "french green lentils", "marrow beans", "gigante beans",
+    "scarlet runner beans", "moth beans", "horse gram", "bambara beans",
+    "tiger nuts", "baru nuts", "sacha inchi seeds", "watermelon seeds", "perilla seeds",
+    // proteins / dairy
+    "guinea fowl", "squab", "elk", "wild boar", "octopus", "cuttlefish",
+    "sea scallops", "bay scallops", "razor clams", "geoduck", "uni",
+    "skyr", "labneh", "quark", "farmer cheese", "paneer", "halloumi", "cotija",
+    // pantry / fats / ferments
+    "yuzu juice", "verjus", "pomegranate molasses", "tamarind paste", "date paste",
+    "cashew cream", "tahini paste", "black garlic", "fermented black beans",
+    "doenjang", "gochujang", "fish roe", "bonito flakes", "dashi", "kombu",
+    "extra virgin avocado oil", "unrefined coconut oil", "cold-pressed flax oil",
+    "grass-fed ghee", "cultured cream", "creme fraiche", "a2 yogurt"
+  ];
+  for (var c6 = 0; c6 < extraClean6.length; c6++) {
+    if (cleanIngredients.indexOf(extraClean6[c6]) === -1) cleanIngredients.push(extraClean6[c6]);
   }
 
   // More added-sugar synonyms seen on U.S. labels.
