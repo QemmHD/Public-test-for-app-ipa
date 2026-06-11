@@ -284,7 +284,10 @@
     return fetchJson(url).then(function (j) {
       var foods = (j && j.foods) || [];
       var norm0 = function (x) { return String(x || "").replace(/^0+/, ""); };
-      var hit = foods.filter(function (f) { return norm0(f.gtinUpc) === norm0(code); })[0] || foods[0];
+      // FoodData Central search is relevance-ranked and can return unrelated
+      // products for an unknown UPC. Never attach the first fuzzy result to a
+      // scanned barcode; only an exact GTIN/UPC match is trustworthy.
+      var hit = foods.filter(function (f) { return norm0(f.gtinUpc) === norm0(code); })[0];
       return hit ? mapUsdaFood(hit, code) : null;
     }).catch(function () { return null; });
   }
