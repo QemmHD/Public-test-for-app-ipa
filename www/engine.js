@@ -60,6 +60,7 @@
   // OCR noise out of the result without discarding genuine ingredients such as
   // salt, water, sugar, iron or sodium benzoate.
   var NON_INGREDIENT_RE = /\b(daily value|per serving|per container|serving size|servings|amount per|nutrition facts|calories|total fat|saturated fat|trans fat|polyunsaturated fat|monounsaturated fat|total carbohydrate|dietary fiber|total sugars|added sugars|cholesterol|distributed by|manufactured|net wt|net weight|fl oz|best before|best by|use by|sell by|exp date|questions|comments|satisfaction|refrigerat|produced in|made in|product of|packaged|facility|contains less than|may contain|www|http)\b/;
+  var COMMENTARY_RE = /\b(would you like|do you want|quick breakdown|what you consume|this ingredient list|generally corresponds|here is a breakdown|souhaitez-vous|voulez-vous|voici un d[eé]cryptage|ce que vous consommez|cette liste d.ingr[eé]dients|correspond g[eé]n[eé]ralement)\b/i;
   // A standalone number followed by a measurement unit (e.g. "200mg", "2 g",
   // "120 kcal") is a nutrition value, not an ingredient.
   var NUTRITION_VALUE_RE = /\b\d+(\.\d+)?\s?(mg|mcg|g|kg|kcal|iu|ml|oz)\b/;
@@ -74,11 +75,19 @@
     "fat": 1, "total fat": 1, "saturated fat": 1, "trans fat": 1, "calcium": 1
   };
   function isNonIngredient(n) {
-    return NON_INGREDIENT_RE.test(n) || NUTRITION_VALUE_RE.test(n) || NUTRIENT_ONLY[n] === 1;
+    return NON_INGREDIENT_RE.test(n) || COMMENTARY_RE.test(n) || NUTRITION_VALUE_RE.test(n) || NUTRIENT_ONLY[n] === 1;
+  }
+  function ingredientTextQuality(text) {
+    text = String(text || "").trim();
+    if (text.replace(/\s/g, "").length < 3) return { usable: false, suspicious: false };
+    var suspicious = COMMENTARY_RE.test(text) || (text.length > 350 && (text.match(/[?!]/g) || []).length > 1);
+    return { usable: !suspicious, suspicious: suspicious };
   }
   function parseIngredients(text) {
     if (!text) return [];
-    var cleaned = text
+    // Some crowd-sourced product records contain an ingredient list followed
+    // by prose or an AI-generated explanation. Never score that commentary.
+    var cleaned = String(text).split(COMMENTARY_RE)[0]
       .replace(/\b(?:https?:\/\/|www\.)\S+/gi, " ")
       .replace(/\S+@\S+\.\S+/g, " ")
       .replace(/\b[\w.-]+\.(?:com|net|org|co|us)\b/gi, " ")
@@ -99,6 +108,7 @@
       var n = norm(raw);
       if (!n || n.length < 2) continue;
       if (isNonIngredient(n)) continue;
+      if (tokenize(n).length > 14) continue; // sentence-like prose, not an ingredient
       if (seen[n]) continue;            // global de-dup (not just adjacent repeats)
       seen[n] = 1;
       out.push({ raw: raw.replace(/\s+/g, " ").trim(), norm: n });
@@ -286,6 +296,47 @@
       return { label: "Bad", cls: "bad" };
     }
 
+    // Strict scan verdict: a product only earns approval when every listed
+    // ingredient is known and none are in an avoid/caution/limit bucket. A missing or
+    // partly unknown list must never be presented as approved.
+    function strictVerdict(classified) {
+      classified = classified || [];
+      if (!classified.length) return {
+        approved: false, needsReview: true, label: "Needs ingredients", cls: "review",
+        summary: "No complete ingredient list was available.", blockers: []
+      };
+      var blockers = classified.filter(function (c) {
+        return c.status === "avoid" || c.status === "caution" || c.status === "limit";
+      });
+      var unknown = classified.filter(function (c) { return c.status === "unknown"; });
+      if (blockers.length) return {
+        approved: false, needsReview: false, label: "Not approved", cls: "fail",
+        summary: "Fails the strict ingredient standard.", blockers: blockers
+      };
+      if (unknown.length) return {
+        approved: false, needsReview: true, label: "Needs review", cls: "review",
+        summary: "Unknown ingredients prevent strict approval.", blockers: unknown
+      };
+      return {
+        approved: true, needsReview: false, label: "Strict approved", cls: "pass",
+        summary: "No avoid, caution, limit, or unknown ingredients found.", blockers: []
+      };
+    }
+
+    function ingredientConfidence(classified) {
+      classified = classified || [];
+      if (!classified.length) return { level: "low", label: "Low confidence", summary: "No ingredient list available." };
+      var unknown = classified.filter(function (c) { return c.status === "unknown"; }).length;
+      var ratio = unknown / classified.length;
+      if (classified.length >= 3 && ratio === 0) return {
+        level: "high", label: "High confidence", summary: "Full listed ingredients were recognized."
+      };
+      if (ratio <= 0.25) return {
+        level: "medium", label: "Medium confidence", summary: "Most listed ingredients were recognized."
+      };
+      return { level: "low", label: "Low confidence", summary: "Too many listed ingredients need review." };
+    }
+
     function analyze(off, ingredientsText, productType) {
       var isFood = isFoodType(productType);
       var items = parseIngredients(ingredientsText);
@@ -332,7 +383,8 @@
       else if (classified.length) nutrition.positives.unshift({ label: "Additives", value: "None", sev: "good", note: "No risky ingredients" });
 
       return { classified: classified, score: score, badge: bandFor(score, hasAvoid), nutrition: nutrition,
-        flaggedCount: flaggedCount, scoreReasons: reasons, productType: productType || "food" };
+        flaggedCount: flaggedCount, scoreReasons: reasons, productType: productType || "food",
+        strictVerdict: strictVerdict(classified), ingredientConfidence: ingredientConfidence(classified) };
     }
 
     function personalAlerts(classified, profile) {
@@ -463,7 +515,9 @@
       },
       norm: norm, titleCase: titleCase, num: num, cap: cap,
       tokenize: tokenize, phraseInTokens: phraseInTokens, isFoodType: isFoodType,
-      parseIngredients: parseIngredients, classify: classify, ingredientDetail: ingredientDetail,
+      parseIngredients: parseIngredients, ingredientTextQuality: ingredientTextQuality,
+      classify: classify, ingredientDetail: ingredientDetail,
+      strictVerdict: strictVerdict, ingredientConfidence: ingredientConfidence,
       evalNutrition: evalNutrition, analyze: analyze, bandFor: bandFor, personalAlerts: personalAlerts,
       computeTargets: computeTargets, computeKcal: computeKcal, computeMacros: computeMacros,
       diffProducts: diffProducts

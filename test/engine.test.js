@@ -557,3 +557,55 @@ test("parseIngredients extracts hidden sub-ingredients from parentheses", () => 
     assert.ok(got.includes(n), "expected to extract: " + n);
   });
 });
+
+/* ---------------- strict approval contract + database breadth */
+test("strict verdict approves only fully recognized lists with no hard flags", () => {
+  const approved = engine.analyze(null, "water, chickpeas, sea salt", "food");
+  assert.strictEqual(approved.strictVerdict.approved, true);
+  assert.strictEqual(approved.strictVerdict.label, "Strict approved");
+  assert.strictEqual(approved.ingredientConfidence.level, "high");
+
+  const failed = engine.analyze(null, "water, soybean oil, natural flavor", "food");
+  assert.strictEqual(failed.strictVerdict.approved, false);
+  assert.strictEqual(failed.strictVerdict.needsReview, false);
+  assert.strictEqual(failed.strictVerdict.blockers.length, 2);
+
+  const unknown = engine.analyze(null, "water, completely novel ingredient", "food");
+  assert.strictEqual(unknown.strictVerdict.approved, false);
+  assert.strictEqual(unknown.strictVerdict.needsReview, true);
+
+  const limited = engine.analyze(null, "water, sugar, sea salt", "food");
+  assert.strictEqual(limited.strictVerdict.approved, false, "limit ingredients must fail strict approval");
+});
+
+test("ingredient database recognizes broad international and label-form foods", () => {
+  const foods = [
+    "romanesco", "lion's mane mushroom", "chickpea flour", "wild caught salmon",
+    "plain greek yogurt", "apple cider vinegar", "natural almond butter", "spring water"
+  ];
+  foods.forEach((food) => {
+    const c = engine.classify(engine.norm(food), food, "food");
+    assert.strictEqual(c.group, "clean", food + " should classify as clean");
+  });
+  assert.ok(global.window.CB_DATA.cleanIngredients.length >= 1000, "clean database should exceed 1,000 entries");
+});
+
+test("strict alias expansion catches more seed oils and artificial sweeteners", () => {
+  ["rapeseed oil", "high oleic sunflower oil", "vegetable shortening"].forEach((name) => {
+    assert.strictEqual(engine.classify(engine.norm(name), name, "food").status, "avoid", name);
+  });
+  ["acesulfame potassium", "sodium saccharin", "neohesperidin dc"].forEach((name) => {
+    assert.strictEqual(engine.classify(engine.norm(name), name, "food").status, "avoid", name);
+  });
+});
+
+test("polluted ingredient fields stop before explanatory prose", () => {
+  const polluted = "Water, sugar, citric acid. Voici un décryptage rapide de ce que vous consommez: " +
+    "Cette liste d’ingrédients correspond généralement à une boisson. Souhaitez-vous des détails ?";
+  assert.strictEqual(engine.ingredientTextQuality(polluted).suspicious, true);
+  const got = engine.parseIngredients(polluted).map((x) => x.norm);
+  assert.ok(got.includes("water"));
+  assert.ok(got.includes("sugar"));
+  assert.ok(got.includes("citric acid"));
+  assert.ok(!got.some((x) => /souhaitez|correspond|boisson|decryptage/.test(x)), "commentary must not be scored");
+});

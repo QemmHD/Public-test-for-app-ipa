@@ -185,6 +185,25 @@ body::after {
 .badge.mid { color: var(--mid); background: rgba(255,176,46,0.13); }
 .badge.bad { color: var(--bad); background: rgba(255,77,77,0.13); }
 
+/* strict scan verdict */
+.strict-card { margin: 0 0 14px; padding: 17px; border-radius: 20px; border: 1px solid var(--brd); box-shadow: var(--shadow); }
+.strict-card.pass { background: linear-gradient(145deg, rgba(62,224,127,0.20), rgba(18,184,166,0.08)); border-color: rgba(62,224,127,0.42); }
+.strict-card.fail { background: linear-gradient(145deg, rgba(255,86,102,0.22), rgba(255,86,102,0.06)); border-color: rgba(255,86,102,0.48); }
+.strict-card.review { background: linear-gradient(145deg, rgba(255,176,46,0.20), rgba(255,176,46,0.06)); border-color: rgba(255,176,46,0.42); }
+.strict-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.strict-kicker { color: var(--mut); font-size: 11px; font-weight: 850; letter-spacing: .08em; text-transform: uppercase; }
+.strict-label { font-size: 27px; font-weight: 900; letter-spacing: -.035em; margin-top: 3px; text-transform: uppercase; }
+.strict-card.pass .strict-label { color: var(--good); }
+.strict-card.fail .strict-label { color: var(--bad); }
+.strict-card.review .strict-label { color: var(--mid); }
+.strict-summary { color: var(--mut); font-size: 13px; line-height: 1.45; margin-top: 10px; }
+.confidence { flex-shrink: 0; padding: 5px 9px; border-radius: 999px; font-size: 10px; font-weight: 850; text-transform: uppercase; letter-spacing: .04em; }
+.confidence.high { color: var(--good); background: rgba(62,224,127,.14); }
+.confidence.medium { color: var(--mid); background: rgba(255,176,46,.14); }
+.confidence.low { color: var(--bad); background: rgba(255,86,102,.14); }
+.strict-blockers { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.strict-chip { padding: 6px 9px; border-radius: 9px; background: rgba(0,0,0,.20); border: 1px solid rgba(255,255,255,.10); font-size: 11px; font-weight: 750; }
+
 /* alerts */
 .alerts { margin: 14px 0 0; }
 .alert { background: rgba(255,176,46,0.12); border: 1px solid rgba(255,176,46,0.32); color: #ffd98a; padding: 12px 14px; border-radius: 14px; font-size: 14px; margin: 8px 0; backdrop-filter: blur(10px); }

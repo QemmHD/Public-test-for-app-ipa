@@ -205,11 +205,17 @@
   // product with no free-text list still resolves automatically (no photo).
   function offIngredientsText(p) {
     var txt = p.ingredients_text_en || p.ingredients_text || p.ingredients_text_with_allergens || "";
-    if ((!txt || txt.replace(/\s/g, "").length < 3) && Array.isArray(p.ingredients) && p.ingredients.length) {
-      txt = p.ingredients.map(function (x) {
+    var structured = "";
+    if (Array.isArray(p.ingredients) && p.ingredients.length) {
+      structured = p.ingredients.map(function (x) {
         return (x && x.text) || (x && x.id && String(x.id).replace(/^[a-z]{2}:/, "").replace(/-/g, " ")) || "";
       }).filter(Boolean).join(", ");
     }
+    // Crowd-sourced free text can contain descriptions or AI commentary.
+    // Prefer the structured list whenever the free-text field is suspicious.
+    var quality = ENG.ingredientTextQuality(txt);
+    if ((!quality.usable || !txt || txt.replace(/\s/g, "").length < 3) && structured) txt = structured;
+    if (!ENG.ingredientTextQuality(txt).usable) txt = "";
     return txt;
   }
   // Additive E-numbers Open Food Facts detected for this product (e.g. "en:e102").
@@ -400,7 +406,9 @@
       kcal: food ? computeKcal(off) : null,
       macros: food ? ENG.computeMacros(off) : null,
       score: r.score, badge: r.badge, classified: r.classified, nutrition: r.nutrition,
-      flaggedCount: r.flaggedCount, scoreReasons: r.scoreReasons, logged: "checked", ateAt: 0, portion: 1, ts: Date.now()
+      flaggedCount: r.flaggedCount, scoreReasons: r.scoreReasons,
+      strictVerdict: r.strictVerdict, ingredientConfidence: r.ingredientConfidence,
+      logged: "checked", ateAt: 0, portion: 1, ts: Date.now()
     };
   }
   // Adjust the serving multiplier on the current product (food only), keep
@@ -1051,6 +1059,20 @@
     var txt = m[p.badge.cls];
     return txt ? '<div class="verdict">' + txt + '</div>' : "";
   }
+  function strictBlock(p) {
+    var v = p.strictVerdict || ENG.strictVerdict(p.classified || []);
+    var conf = p.ingredientConfidence || ENG.ingredientConfidence(p.classified || []);
+    var blockers = (v.blockers || []).slice(0, 3).map(function (b) {
+      return '<span class="strict-chip">' + esc(titleCase(b.raw || b.name || "Unknown ingredient")) + '</span>';
+    }).join("");
+    return '<div class="strict-card ' + v.cls + '">' +
+      '<div class="strict-top"><div><div class="strict-kicker">Strict scan standard</div>' +
+      '<div class="strict-label">' + esc(v.label) + '</div></div>' +
+      '<div class="confidence ' + conf.level + '">' + esc(conf.label) + '</div></div>' +
+      '<div class="strict-summary">' + esc(v.summary) + ' ' + esc(conf.summary) + '</div>' +
+      (blockers ? '<div class="strict-blockers">' + blockers + '</div>' : "") +
+      '</div>';
+  }
   function animateScore() {
     var ring = document.querySelector(".score-ring"), numEl = document.querySelector(".score-num");
     if (!ring || !numEl || !state.product) return;
@@ -1171,6 +1193,7 @@
     var c = scoreColor(p.badge.cls);
     var fav = isFav(p.id);
     return '<div class="screen result">' + backBar("") +
+      strictBlock(p) +
       '<div class="hero glass" style="--c:' + c + '">' +
         '<button class="fav-btn' + (fav ? " on" : "") + '" data-fav="1" aria-label="Favorite">' + (fav ? "★" : "☆") + '</button>' +
         '<div class="product-head">' +
@@ -1525,6 +1548,9 @@
       return '<button class="chip' + ((s.theme || "dark") === o ? " on" : "") + '" data-theme="' + o + '">' + cap(o) + '</button>';
     }).join("");
     var settings = '<div class="section-title">Settings</div><div class="panel glass">' +
+      '<div class="lrow"><div class="row-main"><div class="row-title">Strict scan standard</div>' +
+        '<div class="row-sub">Always on. Any avoid, caution, or limit ingredient fails approval; unknown ingredients require review.</div></div>' +
+        '<div class="status-tag good">On</div></div>' +
       '<div class="lrow"><div class="row-main"><div class="row-title">Theme</div></div><div class="chips sm">' + themeSel + '</div></div>' +
       '<div class="lrow tappable" data-act="exportData"><div class="row-main"><div class="row-title">Export my data</div><div class="row-sub">Download a backup file</div></div><div class="chev">›</div></div>' +
       '<label class="lrow tappable"><div class="row-main"><div class="row-title">Import data</div><div class="row-sub">Restore from a backup</div></div><input id="importfile" type="file" accept="application/json" hidden><div class="chev">›</div></label></div>';

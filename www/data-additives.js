@@ -1560,6 +1560,112 @@ var CB_DATA = (function () {
     if (cleanIngredients.indexOf(extraClean6[c6]) === -1) cleanIngredients.push(extraClean6[c6]);
   }
 
+  // Seventh pass: broad international label coverage. Keep entries specific
+  // enough for whole-phrase matching; avoid generic words such as "oil" or
+  // "powder" that could hide a flagged ingredient.
+  const extraClean7 = [
+    // fruit
+    "ambarella", "aronia berry", "barberry", "bilberry", "black currant", "red currant",
+    "white currant", "boysenberry", "cloudberry", "elderberry", "gooseberry", "huckleberry",
+    "lingonberry", "marionberry", "mulberry", "salmonberry", "serviceberry", "tayberry",
+    "acerola cherry", "buddha's hand", "clementine", "damson plum", "greengage plum",
+    "key lime", "meyer lemon", "prickly pear", "quince", "rambutan", "rose apple",
+    "surinam cherry", "ugli fruit", "white peach", "yellow watermelon",
+    // vegetables and mushrooms
+    "broccolini", "romanesco", "kohlrabi", "rutabaga", "sunchoke", "jerusalem artichoke",
+    "daikon radish", "watermelon radish", "black radish", "fennel bulb", "garlic scapes",
+    "pea shoots", "sunflower shoots", "microgreens", "mung bean sprouts", "alfalfa sprouts",
+    "bamboo shoots", "hearts of palm", "palm heart", "young jackfruit", "green papaya",
+    "king oyster mushroom", "oyster mushroom", "maitake mushroom", "morel mushroom",
+    "porcini mushroom", "shiitake mushroom", "wood ear mushroom", "lion's mane mushroom",
+    "enoki mushroom", "chanterelle mushroom", "cremini mushroom", "portobello mushroom",
+    // herbs, spices, aromatics
+    "anise seed", "black cardamom", "green cardamom", "caraway seed", "celery seed",
+    "coriander seed", "cumin seed", "dill seed", "fenugreek seed", "fennel seed",
+    "mustard seed", "nigella seed", "poppy seed", "saffron threads", "star anise",
+    "ceylon cinnamon", "cassia cinnamon", "vanilla bean", "vanilla powder", "cacao nibs",
+    "fresh ginger", "fresh turmeric", "roasted garlic", "granulated garlic", "minced onion",
+    "parsley flakes", "crushed red pepper", "chipotle pepper", "ancho chile", "guajillo chile",
+    "pasilla chile", "new mexico chile", "serrano pepper", "poblano pepper",
+    // grains, flours, noodles
+    "whole oat flour", "whole wheat flour", "whole rye flour", "whole spelt flour",
+    "whole barley flour", "brown rice flour", "white rice flour", "black rice flour",
+    "chickpea flour", "lentil flour", "pea flour", "lupin flour", "cassava flour",
+    "tigernut flour", "green banana flour", "buckwheat flour", "teff flour", "sorghum flour",
+    "millet flour", "quinoa flour", "amaranth flour", "almond flour", "coconut flour",
+    "rolled barley", "steel cut oats", "oat groats", "wheat berries", "rye berries",
+    "freekeh", "bulgur wheat", "pearl couscous", "rice noodles", "soba noodles",
+    // beans, pulses, nuts, seeds
+    "aduki beans", "adzuki beans", "anasazi beans", "black soybeans", "borlotti beans",
+    "cannellini beans", "cranberry beans", "flageolet beans", "great northern beans",
+    "navy beans", "pink beans", "pinto beans", "yellow split peas", "green split peas",
+    "whole green peas", "whole yellow peas", "roasted chickpeas", "sprouted lentils",
+    "sprouted mung beans", "sprouted chickpeas", "hemp hearts", "ground flaxseed",
+    "golden flaxseed", "black sesame seeds", "white sesame seeds", "pumpkin seed kernels",
+    "sunflower seed kernels", "raw almonds", "roasted almonds", "raw cashews",
+    "roasted cashews", "raw walnuts", "roasted peanuts", "natural peanut butter",
+    "natural almond butter", "natural cashew butter", "sunflower seed butter",
+    // animal proteins and seafood
+    "beef liver", "chicken liver", "chicken breast", "chicken thigh", "turkey breast",
+    "ground turkey", "ground chicken", "ground beef", "beef bone broth", "chicken bone broth",
+    "wild caught salmon", "wild caught tuna", "wild caught sardines", "wild caught anchovies",
+    "atlantic mackerel", "pacific mackerel", "rainbow trout", "arctic char", "albacore tuna",
+    "skipjack tuna", "yellowfin tuna", "sockeye salmon", "coho salmon", "pink salmon",
+    "smoked salmon", "canned salmon", "canned sardines", "canned tuna", "whole egg",
+    "egg whites", "egg yolks", "pasture raised eggs", "free range eggs",
+    // dairy and simple alternatives
+    "whole milk", "skim milk", "goat milk", "sheep milk", "buttermilk", "plain kefir",
+    "plain greek yogurt", "plain yogurt", "cottage cheese", "ricotta cheese", "mozzarella cheese",
+    "parmesan cheese", "pecorino romano", "cheddar cheese", "goat cheese", "sheep cheese",
+    "unsalted butter", "salted butter", "cultured butter", "coconut cream", "coconut milk",
+    // minimally processed pantry
+    "tomato puree", "tomato paste", "crushed tomatoes", "diced tomatoes", "whole peeled tomatoes",
+    "unsweetened applesauce", "pumpkin puree", "sweet potato puree", "roasted red peppers",
+    "sun dried tomatoes", "apple cider vinegar", "red wine vinegar", "white wine vinegar",
+    "balsamic vinegar", "rice vinegar", "sherry vinegar", "coconut vinegar", "lemon juice",
+    "lime juice", "orange juice", "pickle brine", "sauerkraut juice", "coconut aminos",
+    "extra virgin olive oil", "virgin olive oil", "cold pressed olive oil", "avocado oil",
+    "virgin coconut oil", "mct oil", "beef tallow", "duck fat", "chicken fat", "pork lard",
+    "sea salt", "kosher salt", "pink salt", "black salt", "smoked salt", "mineral water",
+    "sparkling water", "carbonated water", "filtered water", "spring water"
+  ];
+  for (var c7 = 0; c7 < extraClean7.length; c7++) {
+    if (cleanIngredients.indexOf(extraClean7[c7]) === -1) cleanIngredients.push(extraClean7[c7]);
+  }
+
+  // Strict-scan aliases frequently printed on labels.
+  const extraSeedOils = [
+    "rapeseed oil", "expeller pressed canola oil", "high oleic canola oil",
+    "high oleic sunflower oil", "high oleic safflower oil", "soy oil",
+    "corn germ oil", "cotton seed oil", "grape seed oil", "rice bran oil",
+    "vegetable shortening", "soybean shortening", "hydrogenated vegetable oil",
+    "partially hydrogenated vegetable oil", "interesterified vegetable oil"
+  ];
+  for (var so = 0; so < extraSeedOils.length; so++) {
+    if (seedOils.indexOf(extraSeedOils[so]) === -1) seedOils.push(extraSeedOils[so]);
+  }
+  const extraSweeteners = [
+    "acesulfame potassium", "acesulfame k", "ace k", "aspartame-acesulfame salt",
+    "sucralose powder", "saccharin sodium", "sodium saccharin", "calcium saccharin",
+    "neohesperidin dihydrochalcone", "neohesperidin dc", "thaumatin"
+  ];
+  for (var sw = 0; sw < extraSweeteners.length; sw++) {
+    if (artificialSweeteners.indexOf(extraSweeteners[sw]) === -1) artificialSweeteners.push(extraSweeteners[sw]);
+  }
+  const extraFortified = [
+    "vitamin a acetate", "retinyl acetate", "retinyl palmitate", "beta carotene",
+    "vitamin d2", "ergocalciferol", "vitamin d3", "cholecalciferol", "vitamin e acetate",
+    "dl alpha tocopheryl acetate", "phytonadione", "vitamin k1", "menaquinone", "vitamin k2",
+    "calcium carbonate", "calcium citrate", "calcium phosphate", "ferrous fumarate",
+    "ferrous sulfate", "ferric pyrophosphate", "zinc oxide", "zinc sulfate", "zinc gluconate",
+    "magnesium oxide", "magnesium citrate", "potassium iodide", "potassium chloride",
+    "sodium selenite", "selenium yeast", "copper gluconate", "manganese sulfate",
+    "chromium chloride", "chromium picolinate", "molybdenum", "biotin", "inositol"
+  ];
+  for (var fv = 0; fv < extraFortified.length; fv++) {
+    if (fortifiedVitamins.indexOf(extraFortified[fv]) === -1) fortifiedVitamins.push(extraFortified[fv]);
+  }
+
   // More added-sugar synonyms seen on U.S. labels.
   const extraSugars = [
     "turbinado", "demerara", "muscovado", "powdered sugar", "confectioners sugar",
