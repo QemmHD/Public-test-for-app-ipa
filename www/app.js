@@ -927,10 +927,15 @@
     if (query.length < 2) return;
     state.searchQuery = query; state.searchRaw = null; state.searchResults = null; state.searchSort = "rel";
     go("search");
-    busy(true, "Searching…");
+    // No blocking overlay — the search screen renders shimmer placeholders
+    // immediately, which reads faster and keeps the back button usable.
     searchProducts(query).then(function (results) {
-      busy(false, ""); state.searchRaw = results; render();
-    }).catch(function () { busy(false, ""); state.searchRaw = []; render(); });
+      if (state.searchQuery !== query) return; // a newer search took over
+      state.searchRaw = results; render();
+    }).catch(function () {
+      if (state.searchQuery !== query) return;
+      state.searchRaw = []; render();
+    });
   }
   // Enough to score automatically (no photo) when we have a printed ingredient
   // list OR Open Food Facts already detected the product's additives.
@@ -1247,6 +1252,14 @@
       '</div>' +
       '</div>';
   }
+  // Shimmer placeholder rows shown while results load.
+  function skeletonRows(count) {
+    var row = '<div class="row card skel"><div class="srch-img skel-box"></div>' +
+      '<div class="row-main"><div class="skel-line w60"></div><div class="skel-line w35"></div></div></div>';
+    var out = "";
+    for (var i = 0; i < count; i++) out += row;
+    return out;
+  }
   function viewSearch() {
     var rows = "", sortChips = "";
     // Build display list from the untouched raw results so toggling sort is reversible.
@@ -1266,7 +1279,7 @@
       sortChips = '<div class="chips sm"><button class="chip' + (state.searchSort !== "health" ? " on" : "") + '" data-sort="rel">Relevance</button>' +
         '<button class="chip' + (state.searchSort === "health" ? " on" : "") + '" data-sort="health">Healthiest first</button></div>';
     }
-    if (state.searchRaw == null) rows = '<div class="empty small">Searching…</div>';
+    if (state.searchRaw == null) rows = skeletonRows(6);
     else if (!list.length) rows = '<div class="empty">No products found for “' + esc(state.searchQuery) + '”.<br>Try a different name or scan the barcode.</div>';
     else rows = list.map(function (o, i) {
       // Results can now be any product type (food / beauty / household / pet
@@ -1311,9 +1324,11 @@
 
     var c = scoreColor(p.badge.cls);
     var fav = isFav(p.id);
+    // Screen hierarchy: identity & score first, then the strict verdict, then
+    // anything personal to the user (allergen alerts), then the verdict detail
+    // (negatives / positives), then actions, then reference data. Parsing
+    // meta-info (scan cleanup) sits last, next to the raw ingredient list.
     return '<div class="screen result">' + backBar("") +
-      strictBlock(p) +
-      vagueScanBlock(p) +
       '<div class="hero glass" style="--c:' + c + '">' +
         '<button class="fav-btn' + (fav ? " on" : "") + '" data-fav="1" aria-label="Favorite">' + (fav ? "★" : "☆") + '</button>' +
         '<div class="product-head">' +
@@ -1333,7 +1348,10 @@
         '</div>' +
       '</div>' +
       whyBlock(p) +
-      cleanupBlock(p) +
+      strictBlock(p) +
+      (alerts.length ? ('<div class="alerts">' + alerts.map(function (a) {
+        return '<div class="alert">' + icon("alert") + ' <b>' + esc(cap(a.key)) + '</b>: contains ' + esc(a.hits.join(", ")) + '</div>';
+      }).join("") + '</div>') : "") +
       // Yuka-style: the verdict detail (what's bad / what's good) comes FIRST,
       // right under the score — that's the core of the result screen.
       // Bobby-Approved-better: surface the actual flagged INGREDIENT names as
@@ -1345,9 +1363,7 @@
         return negHtml ? '<div class="panel glass"><div class="panel-h neg">' + icon("alert") + ' Negatives</div>' + negHtml + '</div>' : "";
       })() +
       (n.positives && n.positives.length ? '<div class="panel glass"><div class="panel-h pos">' + icon("check") + ' Positives</div>' + n.positives.map(brkRow).join("") + '</div>' : "") +
-      (alerts.length ? ('<div class="alerts">' + alerts.map(function (a) {
-        return '<div class="alert">' + icon("alert") + ' <b>' + esc(cap(a.key)) + '</b>: contains ' + esc(a.hits.join(", ")) + '</div>';
-      }).join("") + '</div>') : "") +
+      vagueScanBlock(p) +
       (p.isFood ?
         '<div class="logseg">' +
           '<button class="seg-btn' + (p.logged === "eaten" ? " on ate" : "") + '" data-log="eaten">' + icon("fork") + ' I ate this</button>' +
@@ -1357,6 +1373,7 @@
       '<button class="ghost-btn cmp-btn" data-act="comparePick">' + icon("swap") + ' Compare with another product</button>' +
       altsBlock(p) +
       nutritionTable(p) +
+      cleanupBlock(p) +
       '<div class="panel glass"><div class="panel-h">Ingredients <span class="cnt">' + p.classified.length + '</span></div>' +
       '<div class="legend">Tap any ingredient for details</div>' +
       (p.classified.length ? groupsHtml : '<div class="empty small">No ingredient list available for this product.</div>') +

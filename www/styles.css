@@ -601,3 +601,16 @@ button, .chip, .tab, .tabitem, .seg-btn, .back, .step-btn, .search-go, [role="bu
 .torch-btn .ic { width: 22px; height: 22px; }
 .ob-feat .ic { width: 20px; height: 20px; flex-shrink: 0; color: var(--accent); }
 .research-btn .ic, .cmp-btn .ic { width: 16px; height: 16px; vertical-align: -3px; margin-right: 2px; }
+
+/* ---- search loading skeleton ---- */
+.skel { pointer-events: none; }
+.skel-box, .skel-line {
+  background: linear-gradient(100deg, rgba(128,138,134,0.12) 35%, rgba(128,138,134,0.24) 50%, rgba(128,138,134,0.12) 65%);
+  background-size: 220% 100%; animation: shimmer 1.25s linear infinite;
+}
+.skel-box { width: 48px; height: 48px; border-radius: 12px; flex-shrink: 0; }
+.skel-line { height: 12px; border-radius: 6px; margin: 5px 0; }
+.skel-line.w60 { width: 62%; }
+.skel-line.w35 { width: 38%; }
+@keyframes shimmer { to { background-position: -120% 0; } }
+@media (prefers-reduced-motion: reduce) { .skel-box, .skel-line { animation: none; } }
