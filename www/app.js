@@ -308,35 +308,8 @@
   // A key pasted in Settings overrides it.
   var USDA_DEFAULT_KEY = "nfNkvg4igapcY1e5JAl4QVVdVeLf8f2fgFBEBLcl";
   function usdaKey() { var s = state.settings || {}; return (s.usdaKey && s.usdaKey.trim()) || USDA_DEFAULT_KEY; }
-  function mapUsdaFood(f, code) {
-    if (!f) return null;
-    var nu = {}, kj = null;
-    (f.foodNutrients || []).forEach(function (n) {
-      var num = String(n.nutrientNumber || n.number || (n.nutrient && n.nutrient.number) || "");
-      var val = n.value != null ? n.value : (n.amount != null ? n.amount : null);
-      if (val == null) return;
-      if (num === "208") nu["energy-kcal_100g"] = val;
-      else if (num === "268") kj = val; // energy reported in kJ only
-      else if (num === "203") nu["proteins_100g"] = val;
-      else if (num === "269" || num === "2000") nu["sugars_100g"] = val;
-      else if (num === "606") nu["saturated-fat_100g"] = val;
-      else if (num === "291") nu["fiber_100g"] = val;
-      else if (num === "307") nu["sodium_100g"] = val / 1000; // mg -> g
-      else if (num === "205") nu["carbohydrates_100g"] = val;
-      else if (num === "204") nu["fat_100g"] = val;
-    });
-    if (nu["energy-kcal_100g"] == null && kj != null) nu["energy-kcal_100g"] = Math.round(kj / 4.184);
-    // Serving size (grams/ml) feeds per-serving kcal & macro scaling; without
-    // it, "I ate this" logging silently fell back to per-100g numbers.
-    var sq = num(f.servingSize);
-    var unit = String(f.servingSizeUnit || "").trim().toLowerCase();
-    var servingQ = (sq && (unit === "g" || unit === "grm" || unit === "ml" || unit === "mlt")) ? sq : undefined;
-    return { barcode: code || f.gtinUpc || "", name: f.description || "Unknown product",
-      brand: f.brandName || f.brandOwner || "", image: "", category: (f.brandedFoodCategory || "").toLowerCase(),
-      serving_quantity: servingQ,
-      ingredientsText: f.ingredients || "", additiveCodes: [], productType: "food",
-      source: "USDA FoodData Central", kosher: false, nutriments: nu };
-  }
+  // USDA mapping lives in the engine (unit-tested); thin delegation here.
+  function mapUsdaFood(f, code) { return ENG.mapUsdaFood(f, code); }
   function lookupUsda(code) {
     var url = "https://api.nal.usda.gov/fdc/v1/foods/search?api_key=" + encodeURIComponent(usdaKey()) +
       "&query=" + encodeURIComponent(code) + "&dataType=Branded&pageSize=5";
@@ -350,22 +323,7 @@
       return hit ? mapUsdaFood(hit, code) : null;
     }).catch(function () { return null; });
   }
-  // Merge a USDA result into an Open Food Facts result, filling only the gaps.
-  function mergeSources(off, u) {
-    if (!off) return u || null;
-    if (!u) return off;
-    if (!off.ingredientsText && u.ingredientsText) {
-      off.ingredientsText = u.ingredientsText;
-      off.source = (off.source && off.source.indexOf("USDA") === -1) ? (off.source + " + USDA") : "USDA FoodData Central";
-    }
-    if ((!off.nutriments || !Object.keys(off.nutriments).length) && u.nutriments) off.nutriments = u.nutriments;
-    if (off.serving_quantity == null && u.serving_quantity != null) off.serving_quantity = u.serving_quantity;
-    // Category unlocks the "Better choices in this category" lookup.
-    if (!off.category && u.category) off.category = u.category;
-    if (!off.name || off.name === "Unknown product") off.name = u.name;
-    if (!off.brand) off.brand = u.brand;
-    return off;
-  }
+  function mergeSources(off, u) { return ENG.mergeSources(off, u); }
   function lookupBarcode(code) {
     var cached = cachedProduct(code);
     if (cached) return Promise.resolve(cached);

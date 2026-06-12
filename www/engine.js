@@ -228,6 +228,57 @@
     return parseIngredientsDetailed(text).items;
   }
 
+  /* ------------------------------------------- USDA FoodData Central mapping
+   * Pure mapping/merge for the USDA gap-fill source, kept here (not in the UI
+   * layer) so the exact field handling is unit-tested against real response
+   * shapes. Search-endpoint Branded foods report nutrients per 100g. */
+  function mapUsdaFood(f, code) {
+    if (!f) return null;
+    var nu = {}, kj = null;
+    (f.foodNutrients || []).forEach(function (n) {
+      var nnum = String(n.nutrientNumber || n.number || (n.nutrient && n.nutrient.number) || "");
+      var val = n.value != null ? n.value : (n.amount != null ? n.amount : null);
+      if (val == null) return;
+      if (nnum === "208") nu["energy-kcal_100g"] = val;
+      else if (nnum === "268") kj = val; // energy reported in kJ only
+      else if (nnum === "203") nu["proteins_100g"] = val;
+      else if (nnum === "269" || nnum === "2000") nu["sugars_100g"] = val;
+      else if (nnum === "606") nu["saturated-fat_100g"] = val;
+      else if (nnum === "291") nu["fiber_100g"] = val;
+      else if (nnum === "307") nu["sodium_100g"] = val / 1000; // mg -> g
+      else if (nnum === "205") nu["carbohydrates_100g"] = val;
+      else if (nnum === "204") nu["fat_100g"] = val;
+    });
+    if (nu["energy-kcal_100g"] == null && kj != null) nu["energy-kcal_100g"] = Math.round(kj / 4.184);
+    // Serving size (grams/ml) feeds per-serving kcal & macro scaling; without
+    // it, "I ate this" logging silently fell back to per-100g numbers.
+    var sq = num(f.servingSize);
+    var unit = String(f.servingSizeUnit || "").trim().toLowerCase();
+    var servingQ = (sq && (unit === "g" || unit === "grm" || unit === "ml" || unit === "mlt")) ? sq : undefined;
+    return { barcode: code || f.gtinUpc || "", name: f.description || "Unknown product",
+      brand: f.brandName || f.brandOwner || "", image: "", category: String(f.brandedFoodCategory || "").toLowerCase(),
+      serving_quantity: servingQ,
+      ingredientsText: f.ingredients || "", additiveCodes: [], productType: "food",
+      source: "USDA FoodData Central", kosher: false, nutriments: nu };
+  }
+  // Merge a USDA result into an Open*Facts result, filling only the gaps —
+  // Open Food Facts data always wins where it exists.
+  function mergeSources(off, u) {
+    if (!off) return u || null;
+    if (!u) return off;
+    if (!off.ingredientsText && u.ingredientsText) {
+      off.ingredientsText = u.ingredientsText;
+      off.source = (off.source && off.source.indexOf("USDA") === -1) ? (off.source + " + USDA") : "USDA FoodData Central";
+    }
+    if ((!off.nutriments || !Object.keys(off.nutriments).length) && u.nutriments) off.nutriments = u.nutriments;
+    if (off.serving_quantity == null && u.serving_quantity != null) off.serving_quantity = u.serving_quantity;
+    // Category unlocks the "Better choices in this category" lookup.
+    if (!off.category && u.category) off.category = u.category;
+    if (!off.name || off.name === "Unknown product") off.name = u.name;
+    if (!off.brand) off.brand = u.brand;
+    return off;
+  }
+
   /* ------------------------------------------------------------- engine */
   function buildEngine(DATA, COSMETICS) {
     // Merge the cosmetic/household knowledge base (if provided) into the data set.
@@ -635,6 +686,7 @@
       tokenize: tokenize, phraseInTokens: phraseInTokens, isFoodType: isFoodType,
       parseIngredients: parseIngredients, parseIngredientsDetailed: parseIngredientsDetailed,
       ingredientTextQuality: ingredientTextQuality,
+      mapUsdaFood: mapUsdaFood, mergeSources: mergeSources,
       classify: classify, ingredientDetail: ingredientDetail,
       strictVerdict: strictVerdict, ingredientConfidence: ingredientConfidence,
       evalNutrition: evalNutrition, analyze: analyze, bandFor: bandFor, personalAlerts: personalAlerts,
@@ -653,7 +705,7 @@
     var facade = {
       norm: norm, titleCase: titleCase, num: num, cap: cap, canonStatus: canonStatus,
       tokenize: tokenize, phraseInTokens: phraseInTokens, isFoodType: isFoodType,
-      parseIngredients: parseIngredients, _ready: false,
+      parseIngredients: parseIngredients, mapUsdaFood: mapUsdaFood, mergeSources: mergeSources, _ready: false,
       init: function (data) {
         data = data || {};
         var built = buildEngine(data.food || (typeof window !== "undefined" && window.CB_DATA) || {},
@@ -668,5 +720,6 @@
 
   return { buildEngine: buildEngine, makeSingleton: makeSingleton,
     norm: norm, titleCase: titleCase, num: num, cap: cap, isFoodType: isFoodType, canonStatus: canonStatus,
-    tokenize: tokenize, phraseInTokens: phraseInTokens, parseIngredients: parseIngredients };
+    tokenize: tokenize, phraseInTokens: phraseInTokens, parseIngredients: parseIngredients,
+    mapUsdaFood: mapUsdaFood, mergeSources: mergeSources };
 });

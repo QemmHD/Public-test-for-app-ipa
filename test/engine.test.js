@@ -793,3 +793,72 @@ test("allergen-statement cut is reported in ignored fragments", () => {
   const parsed = engine.parseIngredientsDetailed("Sugar, salt. Contains milk, soy.");
   assert.ok(parsed.ignored.some((x) => x.reason === "allergen statement"));
 });
+
+/* ---------------- USDA FoodData Central gap-fill (mapUsdaFood/mergeSources) */
+// Fixture shaped like a real /v1/foods/search Branded result.
+function usdaFixture(extra) {
+  return Object.assign({
+    fdcId: 1234567, description: "CHEDDAR CHEESE CRACKERS", dataType: "Branded",
+    gtinUpc: "0049000028911", brandOwner: "ACME FOODS INC", brandName: "Acme",
+    ingredients: "ENRICHED FLOUR (WHEAT FLOUR, NIACIN), CHEDDAR CHEESE (MILK, SALT), SOYBEAN OIL, SALT. CONTAINS WHEAT, MILK, SOY.",
+    servingSize: 28, servingSizeUnit: "g", brandedFoodCategory: "Crackers & Crispbreads",
+    foodNutrients: [
+      { nutrientNumber: "208", value: 480 }, { nutrientNumber: "203", value: 9 },
+      { nutrientNumber: "204", value: 24 }, { nutrientNumber: "606", value: 6 },
+      { nutrientNumber: "205", value: 58 }, { nutrientNumber: "269", value: 4 },
+      { nutrientNumber: "291", value: 2 }, { nutrientNumber: "307", value: 900 }
+    ]
+  }, extra || {});
+}
+
+test("mapUsdaFood maps the full Branded response: nutrients, serving, identity", () => {
+  const off = engine.mapUsdaFood(usdaFixture(), "049000028911");
+  assert.strictEqual(off.name, "CHEDDAR CHEESE CRACKERS");
+  assert.strictEqual(off.brand, "Acme");
+  assert.strictEqual(off.barcode, "049000028911");
+  assert.strictEqual(off.category, "crackers & crispbreads");
+  assert.strictEqual(off.serving_quantity, 28, "serving size in grams must map");
+  assert.strictEqual(off.nutriments["energy-kcal_100g"], 480);
+  assert.strictEqual(off.nutriments["proteins_100g"], 9);
+  assert.strictEqual(off.nutriments["sodium_100g"], 0.9, "sodium mg -> g");
+  assert.strictEqual(off.source, "USDA FoodData Central");
+});
+
+test("mapUsdaFood converts kJ-only energy to kcal", () => {
+  const f = usdaFixture({ foodNutrients: [{ nutrientNumber: "268", value: 2008 }] });
+  const off = engine.mapUsdaFood(f, "049000028911");
+  assert.strictEqual(off.nutriments["energy-kcal_100g"], 480); // 2008 / 4.184
+});
+
+test("mapUsdaFood ignores non-gram serving units", () => {
+  const f = usdaFixture({ servingSize: 5, servingSizeUnit: "crackers" });
+  const off = engine.mapUsdaFood(f, "049000028911");
+  assert.strictEqual(off.serving_quantity, undefined);
+});
+
+test("mergeSources fills only the gaps; Open Food Facts data always wins", () => {
+  const u = engine.mapUsdaFood(usdaFixture(), "049000028911");
+  const off = { barcode: "049000028911", name: "Acme Cheese Crackers", brand: "Acme",
+    ingredientsText: "", category: "", serving_quantity: null,
+    source: "Open Food Facts", nutriments: { "energy-kcal_100g": 470 } };
+  const merged = engine.mergeSources(off, u);
+  assert.ok(/SOYBEAN OIL/.test(merged.ingredientsText), "USDA ingredients fill the gap");
+  assert.strictEqual(merged.source, "Open Food Facts + USDA");
+  assert.strictEqual(merged.nutriments["energy-kcal_100g"], 470, "OFF nutriments kept");
+  assert.strictEqual(merged.serving_quantity, 28, "USDA serving fills the gap");
+  assert.strictEqual(merged.category, "crackers & crispbreads");
+  assert.strictEqual(merged.name, "Acme Cheese Crackers", "OFF name kept");
+});
+
+test("END-TO-END: USDA-only product scores, scales kcal per serving, drops allergen tail", () => {
+  const off = engine.mapUsdaFood(usdaFixture(), "049000028911");
+  const r = engine.analyze(off, off.ingredientsText, "food");
+  const norms = r.classified.map((c) => c.norm);
+  assert.ok(norms.includes("soybean oil"), "real ingredients classified");
+  // The trailing "CONTAINS WHEAT, MILK, SOY." declaration must not be scored
+  // ("milk" still appears legitimately via the cheese sub-ingredients).
+  assert.ok(!r.classified.some((c) => c.norm === "soy"), "allergen statement not scored");
+  assert.ok(r.score >= 0 && r.score <= 100);
+  // Per-serving calories: 480 kcal/100g at a 28 g serving ≈ 134 kcal.
+  assert.strictEqual(engine.computeKcal(off), 134);
+});
