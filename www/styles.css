@@ -588,3 +588,16 @@ button, .chip, .tab, .tabitem, .seg-btn, .back, .step-btn, .search-go, [role="bu
   background: var(--glass2); border: 1px solid var(--brd); }
 .cmp-chip.neg { color: var(--bad); border-color: rgba(255,77,77,0.28); background: rgba(255,77,77,0.09); }
 .cmp-none { color: var(--mut); font-weight: 700; }
+
+/* ---- SVG icon sizing for contexts that previously used emoji ---- */
+.panel-h .ic { width: 14px; height: 14px; flex-shrink: 0; }
+.srch-img.ph .ic { width: 22px; height: 22px; color: var(--mut); opacity: 0.75; }
+.phead-img.ph .ic { width: 30px; height: 30px; color: var(--mut); opacity: 0.75; }
+.cmp-img.ph .ic { width: 26px; height: 26px; color: var(--mut); opacity: 0.75; }
+.photo-illu { display: flex; justify-content: center; }
+.photo-illu .ic { width: 46px; height: 46px; color: var(--mut); opacity: 0.8; stroke-width: 1.6; }
+.alert .ic { width: 15px; height: 15px; vertical-align: -2px; margin-right: 4px; }
+.cmp-crown .ic { width: 18px; height: 18px; }
+.torch-btn .ic { width: 22px; height: 22px; }
+.ob-feat .ic { width: 20px; height: 20px; flex-shrink: 0; color: var(--accent); }
+.research-btn .ic, .cmp-btn .ic { width: 16px; height: 16px; vertical-align: -3px; margin-right: 2px; }

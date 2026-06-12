@@ -750,3 +750,46 @@ test("personalAlerts still catches a real allergen hit", () => {
   assert.strictEqual(alerts.length, 1);
   assert.strictEqual(alerts[0].key, "egg");
 });
+
+/* ---------------- parsing hardening: only real ingredients survive */
+test("trailing MAY CONTAIN advisory cannot leak fake ingredients", () => {
+  const items = engine.parseIngredients("Sugar, Salt. MAY CONTAIN PEANUTS, TREE NUTS, MILK.");
+  const norms = items.map((x) => x.norm);
+  assert.deepStrictEqual(norms, ["sugar", "salt"]);
+});
+
+test("trailing CONTAINS allergen statement is cut, 2%-or-less list is kept", () => {
+  const cut = engine.parseIngredients("Wheat flour, palm oil. Contains wheat and soy.");
+  assert.deepStrictEqual(cut.map((x) => x.norm), ["wheat flour", "palm oil"]);
+  // The mid-list "contains less than 2% of" form introduces REAL ingredients.
+  const kept = engine.parseIngredients("Water, contains less than 2% of: salt, citric acid");
+  const norms = kept.map((x) => x.norm);
+  assert.ok(norms.includes("salt"));
+  assert.ok(norms.includes("citric acid"));
+});
+
+test("manufacturer / date trailing lines are cut before splitting", () => {
+  const items = engine.parseIngredients("Oats, honey. Distributed by Acme Foods, Springfield, IL. Best if used by 2026.");
+  assert.deepStrictEqual(items.map((x) => x.norm), ["oats", "honey"]);
+});
+
+test("OCR-confused INGREDIENTS headers are stripped wherever they appear", () => {
+  ["1NGREDIENTS: Water, Sugar", "lngredients: Water, Sugar", "INGREDIENTS Water, Sugar"].forEach((t) => {
+    const norms = engine.parseIngredients(t).map((x) => x.norm);
+    assert.deepStrictEqual(norms, ["water", "sugar"], "failed for: " + t);
+  });
+});
+
+test("connector debris from parenthetical expansion is cleaned", () => {
+  const items = engine.parseIngredients("Whey (from milk), salt");
+  const norms = items.map((x) => x.norm);
+  assert.ok(norms.includes("whey"));
+  assert.ok(norms.includes("milk"), "(from milk) should read as 'milk'");
+  assert.ok(!norms.includes("from milk"));
+  assert.ok(!norms.some((n) => /^(and|or|of|from|with)$/.test(n)), "no bare connectors");
+});
+
+test("allergen-statement cut is reported in ignored fragments", () => {
+  const parsed = engine.parseIngredientsDetailed("Sugar, salt. Contains milk, soy.");
+  assert.ok(parsed.ignored.some((x) => x.reason === "allergen statement"));
+});

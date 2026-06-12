@@ -3,7 +3,7 @@
   "use strict";
 
   // Keep in sync with package.json "version" (stamped into the IPA by CI).
-  var APP_VERSION = "1.3.0";
+  var APP_VERSION = "1.4.0";
 
   var DATA = window.CB_DATA;
   var COS = window.CB_DATA_COSMETICS || null;
@@ -181,16 +181,16 @@
   var STATUS_GROUPS = ["avoid", "caution", "limit", "unknown", "good"];
   // Human label + emoji per product family for the result-screen type badge.
   var PROD_TYPE_LABEL = {
-    food: ["🍽", "Food"], petfood: ["🐾", "Pet food"],
-    beauty: ["🧴", "Beauty / personal care"], household: ["🧽", "Household / other"]
+    food: "Food", petfood: "Pet food",
+    beauty: "Beauty / personal care", household: "Household / other"
   };
   function prodTypeBadge(t) {
     var m = PROD_TYPE_LABEL[t] || PROD_TYPE_LABEL.household;
-    return '<div class="ptype-badge" data-ptype="' + esc(t || "food") + '">' + m[0] + ' ' + m[1] + '</div>';
+    return '<div class="ptype-badge" data-ptype="' + esc(t || "food") + '">' + m + '</div>';
   }
   // Certified-only kosher chip (shown only when Open*Facts carries a kosher label).
   function kosherBadge() {
-    return '<div class="kosher-badge" title="Certified kosher per product label data">\u2721 Certified Kosher</div>';
+    return '<div class="kosher-badge" title="Certified kosher per product label data">Kosher certified</div>';
   }
 
   // Ingredient-detail / nutrition / scoring all live in the engine now.
@@ -1086,8 +1086,8 @@
     var r = state.research;
     if (!r || r.term !== d.title) return "";
     if (r.loading) return '<div class="research glass"><div class="spinner small"></div><div class="rh">Researching “' + esc(d.title) + '” online…</div></div>';
-    if (r.error || !r.data) return '<div class="research glass"><div class="rh">🔎 No public summary found for “' + esc(d.title) + '” yet.</div></div>';
-    return '<div class="research glass"><div class="rh">🔎 Researched · Wikipedia</div>' +
+    if (r.error || !r.data) return '<div class="research glass"><div class="rh">No public summary found for “' + esc(d.title) + '” yet.</div></div>';
+    return '<div class="research glass"><div class="rh">Researched · Wikipedia</div>' +
       (r.data.description ? '<div class="rdesc">' + esc(r.data.description) + '</div>' : "") +
       '<p>' + esc(r.data.extract) + '</p>' +
       (r.data.url ? '<a class="rlink" href="' + esc(r.data.url) + '" target="_blank" rel="noopener">Read more on Wikipedia ›</a>' : "") +
@@ -1110,7 +1110,15 @@
     camera: '<path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.5"/>',
     keypad: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h.01M12 7h.01M16 7h.01M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01"/>',
     tag: '<path d="M3 12l9-9 9 9-9 9z"/><circle cx="8.5" cy="8.5" r="1.4"/>',
-    fork: '<path d="M7 3v7a2 2 0 0 0 2 2v9M5 3v4M9 3v4M17 3c-1.5 0-2.5 2-2.5 5s1 4 2.5 4 2.5-1 2.5-4-1-5-2.5-5zM17 16v5"/>'
+    fork: '<path d="M7 3v7a2 2 0 0 0 2 2v9M5 3v4M9 3v4M17 3c-1.5 0-2.5 2-2.5 5s1 4 2.5 4 2.5-1 2.5-4-1-5-2.5-5zM17 16v5"/>',
+    book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/>',
+    box: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5"/><path d="M12 12v9"/>',
+    flash: '<path d="M13 2L5 13h5l-1 9 8-11h-5z"/>',
+    swap: '<path d="M7 16l-4-4 4-4"/><path d="M3 12h18"/><path d="M17 8l4 4-4 4"/>',
+    crown: '<path d="M3 8.5l4.5 3.5L12 5l4.5 7L21 8.5V17H3z"/>',
+    alert: '<path d="M12 3.5l9.5 16.5h-19z"/><path d="M12 10v4.5"/><path d="M12 17.6h.01"/>',
+    check: '<path d="M4 12.5l5 5L20 6.5"/>',
+    up: '<path d="M12 19V5"/><path d="M5 12l7-7 7 7"/>'
   };
   function icon(n, cls) { return '<svg class="ic' + (cls ? " " + cls : "") + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + (ICONS[n] || "") + '</svg>'; }
 
@@ -1209,7 +1217,7 @@
       '<button class="big-btn" data-act="scan">' + icon("scan") + ' Scan a barcode</button>' +
       '<div class="dual"><button class="ghost-btn" data-act="addPhoto">' + icon("tag") + ' Add by photo</button>' +
       '<button class="ghost-btn" data-act="manual">' + icon("keypad") + ' Enter code</button></div>' +
-      '<button class="ghost-btn" data-act="encyclopedia">📚 Ingredient encyclopedia</button>' +
+      '<button class="ghost-btn" data-act="encyclopedia">' + icon("book") + ' Ingredient encyclopedia</button>' +
       (recent.length ? ('<div class="section-title">Recent scans</div>' + recent.map(historyRow).join("")) :
         '<div class="empty">' + illus("scan") + 'No scans yet.<br>Scan or search your first product above.</div>') +
       '</div>';
@@ -1229,11 +1237,11 @@
         '<span class="scan-corner bl"></span><span class="scan-corner br"></span>' +
         '<div class="scan-laser"></div></div>' +
       '<div class="scan-flash" id="scanFlash"></div>' +
-      '<button class="torch-btn" id="torchBtn" data-act="torch" aria-label="Toggle flashlight" hidden>🔦</button>' +
+      '<button class="torch-btn" id="torchBtn" data-act="torch" aria-label="Toggle flashlight" hidden>' + icon("flash") + '</button>' +
       '<div class="scan-status" id="status">' + esc(state.statusMsg) + '</div>' +
       '<div class="scan-hint">Hold steady — the barcode scans automatically. Trouble? Snap a photo below for a sharper read.</div>' +
       '<div class="scan-actions">' +
-        '<label class="big-btn photo-cap"><input id="bcphoto" type="file" accept="image/*" capture="environment" hidden> 📷 Take a photo of the barcode</label>' +
+        '<label class="big-btn photo-cap"><input id="bcphoto" type="file" accept="image/*" capture="environment" hidden>' + icon("camera") + ' Take a photo of the barcode</label>' +
         '<button class="link-btn" data-act="manual">Enter code manually</button>' +
         '<button class="cancel-btn" data-act="home">Cancel</button>' +
       '</div>' +
@@ -1268,7 +1276,7 @@
       var needsScan = !offHasFullIngredients(o);
       var sub = needsScan ? "Needs ingredient scan - tap to scan label" : esc(o.brand || o.source);
       return '<div class="row card tappable' + (needsScan ? " scan-needed" : "") + '" data-search-idx="' + i + '">' +
-        (o.image ? '<img class="srch-img" src="' + esc(o.image) + '" alt="">' : '<div class="srch-img ph">🥫</div>') +
+        (o.image ? '<img class="srch-img" src="' + esc(o.image) + '" alt="">' : '<div class="srch-img ph">' + icon("box") + '</div>') +
         '<div class="row-main"><div class="row-title">' + esc(o.name) + '</div>' +
         '<div class="row-sub">' + typeTag + (typeTag && sub ? " · " : "") + sub + '</div></div>' +
         '<div class="chev">›</div></div>';
@@ -1309,7 +1317,7 @@
       '<div class="hero glass" style="--c:' + c + '">' +
         '<button class="fav-btn' + (fav ? " on" : "") + '" data-fav="1" aria-label="Favorite">' + (fav ? "★" : "☆") + '</button>' +
         '<div class="product-head">' +
-          (p.image ? '<img class="phead-img" src="' + esc(p.image) + '" alt="">' : '<div class="phead-img ph" id="pheadPh">🥫</div>') +
+          (p.image ? '<img class="phead-img" src="' + esc(p.image) + '" alt="">' : '<div class="phead-img ph" id="pheadPh">' + icon("box") + '</div>') +
           '<div class="phead-txt"><div class="phead-name">' + esc(p.name) + '</div>' +
           '<div class="phead-brand">' + esc(p.brand || "") + '</div>' +
           '<div class="phead-src">via ' + esc(p.source) + '</div>' +
@@ -1334,11 +1342,11 @@
       (function () {
         var negHtml = concernRows(p) +
           (n.negatives || []).filter(function (r) { return r.label !== "Additives"; }).map(brkRow).join("");
-        return negHtml ? '<div class="panel glass"><div class="panel-h neg"><span>⚠</span> Negatives</div>' + negHtml + '</div>' : "";
+        return negHtml ? '<div class="panel glass"><div class="panel-h neg">' + icon("alert") + ' Negatives</div>' + negHtml + '</div>' : "";
       })() +
-      (n.positives && n.positives.length ? '<div class="panel glass"><div class="panel-h pos"><span>✓</span> Positives</div>' + n.positives.map(brkRow).join("") + '</div>' : "") +
+      (n.positives && n.positives.length ? '<div class="panel glass"><div class="panel-h pos">' + icon("check") + ' Positives</div>' + n.positives.map(brkRow).join("") + '</div>' : "") +
       (alerts.length ? ('<div class="alerts">' + alerts.map(function (a) {
-        return '<div class="alert">⚠️ <b>' + esc(cap(a.key)) + '</b>: contains ' + esc(a.hits.join(", ")) + '</div>';
+        return '<div class="alert">' + icon("alert") + ' <b>' + esc(cap(a.key)) + '</b>: contains ' + esc(a.hits.join(", ")) + '</div>';
       }).join("") + '</div>') : "") +
       (p.isFood ?
         '<div class="logseg">' +
@@ -1346,7 +1354,7 @@
           '<button class="seg-btn' + (p.logged !== "eaten" ? " on" : "") + '" data-log="checked">' + icon("search") + ' Just checking</button>' +
         '</div>' : "") +
       (p.isFood ? portionBlock(p) : "") +
-      '<button class="ghost-btn cmp-btn" data-act="comparePick">⇄ Compare with another product</button>' +
+      '<button class="ghost-btn cmp-btn" data-act="comparePick">' + icon("swap") + ' Compare with another product</button>' +
       altsBlock(p) +
       nutritionTable(p) +
       '<div class="panel glass"><div class="panel-h">Ingredients <span class="cnt">' + p.classified.length + '</span></div>' +
@@ -1389,16 +1397,16 @@
   function altsBlock(p) {
     var a = state.alts;
     if (!a || a.forId !== p.id) return "";
-    if (a.loading) return '<div class="panel glass"><div class="panel-h pos"><span>↑</span> Better choices</div>' +
+    if (a.loading) return '<div class="panel glass"><div class="panel-h pos">' + icon("up") + ' Better choices</div>' +
       '<div class="lrow"><div class="spinner small"></div><div class="row-main"><div class="row-sub">Finding healthier options in this category…</div></div></div></div>';
     if (!a.list || !a.list.length) return "";
     var rows = a.list.map(function (prod, i) {
       return '<div class="lrow tappable" data-alt="' + i + '">' +
-        (prod.image ? '<img class="srch-img" src="' + esc(prod.image) + '" alt="">' : '<div class="srch-img ph">🥫</div>') +
+        (prod.image ? '<img class="srch-img" src="' + esc(prod.image) + '" alt="">' : '<div class="srch-img ph">' + icon("box") + '</div>') +
         '<div class="row-main"><div class="row-title">' + esc(prod.name) + '</div><div class="row-sub">' + esc(prod.brand || "") + '</div></div>' +
         '<div class="mini-score" style="background:' + scoreColor(prod.badge.cls) + '">' + prod.score + '</div></div>';
     }).join("");
-    return '<div class="panel glass"><div class="panel-h pos"><span>↑</span> Better choices in this category</div>' + rows + '</div>';
+    return '<div class="panel glass"><div class="panel-h pos">' + icon("up") + ' Better choices in this category</div>' + rows + '</div>';
   }
   // Candidates to compare the current product against: everything the user has
   // seen (history + favorites) plus any loaded alternatives, minus the product
@@ -1421,7 +1429,7 @@
     var cands = compareCandidates(p); state.compareCands = cands;
     var rows = cands.length ? cands.map(function (o, i) {
       return '<div class="lrow tappable" data-cmp="' + i + '">' +
-        (o.image ? '<img class="srch-img" src="' + esc(o.image) + '" alt="">' : '<div class="srch-img ph">🥫</div>') +
+        (o.image ? '<img class="srch-img" src="' + esc(o.image) + '" alt="">' : '<div class="srch-img ph">' + icon("box") + '</div>') +
         '<div class="row-main"><div class="row-title">' + esc(o.name) + '</div><div class="row-sub">' + esc(o.brand || "") + '</div></div>' +
         '<div class="mini-score" style="background:' + scoreColor(o.badge.cls) + '">' + o.score + '</div></div>';
     }).join("") : '<div class="empty small">Scan or save another product first, then come back to compare it here.</div>';
@@ -1432,7 +1440,7 @@
     var c = scoreColor(p.badge.cls);
     return '<div class="cmp-col' + (mark ? " win" : "") + '">' +
       (mark ? '<div class="cmp-crown">' + mark + '</div>' : '') +
-      (p.image ? '<img class="cmp-img" src="' + esc(p.image) + '" alt="">' : '<div class="cmp-img ph">🥫</div>') +
+      (p.image ? '<img class="cmp-img" src="' + esc(p.image) + '" alt="">' : '<div class="cmp-img ph">' + icon("box") + '</div>') +
       '<div class="cmp-name">' + esc(p.name) + '</div>' +
       '<div class="score-ring cmp-ring" style="--c:' + c + ';--p:' + p.score + '"><div class="score-num">' + p.score + '</div></div>' +
       '<div class="badge ' + p.badge.cls + '">' + esc(p.badge.label) + '</div>' +
@@ -1465,9 +1473,9 @@
 
     return '<div class="screen result">' + backBar("Comparison") +
       '<div class="cmp-cols">' +
-        compareCol(a, d.better === "a" ? "♔" : "") +
+        compareCol(a, d.better === "a" ? icon("crown") : "") +
         '<div class="cmp-vs-badge">VS</div>' +
-        compareCol(b, d.better === "b" ? "♔" : "") +
+        compareCol(b, d.better === "b" ? icon("crown") : "") +
       '</div>' +
       '<div class="panel glass"><div class="panel-h">Verdict</div>' +
         '<div class="cmp-verdict">' + verdict + '</div>' +
@@ -1475,7 +1483,7 @@
         '<div class="cmp-vals"><span class="' + (d.additiveCount.a < d.additiveCount.b ? "cmp-good" : "") + '">' + d.additiveCount.a + '</span>' +
         '<span class="cmp-vs">vs</span><span class="' + (d.additiveCount.b < d.additiveCount.a ? "cmp-good" : "") + '">' + d.additiveCount.b + '</span></div></div>' +
       '</div>' +
-      '<div class="panel glass"><div class="panel-h neg"><span>⚠</span> Negatives</div>' +
+      '<div class="panel glass"><div class="panel-h neg">' + icon("alert") + ' Negatives</div>' +
         '<div class="lrow"><div class="row-main"><div class="row-title">Only ' + esc(a.name) + '</div></div><div class="cmp-chips">' + chipList(d.negatives.aOnly, "neg") + '</div></div>' +
         '<div class="lrow"><div class="row-main"><div class="row-title">Only ' + esc(b.name) + '</div></div><div class="cmp-chips">' + chipList(d.negatives.bOnly, "neg") + '</div></div>' +
         '<div class="lrow"><div class="row-main"><div class="row-title">In both</div></div><div class="cmp-chips">' + chipList(d.negatives.shared, "neg") + '</div></div>' +
@@ -1561,7 +1569,7 @@
         return '<button class="tab' + (state.ingTab === t[0] ? " on" : "") + '" data-tab="' + t[0] + '">' + t[1] + '</button>';
       }).join("") + '</div>' +
       '<div class="tab-body">' + body + '</div>' +
-      '<button class="ghost-btn research-btn" data-research="' + esc(d.title) + '">🔎 Research this ingredient online</button>' +
+      '<button class="ghost-btn research-btn" data-research="' + esc(d.title) + '">' + icon("search") + ' Research this ingredient online</button>' +
       researchBlock(d) +
       '<div class="disclaimer">Educational summary, not medical advice.</div></div>';
   }
@@ -1591,7 +1599,7 @@
     var source = eatenMode ? state.history.filter(function (p) { return p.logged === "eaten"; }) : state.history;
     var chips = '<div class="chips">' +
       '<button class="chip' + (!eatenMode ? " on" : "") + '" data-ins="all">All scans</button>' +
-      '<button class="chip' + (eatenMode ? " on" : "") + '" data-ins="eaten">🍽 Eaten (' + eatenCount + ')</button></div>';
+      '<button class="chip' + (eatenMode ? " on" : "") + '" data-ins="eaten">Eaten (' + eatenCount + ')</button></div>';
     var s = computeInsights(source);
     var today = todayCard();
     var trends = trendsCard();
@@ -1602,7 +1610,7 @@
     var bar = '<div class="distbar">' + seg("exc", s.dist.exc) + seg("good", s.dist.good) + seg("mid", s.dist.mid) + seg("bad", s.dist.bad) + '</div>';
     var topHtml = s.top.length ? s.top.map(function (f) {
       return '<div class="lrow"><div class="row-main"><div class="row-title">' + esc(f.name) + '</div></div><div class="status-tag caution">' + f.count + '×</div></div>';
-    }).join("") : '<div class="lrow"><div class="row-main"><div class="row-sub">No flagged additives yet 🎉</div></div></div>';
+    }).join("") : '<div class="lrow"><div class="row-main"><div class="row-sub">No flagged additives yet</div></div></div>';
     return '<div class="screen">' +
       '<header class="hd"><div class="logo">Insights</div><div class="sub">Your diet & scanning habits</div></header>' + today + trends + chips +
       '<div class="stat-grid">' +
@@ -1627,10 +1635,10 @@
       '<div class="ob-hero"><div class="ob-logo">' + brandLogo(88) + '</div><div class="logo">NutriCheck</div>' +
       '<div class="sub">Scan any food and instantly see what\'s really inside — every additive rated, explained and researched.</div></div>' +
       '<div class="ob-feats">' +
-        '<div class="ob-feat">📷 <span>Scan or search any product</span></div>' +
-        '<div class="ob-feat">🚦 <span>0–100 score with a clear verdict</span></div>' +
-        '<div class="ob-feat">🧪 <span>Every ingredient explained, with studies</span></div>' +
-        '<div class="ob-feat">↑ <span>Better choices when a product scores low</span></div>' +
+        '<div class="ob-feat">' + icon("scan") + '<span>Scan or search any product</span></div>' +
+        '<div class="ob-feat">' + icon("chart") + '<span>0–100 score with a clear verdict</span></div>' +
+        '<div class="ob-feat">' + icon("book") + '<span>Every ingredient explained, with studies</span></div>' +
+        '<div class="ob-feat">' + icon("up") + '<span>Better choices when a product scores low</span></div>' +
       '</div>' +
       '<div class="section-title">Any diet needs? (optional)</div>' + toggles +
       '<button class="big-btn" data-act="finishOnboard">Start scanning →</button></div>';
@@ -1755,8 +1763,8 @@
       "We couldn't read the ingredients for this barcode. Take a clear photo of the <b>ingredients list</b> and we'll read it." :
       "Take a clear, well-lit photo of the <b>ingredients list</b> on the package.";
     return '<div class="screen">' + backBar("Add by photo") +
-      '<div class="photo-card glass"><div class="photo-illu">🏷️</div><p>' + note + '</p>' +
-      '<label class="big-btn"><input id="photo" type="file" accept="image/*" capture="environment" hidden> 📸 Take / choose photo</label>' +
+      '<div class="photo-card glass"><div class="photo-illu">' + icon("camera") + '</div><p>' + note + '</p>' +
+      '<label class="big-btn"><input id="photo" type="file" accept="image/*" capture="environment" hidden>' + icon("camera") + ' Take or choose photo</label>' +
       '<div class="hint">Fill the frame with just the ingredients text for the best read.</div></div>' +
       '<div id="ocrPreview"></div></div>';
   }

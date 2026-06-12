@@ -87,7 +87,56 @@
     "potassium": 1, "sodium": 1, "cholesterol": 1, "phosphorus": 1, "magnesium": 1,
     "fat": 1, "total fat": 1, "saturated fat": 1, "trans fat": 1, "calcium": 1
   };
-  var LABEL_NOISE_RE = /\b(allergy advice|allergen information|warning|warnings|directions|instructions|storage instructions|store in a cool|keep refrigerated|recycle|scan here|learn more|customer service|consumer information|certified organic|non gmo project verified|gluten free|no artificial|good source of|excellent source of|phone|telephone|copyright|trademark|lot code|batch code|barcode|the composition of the product|for more details|more details|niet ionogene oppervlakteactieve stoffen|oppervlakteactieve stoffen|info|pepsico)\b/i;
+  var LABEL_NOISE_RE = /\b(allergy advice|allergen information|warning|warnings|directions|instructions|storage instructions|store in a cool|keep refrigerated|keep frozen|recycle|scan here|learn more|customer service|consumer information|certified organic|non gmo project verified|gluten free|no artificial|good source of|excellent source of|phone|telephone|copyright|trademark|lot code|batch code|barcode|the composition of the product|for more details|more details|niet ionogene oppervlakteactieve stoffen|oppervlakteactieve stoffen|info|pepsico)\b/i;
+  // Sections that always FOLLOW the ingredient list on a label ("MAY CONTAIN…",
+  // "DISTRIBUTED BY…", "BEST IF USED BY…"). Everything from these markers on is
+  // cut BEFORE splitting — fragment-level filtering alone leaks the tail (e.g.
+  // "may contain peanuts, tree nuts" used to drop only the first fragment and
+  // keep "tree nuts" as a fake ingredient).
+  // Only HARD markers cut — phrases that never appear mid-list. Softer noise
+  // ("store in a cool place", "use by") is left to fragment-level filtering so
+  // real ingredients OCR'd after it still survive.
+  var TRAILING_SECTION_RE = /\b(may contain|allergy advice|allergen (?:information|advice|statement)|manufactured (?:by|for|in)|distributed by|dist\.? by|imported by|best (?:before|by|if used)|nutrition facts)\b/i;
+  // Vocabulary of a "CONTAINS: WHEAT, MILK, SOY." allergen declaration. When a
+  // "contains…" tail is made only of these words it's an allergen statement
+  // (a legal duplicate of allergens already in the list), not new ingredients.
+  var ALLERGEN_WORDS = {
+    wheat: 1, milk: 1, soy: 1, soya: 1, soybean: 1, soybeans: 1, egg: 1, eggs: 1,
+    peanut: 1, peanuts: 1, tree: 1, nut: 1, nuts: 1, almond: 1, almonds: 1,
+    cashew: 1, cashews: 1, pecan: 1, pecans: 1, walnut: 1, walnuts: 1,
+    hazelnut: 1, hazelnuts: 1, pistachio: 1, pistachios: 1, macadamia: 1,
+    coconut: 1, fish: 1, shellfish: 1, crustacean: 1, crustaceans: 1, mollusc: 1,
+    molluscs: 1, mollusk: 1, mollusks: 1, sesame: 1, mustard: 1, celery: 1,
+    sulphites: 1, sulfites: 1, sulphite: 1, sulfite: 1, lupin: 1, gluten: 1,
+    dairy: 1, and: 1, or: 1, of: 1, traces: 1, ingredients: 1, a: 1, an: 1
+  };
+  // Fragments made ONLY of connector words ("and", "from", "of") are split
+  // debris, never ingredients.
+  var STOPWORD_FRAG = {
+    and: 1, or: 1, of: 1, with: 1, the: 1, a: 1, an: 1, "in": 1, "for": 1,
+    from: 1, to: 1, as: 1, by: 1, each: 1, other: 1, its: 1, on: 1, made: 1
+  };
+  function isStopwordFragment(n) {
+    var toks = tokenize(n);
+    for (var i = 0; i < toks.length; i++) if (!STOPWORD_FRAG[toks[i]]) return false;
+    return toks.length > 0;
+  }
+  // Index where a trailing "CONTAINS <allergens>." declaration starts, or -1.
+  // "contains less than 2% of" (real ingredients follow) never matches.
+  function allergenStatementIndex(text) {
+    var re = /\bcontains\b[:\s]/gi, m;
+    while ((m = re.exec(text))) {
+      var tail = text.slice(m.index + m[0].length);
+      if (/^\s*(?:less|fewer|2\s*%|\d)/i.test(tail)) continue;
+      var stmt = tail.split(/[.\n\r]/)[0];
+      var toks = tokenize(norm(stmt));
+      if (!toks.length || toks.length > 14) continue;
+      var allAllergen = true;
+      for (var i = 0; i < toks.length; i++) if (!ALLERGEN_WORDS[toks[i]]) { allAllergen = false; break; }
+      if (allAllergen) return m.index;
+    }
+    return -1;
+  }
   function isNonIngredient(n) {
     return NON_INGREDIENT_RE.test(n) || COMMENTARY_RE.test(n) || LABEL_NOISE_RE.test(n) ||
       NUTRITION_VALUE_RE.test(n) || NUTRIENT_ONLY[n] === 1;
@@ -116,11 +165,31 @@
     var trailingCommentary = commentaryMatch ? sourceText.slice(commentaryMatch.index).trim() : "";
     // Some crowd-sourced product records contain an ingredient list followed
     // by prose or an AI-generated explanation. Never score that commentary.
-    var cleaned = sourceText.split(COMMENTARY_RE)[0]
+    var body = sourceText.split(COMMENTARY_RE)[0];
+    var preIgnored = [];
+    // Cut trailing label sections (allergen advisories, manufacturer/date
+    // lines) BEFORE splitting so their inner commas can't leak fake ingredients.
+    var cutAt = -1;
+    var tm = TRAILING_SECTION_RE.exec(body);
+    if (tm) cutAt = tm.index;
+    var ai = allergenStatementIndex(body);
+    if (ai !== -1 && (cutAt === -1 || ai < cutAt)) cutAt = ai;
+    if (cutAt > 0) {
+      var cutText = body.slice(cutAt).trim();
+      if (cutText) preIgnored.push({
+        raw: cutText.replace(/\s+/g, " ").slice(0, 160), norm: norm(cutText.slice(0, 160)),
+        reason: /^contains/i.test(cutText) || /^may contain|^allerg/i.test(cutText) ? "allergen statement" : "label text"
+      });
+      body = body.slice(0, cutAt);
+    }
+    var cleaned = body
       .replace(/\b(?:https?:\/\/|www\.)\S+/gi, " ")
       .replace(/\S+@\S+\.\S+/g, " ")
       .replace(/\b[\w.-]+\.(?:com|net|org|co|us)\b/gi, " ")
-      .replace(/\b(?:ingredients?|ingredienten|ingredientenlijst)(?:\s+list)?:?/i, " ")
+      // OCR misreads the INGREDIENTS header as "1NGREDIENTS"/"lngredients";
+      // strip every header occurrence, not just the first.
+      .replace(/\b[il1|]ngred[il1|]?ents?(?:\s+list)?\s*:?/gi, " ")
+      .replace(/\b(?:ingredienten|ingredientes|ingredientenlijst)\s*:?/gi, " ")
       .replace(/contains( 2% or less of| less than 2% of)?:?/ig, ",")
       // Expand parenthetical / bracketed sub-ingredients into their own items so
       // hidden flags inside a parent (e.g. "enriched flour (niacin, reduced iron)",
@@ -130,15 +199,19 @@
     // newlines, bullets/middots, pipes, slashes and asterisks — plus a period
     // that is NOT part of a decimal number. This catches labels that wrap lines
     // or use dots/bullets between ingredients so we read the WHOLE list.
-    var parts = cleaned.split(/[,;\n\r•·‣▪●∙|/*]+|\.(?!\d)/), out = [], ignored = [], seen = {};
+    var parts = cleaned.split(/[,;\n\r•·‣▪●∙|/*]+|\.(?!\d)/), out = [], ignored = preIgnored, seen = {};
     if (trailingCommentary) ignored.push({
       raw: trailingCommentary.slice(0, 180), norm: norm(trailingCommentary.slice(0, 180)), reason: "explanatory prose"
     });
     for (var i = 0; i < parts.length; i++) {
       var raw = parts[i].replace(/\([^)]*\)/g, "").trim();
+      // Strip leading connector debris from parenthetical expansion, so
+      // "(from milk)" reads as the ingredient "milk", not "from milk".
+      raw = raw.replace(/^(?:(?:made\s+)?(?:from|with)|and|or)\s+/i, "").trim();
       if (!raw) continue;
       var n = norm(raw);
       if (!n || n.length < 2) continue;
+      if (isStopwordFragment(n)) continue; // connector debris, drop silently
       var reason = ignoredReason(raw, n);
       if (reason) {
         if (ignored.length < 30) ignored.push({ raw: raw.replace(/\s+/g, " ").trim(), norm: n, reason: reason });
