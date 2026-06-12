@@ -66,10 +66,16 @@ jobs:
             || /usr/libexec/PlistBuddy -c "Add :UIRequiresFullScreen bool true" "$PLIST"
           echo "== Orientation ==" && /usr/libexec/PlistBuddy -c "Print :UISupportedInterfaceOrientations" "$PLIST"
 
-      # Generate the custom NutriCheck app icon from assets/logo.png into the
-      # iOS AppIcon set. Non-fatal: if it fails the build still ships.
+      # Generate and verify the custom NutriCheck icon. Icon generation is
+      # required so an IPA can never silently ship with Capacitor's default.
       - name: Generate app icon
-        run: npx --yes @capacitor/assets@3 generate --ios --assetPath assets || echo "icon generation skipped"
+        run: |
+          npx --yes @capacitor/assets@3 generate --ios --assetPath assets
+          APPICON=ios/App/App/Assets.xcassets/AppIcon.appiconset
+          test -d "$APPICON"
+          ICON_COUNT=$(find "$APPICON" -type f -name '*.png' | wc -l | tr -d ' ')
+          echo "Generated $ICON_COUNT iOS app-icon images"
+          test "$ICON_COUNT" -ge 1
 
       - name: Install CocoaPods dependencies
         run: |
