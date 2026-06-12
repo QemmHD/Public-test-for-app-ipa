@@ -637,3 +637,14 @@ test("real snack-label terms from scans no longer fall through as unknown", () =
     assert.notStrictEqual(c.group, "unknown", name + " must not be unknown");
   });
 });
+
+test("common label forms and vague functional classes are catalogued", () => {
+  ["milk powder", "whey protein concentrate", "nonfat dry milk", "dehydrated onion", "tomato powder"].forEach((name) => {
+    assert.strictEqual(engine.classify(engine.norm(name), name, "food").status, "good", name);
+  });
+  ["emulsifiers", "stabilizers", "raising agents", "flavour enhancers", "anti-caking agents"].forEach((name) => {
+    const c = engine.classify(engine.norm(name), name, "food");
+    assert.strictEqual(c.status, "caution", name);
+    assert.ok(c.additive && /^generic/.test(c.additive.id), name + " should request exact compound details");
+  });
+});

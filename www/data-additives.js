@@ -1740,10 +1740,46 @@ var CB_DATA = (function () {
   }
 
   // Recognizable label-form ingredients seen in processed-food ingredient lists.
-  const labelFormClean = ["whey powder", "sweet whey powder", "cheese powder", "cheddar cheese powder", "gluten", "wheat gluten", "vital wheat gluten"];
+  const labelFormClean = [
+    "whey", "whey powder", "sweet whey powder", "whey protein", "whey protein concentrate",
+    "cheese powder", "cheddar cheese powder", "parmesan cheese powder", "milk powder",
+    "whole milk powder", "skim milk powder", "nonfat dry milk", "dry milk", "milk solids",
+    "buttermilk powder", "cream powder", "cheese cultures", "gluten", "wheat gluten",
+    "vital wheat gluten", "corn flour", "maize flour", "rice powder", "onion flakes",
+    "dehydrated onion", "dehydrated garlic", "tomato powder", "lemon powder", "herb extract"
+  ];
   for (var lc = 0; lc < labelFormClean.length; lc++) {
     if (cleanIngredients.indexOf(labelFormClean[lc]) === -1) cleanIngredients.push(labelFormClean[lc]);
   }
+
+  // Recognize incomplete functional-class titles, but keep them as strict
+  // blockers until lookup or a clearer scan identifies the actual compound.
+  const genericFunctionalClasses = [
+    ["emulsifier", "Emulsifier"], ["emulsifiers", "Emulsifier"],
+    ["stabilizer", "Stabilizer"], ["stabilizers", "Stabilizer"],
+    ["stabiliser", "Stabilizer"], ["stabilisers", "Stabilizer"],
+    ["thickener", "Thickener"], ["thickeners", "Thickener"],
+    ["preservative", "Preservative"], ["preservatives", "Preservative"],
+    ["raising agent", "Raising agent"], ["raising agents", "Raising agent"],
+    ["leavening agent", "Leavening agent"], ["leavening agents", "Leavening agent"],
+    ["flavor enhancer", "Flavor enhancer"], ["flavor enhancers", "Flavor enhancer"],
+    ["flavour enhancer", "Flavor enhancer"], ["flavour enhancers", "Flavor enhancer"],
+    ["anti-caking agent", "Anti-caking agent"], ["anti-caking agents", "Anti-caking agent"],
+    ["humectant", "Humectant"], ["humectants", "Humectant"],
+    ["firming agent", "Firming agent"], ["firming agents", "Firming agent"],
+    ["glazing agent", "Glazing agent"], ["glazing agents", "Glazing agent"]
+  ];
+  genericFunctionalClasses.forEach(function (fc, i) {
+    additives.push({
+      id: "genericfunctional" + i, names: [fc[0]], enumber: "",
+      category: "Undisclosed " + fc[1].toLowerCase(), risk: "caution",
+      summary: "A functional ingredient class is listed without naming the actual compound.",
+      whatIs: fc[1] + " is a label function that may refer to several different food additives.",
+      whyFlagged: "Strict scans require the exact compound. Use online lookup or scan the full label to identify it.",
+      healthRisk: "Depends on the unnamed compound; the main concern is missing ingredient transparency.",
+      studies: []
+    });
+  });
 
   /* Category-level explanations so EVERY ingredient has a meaningful detail
      page even when it isn't one of the individually-written additives. */

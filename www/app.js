@@ -361,13 +361,25 @@
     // source tags its results with the right productType via mapOff(src), so
     // opening a result builds it through the correct (food vs cosmetic) path.
     // A single source failing (timeout / down) must not sink the whole search.
-    var jobs = OFF_SOURCES.map(function (src) {
+    var jobs = [];
+    OFF_SOURCES.forEach(function (src, sourceIndex) {
       var host = src.base.split("/api/")[0];
       var url = host + "/cgi/search.pl?search_terms=" + encodeURIComponent(query) +
         "&search_simple=1&action=process&json=1&page_size=20&fields=" + OFF_FIELDS;
-      return fetchJson(url).then(function (j) {
-        return ((j && j.products) || []).map(function (p) { return mapOff(p, "", src); });
-      }).catch(function () { return []; });
+      var brandUrl = host + "/cgi/search.pl?action=process&json=1&page_size=20&tagtype_0=brands" +
+        "&tag_contains_0=contains&tag_0=" + encodeURIComponent(query) + "&fields=" + OFF_FIELDS;
+      [url, brandUrl].forEach(function (searchUrl, kindIndex) {
+        jobs.push(fetchJson(searchUrl).then(function (j) {
+          return ((j && j.products) || []).map(function (p, resultIndex) {
+            var o = mapOff(p, "", src);
+            if (o) {
+              o._brandHit = kindIndex === 1;
+              o._searchOrder = sourceIndex * 1000 + kindIndex * 100 + resultIndex;
+            }
+            return o;
+          });
+        }).catch(function () { return []; }));
+      });
     });
     return Promise.all(jobs).then(function (lists) {
       var seen = {}, out = [];
@@ -378,6 +390,26 @@
           if (seen[key]) return; seen[key] = 1;
           out.push(o);
         });
+      });
+      out.forEach(function (o) {
+        var q = ENG.norm(query), brand = ENG.norm(o.brand), name = ENG.norm(o.name);
+        var qt = ENG.tokenize(q), bt = ENG.tokenize(brand), nt = ENG.tokenize(name), score = 0;
+        if (brand === q) score += 160;
+        else if (brand.indexOf(q) === 0) score += 120;
+        else if (brand.indexOf(q) !== -1) score += 85;
+        if (name === q) score += 145;
+        else if (name.indexOf(q) === 0) score += 105;
+        else if (name.indexOf(q) !== -1) score += 70;
+        qt.forEach(function (t) {
+          if (bt.indexOf(t) !== -1) score += 24;
+          if (nt.indexOf(t) !== -1) score += 14;
+        });
+        if (o._brandHit) score += 35;
+        if (offHasFullIngredients(o)) score += 8;
+        o._searchRelevance = score;
+      });
+      out.sort(function (a, b) {
+        return b._searchRelevance - a._searchRelevance || a._searchOrder - b._searchOrder;
       });
       return out;
     });
@@ -870,9 +902,15 @@
   function offHasIngredients(off) {
     return !!(off && (off.ingredientsText || (off.additiveCodes && off.additiveCodes.length)));
   }
+  function offHasFullIngredients(off) {
+    return !!(off && off.ingredientsText && off.ingredientsText.replace(/\s/g, "").length >= 3);
+  }
   function openOff(off) {
     if (!off) return;
-    if (!offHasIngredients(off)) { state.pending = { barcode: off.barcode, off: off }; go("addPhoto"); return; }
+    // Search results need a real ingredient list before we rank or score them.
+    // A partial additive tag is useful after a barcode scan, but not enough to
+    // call a lookup result reviewed.
+    if (!offHasFullIngredients(off)) { state.pending = { barcode: off.barcode, off: off }; go("addPhoto"); return; }
     showProduct(buildProduct(off));
   }
 
@@ -1084,6 +1122,15 @@
       (blockers ? '<div class="strict-blockers">' + blockers + '</div>' : "") +
       '</div>';
   }
+  function vagueScanBlock(p) {
+    var vague = (p.classified || []).filter(function (c) {
+      return c.group === "vague" || (c.additive && /^generic/.test(c.additive.id || ""));
+    });
+    if (!vague.length) return "";
+    return '<div class="panel glass vague-scan-panel"><div class="panel-h">More detail needed <span class="cnt">' +
+      vague.length + ' vague</span></div><div class="vague-scan-copy">Tap a vague ingredient below to look it up online, or scan the full label so NutriCheck can identify the exact compounds.</div>' +
+      '<button class="ghost-btn" data-act="scanIngredients">' + icon("camera") + ' Scan full ingredient label</button></div>';
+  }
   function cleanupBlock(p) {
     var ignored = p.ignoredFragments || [];
     if (!ignored.length) return "";
@@ -1164,9 +1211,11 @@
     if (list && list.length && state.searchSort === "health") {
       var rank = { a: 0, b: 1, c: 2, d: 3, e: 4 };
       list.sort(function (x, y) {
+        var knownX = offHasFullIngredients(x), knownY = offHasFullIngredients(y);
+        if (knownX !== knownY) return knownX ? -1 : 1;
         var rx = rank[String(x.nutriscore_grade || "").toLowerCase()]; rx = (rx == null ? 9 : rx);
         var ry = rank[String(y.nutriscore_grade || "").toLowerCase()]; ry = (ry == null ? 9 : ry);
-        return rx - ry;
+        return rx - ry || (y._searchRelevance || 0) - (x._searchRelevance || 0);
       });
     }
     state.searchResults = list; // the click handler indexes into this exact (displayed) array
@@ -1181,8 +1230,9 @@
       // food); show a small type tag on non-food rows so mixed results read clearly.
       var tl = o.productType && o.productType !== "food" && PROD_TYPE_LABEL[o.productType];
       var typeTag = tl ? '<span class="srch-type">' + tl[0] + ' ' + esc(tl[1]) + '</span>' : "";
-      var sub = esc(o.brand || (o.ingredientsText ? "" : "No ingredient data"));
-      return '<div class="row card tappable" data-search-idx="' + i + '">' +
+      var needsScan = !offHasFullIngredients(o);
+      var sub = needsScan ? "Needs ingredient scan - tap to scan label" : esc(o.brand || o.source);
+      return '<div class="row card tappable' + (needsScan ? " scan-needed" : "") + '" data-search-idx="' + i + '">' +
         (o.image ? '<img class="srch-img" src="' + esc(o.image) + '" alt="">' : '<div class="srch-img ph">🥫</div>') +
         '<div class="row-main"><div class="row-title">' + esc(o.name) + '</div>' +
         '<div class="row-sub">' + typeTag + (typeTag && sub ? " · " : "") + sub + '</div></div>' +
@@ -1218,6 +1268,7 @@
     var fav = isFav(p.id);
     return '<div class="screen result">' + backBar("") +
       strictBlock(p) +
+      vagueScanBlock(p) +
       '<div class="hero glass" style="--c:' + c + '">' +
         '<button class="fav-btn' + (fav ? " on" : "") + '" data-fav="1" aria-label="Favorite">' + (fav ? "★" : "☆") + '</button>' +
         '<div class="product-head">' +
@@ -1730,7 +1781,8 @@
         state.ingTab = "what"; state.ingFrom = "result";
         state.research = { term: "", loading: false, data: null, error: false };
         go("ingredient");
-        if (item.status === "unknown") doResearch(state.ingDetail.title);
+        if (item.status === "unknown" || item.group === "vague" || (item.additive && /^generic/.test(item.additive.id || "")))
+          doResearch(state.ingDetail.title);
       }
       return;
     }
@@ -1740,6 +1792,15 @@
     var act = t.dataset.act;
     if (act === "torch") { toggleTorch(); return; }
     if (act === "scan") { haptic("light"); go("scanner"); }
+    else if (act === "scanIngredients") {
+      var cp = state.product || {};
+      state.pending = { barcode: cp.barcode || "", off: {
+        barcode: cp.barcode || "", name: cp.name || "Scanned product", brand: cp.brand || "",
+        image: cp.image || "", category: cp.category || "", productType: cp.productType || "food",
+        source: cp.source || "Ingredient scan", nutriments: cp.nutriments || {}
+      } };
+      go("addPhoto");
+    }
     else if (act === "home") go("home");
     else if (act === "addPhoto") go("addPhoto");
     else if (act === "analyzeOcr") {

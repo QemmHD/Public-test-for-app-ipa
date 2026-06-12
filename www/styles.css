@@ -116,6 +116,8 @@ body::after {
   box-shadow: 0 10px 26px rgba(90,110,255,0.34); }
 .srch-img { width: 48px; height: 48px; border-radius: 12px; object-fit: cover; background: rgba(255,255,255,0.06); flex-shrink: 0; }
 .srch-img.ph { display: flex; align-items: center; justify-content: center; font-size: 22px; }
+.scan-needed { border-color: rgba(255,176,46,.28); }
+.scan-needed .row-sub { color: var(--mid); font-weight: 700; }
 .chev { color: var(--mut); font-size: 24px; flex-shrink: 0; font-weight: 300; }
 
 /* sections / rows */
@@ -460,6 +462,9 @@ body.theme-light .cnt { background: rgba(0,0,0,0.08); }
 .cleanup-chips { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 16px 14px; }
 .cleanup-chips span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   padding: 5px 8px; border-radius: 8px; color: var(--mut); background: var(--glass2); border: 1px solid var(--brd); font-size: 11px; }
+.vague-scan-panel { border-color: rgba(255,176,46,.28); }
+.vague-scan-copy { color: var(--mut); font-size: 13px; line-height: 1.45; padding: 0 16px 6px; }
+.vague-scan-panel .ghost-btn { width: calc(100% - 32px); margin: 8px 16px 15px; color: var(--mid); }
 
 /* ============ accessibility & polish ============ */
 /* Visible keyboard focus ring (does not show on mouse/touch). */
