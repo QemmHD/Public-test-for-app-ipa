@@ -41,7 +41,7 @@
     view: "home", prev: "home",
     product: null, ingDetail: null, ingTab: "what",
     history: [], favorites: [], profile: {}, health: {}, settings: { theme: "dark" }, pending: null, ocrPending: null,
-    searchResults: null, searchRaw: null, searchQuery: "", searchSort: "rel", historyFilter: "all",
+    searchResults: null, searchRaw: null, searchQuery: "", searchSort: "rel", historyFilter: "all", histQuery: "",
     alts: { forId: "", loading: false, list: null }, scoreOpen: false, onboarded: true,
     compareB: null, compareCands: [],
     insightsFilter: "all", editHealth: false, encQuery: "", ingFrom: "result",
@@ -62,6 +62,33 @@
   }
   function saveHealth() { try { localStorage.setItem("cb_health", JSON.stringify(state.health)); } catch (e) {} }
   function saveSettings() { try { localStorage.setItem("cb_settings", JSON.stringify(state.settings)); } catch (e) {} }
+  // Cached products/ingredient lookups expire (30/90-day TTL) but were never
+  // deleted, so the keys piled up until iOS's ~5MB localStorage quota was hit —
+  // at which point EVERY save (history, favorites, settings) starts silently
+  // failing. Sweep expired records at launch and keep the product cache bounded;
+  // `aggressive` shrinks harder when a write has already hit the quota.
+  function pruneCaches(aggressive) {
+    try {
+      var now = Date.now(), del = [], prods = [];
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (!k || (k.indexOf("cb_prod_") !== 0 && k.indexOf("cb_ingredient_") !== 0)) continue;
+        var ttl = k.indexOf("cb_prod_") === 0 ? PROD_TTL : ING_TTL;
+        try {
+          var rec = JSON.parse(localStorage.getItem(k));
+          var ts = (rec && rec.ts) || 0;
+          if (now - ts > ttl) del.push(k);
+          else if (k.indexOf("cb_prod_") === 0) prods.push({ k: k, ts: ts });
+        } catch (e) { del.push(k); }
+      }
+      var max = aggressive ? 60 : 250;
+      if (prods.length > max) {
+        prods.sort(function (a, b) { return a.ts - b.ts; });
+        prods.slice(0, prods.length - max).forEach(function (p) { del.push(p.k); });
+      }
+      del.forEach(function (k) { try { localStorage.removeItem(k); } catch (e) {} });
+    } catch (e) {}
+  }
   var toastTimer = null;
   function notify(msg, kind) {
     state.toast = { msg: msg, kind: kind || "info" };
@@ -265,7 +292,13 @@
     } catch (e) { return null; }
   }
   function cacheProduct(code, off) {
-    try { localStorage.setItem("cb_prod_" + code, JSON.stringify({ ts: Date.now(), off: off })); } catch (e) {}
+    var rec = JSON.stringify({ ts: Date.now(), off: off });
+    try { localStorage.setItem("cb_prod_" + code, rec); }
+    catch (e) {
+      // Quota hit — evict old cache entries and retry once.
+      pruneCaches(true);
+      try { localStorage.setItem("cb_prod_" + code, rec); } catch (e2) {}
+    }
   }
   // Query each Open*Facts source in order; first product with data wins. The
   // detected source sets productType (food / beauty / household / petfood).
@@ -1536,13 +1569,20 @@
   function viewHistory() {
     var fav = state.historyFilter === "fav";
     var list = fav ? state.favorites : state.history;
+    var q = norm(state.histQuery || "");
+    var shown = q ? list.filter(function (p) {
+      return norm(p.name).indexOf(q) !== -1 || norm(p.brand || "").indexOf(q) !== -1;
+    }) : list;
     var chips = '<div class="chips">' +
       '<button class="chip' + (!fav ? " on" : "") + '" data-hist="all">Recent</button>' +
       '<button class="chip' + (fav ? " on" : "") + '" data-hist="fav">★ Favorites</button></div>';
-    var body = list.length ? list.map(historyRow).join("") +
-      (!fav ? '<button class="ghost-btn danger" data-act="clearHist">Clear history</button>' : "") :
-      '<div class="empty">' + illus("box") + (fav ? "No favorites yet.<br>Tap ☆ on a product to save it." : "Nothing scanned yet.") + '</div>';
-    return '<div class="screen"><header class="hd"><div class="logo">History</div></header>' + chips + body + '</div>';
+    var search = list.length > 5 ? '<div class="searchbar"><input id="histq" class="text-input search-input" value="' + esc(state.histQuery || "") + '" placeholder="Filter by name or brand…" />' +
+      '<button class="search-go" data-act="histGo" aria-label="Filter history">' + icon("search") + '</button></div>' : "";
+    var body = shown.length ? shown.map(historyRow).join("") +
+      (!fav && !q ? '<button class="ghost-btn danger" data-act="clearHist">Clear history</button>' : "") :
+      (list.length ? '<div class="empty small">No matches for “' + esc(state.histQuery) + '”.</div>' :
+        '<div class="empty">' + illus("box") + (fav ? "No favorites yet.<br>Tap ☆ on a product to save it." : "Nothing scanned yet.") + '</div>');
+    return '<div class="screen"><header class="hd"><div class="logo">History</div></header>' + chips + search + body + '</div>';
   }
 
   function viewInsights() {
@@ -1687,15 +1727,26 @@
       '<div class="panel glass">' + (rows || '<div class="lrow"><div class="row-main"><div class="row-sub">No matches.</div></div></div>') + '</div></div>';
   }
   function exportData() {
-    try {
-      var data = { app: "NutriCheck", version: 4, exportedAt: new Date().toISOString(),
-        history: state.history, favorites: state.favorites, profile: state.profile, health: state.health, settings: state.settings };
+    // Include the label photos referenced by saved products so a restored
+    // backup keeps its images (they live in IndexedDB, not localStorage).
+    var keys = [];
+    state.history.concat(state.favorites).forEach(function (p) {
+      if (p && p.photoKey && keys.indexOf(p.photoKey) === -1) keys.push(p.photoKey);
+    });
+    Promise.all(keys.map(function (k) {
+      return getPhoto(k).then(function (d) { return { k: k, d: d }; });
+    })).then(function (pairs) {
+      var photos = {};
+      pairs.forEach(function (p) { if (p.d) photos[p.k] = p.d; });
+      var data = { app: "NutriCheck", version: 5, exportedAt: new Date().toISOString(),
+        history: state.history, favorites: state.favorites, profile: state.profile,
+        health: state.health, settings: state.settings, photos: photos };
       var blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
       var url = URL.createObjectURL(blob);
       var a = document.createElement("a"); a.href = url; a.download = "nutricheck-backup.json";
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
-    } catch (e) { notify("Couldn't export on this device.", "error"); }
+    }).catch(function () { notify("Couldn't export on this device.", "error"); });
   }
 
   function viewAddPhoto() {
@@ -1752,7 +1803,7 @@
       '<div class="overlay"><div class="spinner"></div><div class="ov-msg">' + esc(state.statusMsg || "Working…") + '</div></div>');
 
     if (state.toast) app.insertAdjacentHTML("beforeend",
-      '<div class="toast ' + esc(state.toast.kind) + '">' + esc(state.toast.msg) + '</div>');
+      '<div class="toast ' + esc(state.toast.kind) + '" role="status" aria-live="polite">' + esc(state.toast.msg) + '</div>');
 
     window.scrollTo(0, keepY);
     lastRenderedView = v;
@@ -1845,12 +1896,22 @@
     }
     else if (act === "manual") go("manual");
     else if (act === "comparePick") go("comparePick");
-    else if (act === "back") go(state.view === "ingredient" ? state.ingFrom : (state.view === "compare" ? "comparePick" : (state.view === "comparePick" ? "result" : "home")));
+    else if (act === "back") {
+      // addPhoto can be reached from search results, a scan, or a result's
+      // "scan full label" button — return there instead of dumping to home.
+      var backTo = state.view === "ingredient" ? state.ingFrom
+        : state.view === "compare" ? "comparePick"
+        : state.view === "comparePick" ? "result"
+        : (state.view === "addPhoto" && (state.prev === "result" || state.prev === "search" || state.prev === "scanner")) ? state.prev
+        : "home";
+      go(backTo);
+    }
     else if (act === "manualGo") { var el = document.getElementById("bc"); if (el && el.value.trim()) handleBarcode(el.value.trim()); }
     else if (act === "searchGo") { var qe = document.getElementById("q"); if (qe && qe.value.trim()) runSearch(qe.value.trim()); }
     else if (act === "toggleScore") { state.scoreOpen = !state.scoreOpen; render(); }
     else if (act === "encyclopedia") { state.encQuery = ""; go("encyclopedia"); }
     else if (act === "encGo") { var ec = document.getElementById("encq"); state.encQuery = ec ? ec.value.trim() : ""; render(); }
+    else if (act === "histGo") { var hq = document.getElementById("histq"); state.histQuery = hq ? hq.value.trim() : ""; render(); }
     else if (act === "editHealth") { state.editHealth = true; render(); }
     else if (act === "exportData") { exportData(); }
     else if (act === "saveUsdaKey") {
@@ -1885,6 +1946,7 @@
           if (d.profile) state.profile = d.profile;
           if (d.health) state.health = d.health;
           if (d.settings) state.settings = d.settings;
+          if (d.photos) Object.keys(d.photos).forEach(function (k) { savePhoto(k, d.photos[k]); });
           saveHistory(); saveFavs(); saveProfile(); saveHealth(); saveSettings(); applyTheme(); render();
           notify("Data imported successfully.", "success");
         } catch (err) { notify("That backup file couldn't be read.", "error"); }
@@ -1939,6 +2001,7 @@
     if (e.target.id === "q" && e.target.value.trim()) { e.preventDefault(); runSearch(e.target.value.trim()); }
     else if (e.target.id === "bc" && e.target.value.trim()) { e.preventDefault(); handleBarcode(e.target.value.trim()); }
     else if (e.target.id === "encq") { e.preventDefault(); state.encQuery = e.target.value.trim(); render(); }
+    else if (e.target.id === "histq") { e.preventDefault(); state.histQuery = e.target.value.trim(); render(); }
   }
   // Keep the app right-side-up. Info.plist already locks the native shell to
   // portrait; this is a best-effort web-layer lock for any browser context.
@@ -1959,6 +2022,15 @@
     document.addEventListener("click", onClick);
     document.addEventListener("change", onChange);
     document.addEventListener("keydown", onKey);
+    // Release the camera when the app goes to the background (iOS keeps the
+    // stream "open" but frozen otherwise) and restart it on return so the
+    // scanner never comes back as a black screen.
+    document.addEventListener("visibilitychange", function () {
+      if (state.view !== "scanner") return;
+      if (document.hidden) stopScanner();
+      else setTimeout(startScanner, 60);
+    });
+    pruneCaches();
     // Theme "auto" should follow the system while the app is open, not just at launch.
     if (window.matchMedia) {
       var mq = window.matchMedia("(prefers-color-scheme: light)");
