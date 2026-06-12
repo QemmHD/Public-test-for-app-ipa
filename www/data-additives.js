@@ -421,6 +421,15 @@ var CB_DATA = (function () {
       ]
     },
     {
+      id: "sodiumtriphosphate", names: ["sodium triphosphate", "sodium tripolyphosphate", "triphosphate", "triphosphates", "e451"], enumber: "E451",
+      category: "Phosphate additive", risk: "limit",
+      summary: "Phosphate salt used to retain moisture and control texture.",
+      whatIs: "Sodium triphosphate is an inorganic phosphate used in processed foods to stabilize texture and retain moisture.",
+      whyFlagged: "Added inorganic phosphates are readily absorbed and are best limited, especially in heavily processed foods.",
+      healthRisk: "High phosphate intake can be a concern for kidney and cardiovascular health.",
+      studies: []
+    },
+    {
       id: "edta", names: ["disodium edta", "calcium disodium edta", "edta", "e385"], enumber: "E385",
       category: "Preservative (chelator)", risk: "limit",
       summary: "Preservative that binds metals; fine in small amounts.",
@@ -1041,7 +1050,7 @@ var CB_DATA = (function () {
       studies: []
     },
     {
-      id: "genericcolors", names: ["color", "colors", "colour", "colours", "coloring", "colouring"], enumber: "",
+      id: "genericcolors", names: ["color", "colors", "colour", "colours", "coloring", "colouring", "colorant", "colorants"], enumber: "",
       category: "Undisclosed color", risk: "caution",
       summary: "One or more color additives are present but not specifically named.",
       whatIs: "Colors may be plant-derived pigments or synthetic dyes. This generic label does not reveal which colorants were used.",
@@ -1746,7 +1755,9 @@ var CB_DATA = (function () {
     "whole milk powder", "skim milk powder", "nonfat dry milk", "dry milk", "milk solids",
     "buttermilk powder", "cream powder", "cheese cultures", "gluten", "wheat gluten",
     "vital wheat gluten", "corn flour", "maize flour", "rice powder", "onion flakes",
-    "dehydrated onion", "dehydrated garlic", "tomato powder", "lemon powder", "herb extract"
+    "dehydrated onion", "dehydrated garlic", "tomato powder", "lemon powder", "herb extract",
+    "enriched macaroni", "durum flour", "durum wheat flour", "milkfat", "milk fat",
+    "cheese culture", "cheese cultures", "rosemary extracts"
   ];
   for (var lc = 0; lc < labelFormClean.length; lc++) {
     if (cleanIngredients.indexOf(labelFormClean[lc]) === -1) cleanIngredients.push(labelFormClean[lc]);
@@ -1768,6 +1779,9 @@ var CB_DATA = (function () {
     ["humectant", "Humectant"], ["humectants", "Humectant"],
     ["firming agent", "Firming agent"], ["firming agents", "Firming agent"],
     ["glazing agent", "Glazing agent"], ["glazing agents", "Glazing agent"]
+    , ["enzyme", "Enzyme"], ["enzymes", "Enzyme"],
+    ["cheese sauce mix", "Cheese sauce mix"], ["sauce mix", "Sauce mix"],
+    ["conserveermiddel", "Preservative"], ["conserveermiddelen", "Preservative"]
   ];
   genericFunctionalClasses.forEach(function (fc, i) {
     additives.push({

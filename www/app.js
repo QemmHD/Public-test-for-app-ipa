@@ -136,8 +136,8 @@
   function parseIngredients(text) { return ENG.parseIngredients(text); }
   function classify(n, raw, productType) { return ENG.classify(n, raw, productType); }
 
-  var STATUS_RANK = { avoid: 4, caution: 3, limit: 2, unknown: 1, good: 0 };
-  var STATUS_LABEL = { avoid: "Avoid", caution: "Caution", limit: "Limit", unknown: "Unknown", good: "Clean" };
+  var STATUS_RANK = { avoid: 4, caution: 3, limit: 2, unknown: 1, ok: 0, good: 0 };
+  var STATUS_LABEL = { avoid: "Avoid", caution: "Caution", limit: "Limit", unknown: "Unknown", ok: "Clean", good: "Clean" };
   var STATUS_GROUPS = ["avoid", "caution", "limit", "unknown", "good"];
   // Human label + emoji per product family for the result-screen type badge.
   var PROD_TYPE_LABEL = {
@@ -1064,7 +1064,7 @@
   function busy(on, msg) { state.busy = on; setStatus(msg || ""); render(); }
   function sevColor(s) { return s === "good" ? "var(--good)" : s === "mid" ? "var(--mid)" : s === "bad" ? "var(--bad)" : "var(--mut)"; }
   function scoreColor(cls) { return cls === "exc" ? "#1fae54" : cls === "good" ? "#7ac943" : cls === "mid" ? "#ff9f1c" : "#ff3b30"; }
-  function statusColor(st) { return st === "avoid" ? "#ff3b30" : st === "caution" ? "#ff7a45" : st === "limit" ? "#ff9f1c" : st === "good" ? "#2fd07a" : "#8a8a99"; }
+  function statusColor(st) { return st === "avoid" ? "#ff3b30" : st === "caution" ? "#ff7a45" : st === "limit" ? "#ff9f1c" : (st === "good" || st === "ok") ? "#2fd07a" : "#8a8a99"; }
   function dot(color) { return '<span class="dot" style="background:' + color + '"></span>'; }
   var ICONS = {
     scan: '<path d="M4 8V6a2 2 0 0 1 2-2h2"/><path d="M16 4h2a2 2 0 0 1 2 2v2"/><path d="M20 16v2a2 2 0 0 1-2 2h-2"/><path d="M8 20H6a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/>',
@@ -1258,7 +1258,9 @@
     var groupsHtml = "";
     STATUS_GROUPS.forEach(function (st) {
       var rows = [];
-      p.classified.forEach(function (c, i) { if (c.status === st) rows.push(ingredientRow(c, i)); });
+      p.classified.forEach(function (c, i) {
+        if (c.status === st || (st === "good" && c.status === "ok")) rows.push(ingredientRow(c, i));
+      });
       if (!rows.length) return;
       groupsHtml += '<div class="ing-group-h"><span class="dot" style="background:' + statusColor(st) + '"></span>' +
         STATUS_LABEL[st] + ' <span class="cnt">' + rows.length + '</span></div>' + rows.join("");

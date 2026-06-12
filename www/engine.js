@@ -25,7 +25,15 @@
   "use strict";
 
   /* ----------------------------------------------------------- text utils */
+  function decodeEntities(s) {
+    return String(s || "")
+      .replace(/&(?:lt|#0*60);?/gi, "<").replace(/&(?:gt|#0*62);?/gi, ">")
+      .replace(/&(?:amp|#0*38);?/gi, "&").replace(/&(?:quot|#0*34);?/gi, "\"")
+      .replace(/&(?:apos|#0*39);?/gi, "'");
+  }
   function norm(s) {
+    s = decodeEntities(s);
+    if (s.normalize) s = s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     return String(s || "").toLowerCase()
       .replace(/\([^)]*\)/g, " ").replace(/\d+(\.\d+)?\s*%/g, " ")
       .replace(/[^a-z0-9&'\- ]/g, " ").replace(/\s+/g, " ").trim();
@@ -74,7 +82,7 @@
     "potassium": 1, "sodium": 1, "cholesterol": 1, "phosphorus": 1, "magnesium": 1,
     "fat": 1, "total fat": 1, "saturated fat": 1, "trans fat": 1, "calcium": 1
   };
-  var LABEL_NOISE_RE = /\b(allergy advice|allergen information|warning|warnings|directions|instructions|storage instructions|store in a cool|keep refrigerated|recycle|scan here|learn more|customer service|consumer information|certified organic|non gmo project verified|gluten free|no artificial|good source of|excellent source of|phone|telephone|copyright|trademark|lot code|batch code|barcode)\b/i;
+  var LABEL_NOISE_RE = /\b(allergy advice|allergen information|warning|warnings|directions|instructions|storage instructions|store in a cool|keep refrigerated|recycle|scan here|learn more|customer service|consumer information|certified organic|non gmo project verified|gluten free|no artificial|good source of|excellent source of|phone|telephone|copyright|trademark|lot code|batch code|barcode|the composition of the product|for more details|more details|niet ionogene oppervlakteactieve stoffen|oppervlakteactieve stoffen|info|pepsico)\b/i;
   function isNonIngredient(n) {
     return NON_INGREDIENT_RE.test(n) || COMMENTARY_RE.test(n) || LABEL_NOISE_RE.test(n) ||
       NUTRITION_VALUE_RE.test(n) || NUTRIENT_ONLY[n] === 1;
@@ -98,7 +106,7 @@
   }
   function parseIngredientsDetailed(text) {
     if (!text) return { items: [], ignored: [] };
-    var sourceText = String(text);
+    var sourceText = decodeEntities(text);
     var commentaryMatch = COMMENTARY_RE.exec(sourceText);
     var trailingCommentary = commentaryMatch ? sourceText.slice(commentaryMatch.index).trim() : "";
     // Some crowd-sourced product records contain an ingredient list followed
@@ -107,7 +115,7 @@
       .replace(/\b(?:https?:\/\/|www\.)\S+/gi, " ")
       .replace(/\S+@\S+\.\S+/g, " ")
       .replace(/\b[\w.-]+\.(?:com|net|org|co|us)\b/gi, " ")
-      .replace(/ingredients?(\s+list)?:?/i, " ")
+      .replace(/\b(?:ingredients?|ingredienten|ingredientenlijst)(?:\s+list)?:?/i, " ")
       .replace(/contains( 2% or less of| less than 2% of)?:?/ig, ",")
       // Expand parenthetical / bracketed sub-ingredients into their own items so
       // hidden flags inside a parent (e.g. "enriched flour (niacin, reduced iron)",
@@ -239,6 +247,11 @@
             return { status: meta.status, group: ck[ci], reason: meta.reason };
           }
         }
+        // Many preservatives, salts, acids and thickeners are used in both food
+        // and personal care. Reuse their researched record instead of calling
+        // them unknown when they appear on a beauty/household label.
+        var dualUse = findInIndex(foodIndex, toks);
+        if (dualUse) return { status: dualUse.risk, additive: dualUse, name: dualUse.names[0], reason: dualUse.category };
         if (listHitTok(vagueT, toks)) return { status: "limit", group: "vague", reason: "Undisclosed ingredient" };
         if (listHitTok(cleanT, toks)) return { status: "good", group: "clean", reason: "Recognized ingredient" };
         return { status: "unknown", group: "unknown", reason: "Not catalogued yet" };

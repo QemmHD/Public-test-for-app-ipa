@@ -648,3 +648,47 @@ test("common label forms and vague functional classes are catalogued", () => {
     assert.ok(c.additive && /^generic/.test(c.additive.id), name + " should request exact compound details");
   });
 });
+
+test("screenshot food-label forms resolve instead of becoming unknown", () => {
+  ["enriched macaroni", "durum flour", "milkfat", "cheese culture", "rosemary extracts"].forEach((name) => {
+    assert.notStrictEqual(engine.classify(engine.norm(name), name, "food").status, "unknown", name);
+  });
+  ["cheese sauce mix", "enzymes", "colorants", "conserveermiddelen", "sodium triphosphate"].forEach((name) => {
+    assert.notStrictEqual(engine.classify(engine.norm(name), name, "food").status, "unknown", name);
+  });
+});
+
+test("personal-care screenshot terms resolve through cosmetic and dual-use records", () => {
+  const expected = {
+    "C10-16 Alkyldimethylamine Oxide": "limit",
+    "C9-11 Pareth-8": "limit",
+    "Deceth-8": "limit",
+    "Fragrances": "caution",
+    "Parfums": "caution",
+    "PPG-16 Copolymer": "limit",
+    "PPG-26": "limit",
+    "Sodium Chloride": "ok",
+    "Sodium Citrate": "ok",
+    "Tetrasodium Glutamate Diacetate": "ok",
+    "Potassium Sorbate": "limit",
+    "Methylisothiazolinome": "caution"
+  };
+  Object.entries(expected).forEach(([name, status]) => {
+    assert.strictEqual(engine.classify(engine.norm(name), name, "beauty").status, status, name);
+  });
+});
+
+test("multilingual and HTML-escaped label text is tracked but not scored", () => {
+  const parsed = engine.parseIngredientsDetailed(
+    "Ingrediënten: &lt; 5% niet-ionogene oppervlakteactieve stoffen, Parfums, Conserveermiddelen, POTASSIUM SORBATE"
+  );
+  assert.deepStrictEqual(parsed.items.map((x) => x.norm), ["parfums", "conserveermiddelen", "potassium sorbate"]);
+  assert.ok(parsed.ignored.some((x) => x.reason === "label text"));
+});
+
+test("brand and explanatory fragments from screenshot are ignored, not ingredients", () => {
+  const parsed = engine.parseIngredientsDetailed(
+    "corn, salt, the composition of the product, info, pepsico, eu for more details, rapeseed oil"
+  );
+  assert.deepStrictEqual(parsed.items.map((x) => x.norm), ["corn", "salt", "rapeseed oil"]);
+});

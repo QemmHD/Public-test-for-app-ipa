@@ -88,7 +88,7 @@ window.CB_DATA_COSMETICS = (function () {
       ]
     },
     {
-      id: "methylisothiazolinone", names: ["methylisothiazolinone", "methylchloroisothiazolinone", "mci/mi", "kathon cg"],
+      id: "methylisothiazolinone", names: ["methylisothiazolinone", "methylisothiazolinome", "methylchloroisothiazolinone", "mci/mi", "kathon cg"],
       category: "Isothiazolinone preservative", risk: "caution",
       summary: "Potent preservative behind a wave of cosmetic allergy cases.",
       whatIs: "Methylisothiazolinone (MIT) and its chloro- partner preserve rinse-off and leave-on cosmetics.",
@@ -158,7 +158,7 @@ window.CB_DATA_COSMETICS = (function () {
 
     /* ------------------------------------------------- fragrance & UV */
     {
-      id: "fragrance", names: ["fragrance", "parfum", "perfume", "aroma", "flavor", "flavour"],
+      id: "fragrance", names: ["fragrance", "fragrances", "parfum", "parfums", "perfume", "perfumes", "aroma", "flavor", "flavour"],
       category: "Undisclosed fragrance", risk: "caution",
       summary: "Umbrella term that can hide dozens of undisclosed scent chemicals.",
       whatIs: "'Fragrance'/'parfum' on a label is a trade-secret blend that can contain dozens to hundreds of individual compounds, including allergens and phthalates.",
@@ -350,6 +350,33 @@ window.CB_DATA_COSMETICS = (function () {
       healthRisk: "Low risk at cosmetic levels; rare irritation.",
       studies: []
     },
+    {
+      id: "amineoxide", names: ["c10-16 alkyldimethylamine oxide", "alkyldimethylamine oxide", "amine oxide"],
+      category: "Surfactant", risk: "limit",
+      summary: "Cleaning and foam-boosting surfactant that can irritate sensitive skin.",
+      whatIs: "Amine oxides are surfactants used in cleaners and personal-care products to lift oils and boost foam.",
+      whyFlagged: "Generally permitted, but concentrated or frequent exposure can irritate skin and eyes.",
+      healthRisk: "Possible skin and eye irritation, especially in concentrated cleaning products.",
+      studies: []
+    },
+    {
+      id: "glutamatediacetate", names: ["tetrasodium glutamate diacetate", "glutamate diacetate"],
+      category: "Chelating agent", risk: "ok",
+      summary: "Readily biodegradable chelator used to improve product stability.",
+      whatIs: "Tetrasodium glutamate diacetate binds metal ions so formulas remain stable and preservatives work reliably.",
+      whyFlagged: "Not flagged; it is considered a lower-impact alternative to persistent chelators.",
+      healthRisk: "Low hazard at normal product concentrations.",
+      studies: []
+    },
+    {
+      id: "sodiumchloride", names: ["sodium chloride"],
+      category: "Mineral salt / viscosity control", risk: "ok",
+      summary: "Common salt used to adjust thickness.",
+      whatIs: "Sodium chloride is ordinary salt, often used to thicken rinse-off products.",
+      whyFlagged: "Not flagged; low hazard at normal product concentrations.",
+      healthRisk: "No notable concern; may be drying in very concentrated formulas.",
+      studies: []
+    },
 
     /* --------------------------------------------------- gentle/clean */
     {
@@ -493,7 +520,8 @@ window.CB_DATA_COSMETICS = (function () {
       "peg-6", "peg-20", "peg-30", "peg-60", "peg-90", "peg-6 caprylic/capric glycerides",
       "peg-60 hydrogenated castor oil", "peg-40 sorbitan peroleate", "ceteareth-30", "ceteareth-6",
       "laureth-2", "laureth-9", "laureth-12", "oleth-5", "steareth-10", "steareth-100",
-      "trideceth-9", "trideceth-12", "ppg-26-buteth-26", "ppg-12-buteth-16", "isoceteth-20"
+      "trideceth-9", "trideceth-12", "ppg-26-buteth-26", "ppg-12-buteth-16", "isoceteth-20",
+      "c9-11 pareth-8", "deceth-8", "ppg-16 copolymer", "ppg-26"
     ],
     microplastic: [
       "polyethylene", "polypropylene", "nylon-12", "nylon-6", "acrylates copolymer",
