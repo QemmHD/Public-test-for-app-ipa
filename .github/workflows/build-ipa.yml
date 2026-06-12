@@ -21,6 +21,15 @@ jobs:
         with:
           node-version: '20'
 
+      # Public release numbers start at NutriCheck 12 for workflow run 11.
+      # Every future IPA build automatically advances to 13, 14, and so on.
+      - name: Set NutriCheck release number
+        run: |
+          RELEASE_NUMBER=$((GITHUB_RUN_NUMBER + 1))
+          echo "RELEASE_NUMBER=$RELEASE_NUMBER" >> "$GITHUB_ENV"
+          node -e "const fs=require('fs'); const p=JSON.parse(fs.readFileSync('capacitor.config.json')); p.appName='NutriCheck ${RELEASE_NUMBER}'; fs.writeFileSync('capacitor.config.json', JSON.stringify(p, null, 2) + '\n');"
+          echo "Building NutriCheck $RELEASE_NUMBER"
+
       - name: Install dependencies
         run: npm install
 
@@ -56,10 +65,32 @@ jobs:
             || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string ${{ github.run_number }}" "$PLIST"
           echo "== App version ==" && /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PLIST"
 
-      # Generate the custom NutriCheck app icon from assets/logo.png into the
-      # iOS AppIcon set. Non-fatal: if it fails the build still ships.
+      # Lock the app to right-side-up portrait so it never rotates sideways.
+      # Replace any existing supported-orientations arrays with portrait-only, and
+      # require full screen so iPad can't override the lock via multitasking.
+      - name: Lock orientation to portrait
+        run: |
+          PLIST=ios/App/App/Info.plist
+          /usr/libexec/PlistBuddy -c "Delete :UISupportedInterfaceOrientations" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Delete :UISupportedInterfaceOrientations~ipad" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations array" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations:0 string UIInterfaceOrientationPortrait" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations~ipad array" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations~ipad:0 string UIInterfaceOrientationPortrait" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Set :UIRequiresFullScreen true" "$PLIST" 2>/dev/null \
+            || /usr/libexec/PlistBuddy -c "Add :UIRequiresFullScreen bool true" "$PLIST"
+          echo "== Orientation ==" && /usr/libexec/PlistBuddy -c "Print :UISupportedInterfaceOrientations" "$PLIST"
+
+      # Generate and verify the custom NutriCheck icon. Icon generation is
+      # required so an IPA can never silently ship with Capacitor's default.
       - name: Generate app icon
-        run: npx --yes @capacitor/assets@3 generate --ios --assetPath assets || echo "icon generation skipped"
+        run: |
+          npx --yes @capacitor/assets@3 generate --ios --assetPath assets
+          APPICON=ios/App/App/Assets.xcassets/AppIcon.appiconset
+          test -d "$APPICON"
+          ICON_COUNT=$(find "$APPICON" -type f -name '*.png' | wc -l | tr -d ' ')
+          echo "Generated $ICON_COUNT iOS app-icon images"
+          test "$ICON_COUNT" -ge 1
 
       - name: Install CocoaPods dependencies
         run: |
@@ -102,14 +133,14 @@ jobs:
           # Sanity check: confirm the binary is an arm64 device Mach-O.
           echo "== Mach-O architecture =="
           lipo -info "Payload/App.app/App" || file "Payload/App.app/App"
-          zip -qr NutriCheck.ipa Payload
-          mv NutriCheck.ipa ../../NutriCheck.ipa
+          zip -qr "NutriCheck-${RELEASE_NUMBER}.ipa" Payload
+          mv "NutriCheck-${RELEASE_NUMBER}.ipa" "../../NutriCheck-${RELEASE_NUMBER}.ipa"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: NutriCheck-IPA
-          path: NutriCheck.ipa
+          name: NutriCheck-${{ env.RELEASE_NUMBER }}-IPA
+          path: NutriCheck-${{ env.RELEASE_NUMBER }}.ipa
           retention-days: 90
 
       # Publish the IPA as a GitHub Release asset so there is a direct,
@@ -117,12 +148,12 @@ jobs:
       - name: Publish IPA to a GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ env.APP_VERSION }}-build-${{ github.run_number }}
-          name: NutriCheck ${{ env.APP_VERSION }} (build ${{ github.run_number }})
+          tag_name: nutricheck-${{ env.RELEASE_NUMBER }}
+          name: NutriCheck ${{ env.RELEASE_NUMBER }}
           body: |
-            NutriCheck **${{ env.APP_VERSION }}** — unsigned **device (arm64)** IPA for sideloading.
+            NutriCheck **${{ env.RELEASE_NUMBER }}** (v${{ env.APP_VERSION }}) unsigned device (arm64) IPA for sideloading.
 
-            Download `NutriCheck.ipa` below and upload it to the iOSGods
+            Download `NutriCheck-${{ env.RELEASE_NUMBER }}.ipa` below and upload it to the iOSGods
             signer (App+ / VIP online sign, or Sideloadly). They re-sign it
             with their certificate; this build is intentionally unsigned.
-          files: NutriCheck.ipa
+          files: NutriCheck-${{ env.RELEASE_NUMBER }}.ipa

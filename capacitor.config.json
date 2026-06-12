@@ -3,8 +3,8 @@
   "appName": "NutriCheck",
   "webDir": "www",
   "ios": {
-    "backgroundColor": "#0a0a0f",
-    "contentInset": "automatic",
+    "backgroundColor": "#06080a",
+    "contentInset": "never",
     "limitsNavigationsToAppBoundDomains": false
   }
 }

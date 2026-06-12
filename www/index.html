@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="NutriCheck" />
   <meta name="theme-color" content="#0b0b10" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob: gap: capacitor:; img-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; connect-src 'self' https://world.openfoodfacts.org https://*.openfoodfacts.org https://world.openbeautyfacts.org https://*.openbeautyfacts.org https://world.openproductsfacts.org https://*.openproductsfacts.org https://world.openpetfoodfacts.org https://*.openpetfoodfacts.org https://en.wikipedia.org https://*.wikipedia.org data: blob:; worker-src 'self' blob:; font-src 'self' data: https://fonts.gstatic.com; media-src 'self' blob: mediastream:;" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob: gap: capacitor:; img-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; connect-src 'self' https://world.openfoodfacts.org https://*.openfoodfacts.org https://world.openbeautyfacts.org https://*.openbeautyfacts.org https://world.openproductsfacts.org https://*.openproductsfacts.org https://world.openpetfoodfacts.org https://*.openpetfoodfacts.org https://en.wikipedia.org https://*.wikipedia.org https://api.nal.usda.gov https://api.fda.gov data: blob:; worker-src 'self' blob:; font-src 'self' data: https://fonts.gstatic.com; media-src 'self' blob: mediastream:;" />
   <title>NutriCheck</title>
   <link rel="apple-touch-icon" href="icon.png" />
   <link rel="icon" type="image/png" href="icon.png" />
@@ -19,6 +19,7 @@
 </head>
 <body>
   <div id="app"></div>
+  <div class="rotate-guard"><div class="ri">📱</div><div>Please rotate back to portrait</div></div>
   <script src="data-additives.js"></script>
   <script src="data-cosmetics.js"></script>
   <script src="engine.js"></script>

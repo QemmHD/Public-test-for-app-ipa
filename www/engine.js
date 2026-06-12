@@ -25,7 +25,15 @@
   "use strict";
 
   /* ----------------------------------------------------------- text utils */
+  function decodeEntities(s) {
+    return String(s || "")
+      .replace(/&(?:lt|#0*60);?/gi, "<").replace(/&(?:gt|#0*62);?/gi, ">")
+      .replace(/&(?:amp|#0*38);?/gi, "&").replace(/&(?:quot|#0*34);?/gi, "\"")
+      .replace(/&(?:apos|#0*39);?/gi, "'");
+  }
   function norm(s) {
+    s = decodeEntities(s);
+    if (s.normalize) s = s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     return String(s || "").toLowerCase()
       .replace(/\([^)]*\)/g, " ").replace(/\d+(\.\d+)?\s*%/g, " ")
       .replace(/[^a-z0-9&'\- ]/g, " ").replace(/\s+/g, " ").trim();
@@ -65,33 +73,86 @@
   // OCR noise out of the result without discarding genuine ingredients such as
   // salt, water, sugar, iron or sodium benzoate.
   var NON_INGREDIENT_RE = /\b(daily value|per serving|per container|serving size|servings|amount per|nutrition facts|calories|total fat|saturated fat|trans fat|polyunsaturated fat|monounsaturated fat|total carbohydrate|dietary fiber|total sugars|added sugars|cholesterol|distributed by|manufactured|net wt|net weight|fl oz|best before|best by|use by|sell by|exp date|questions|comments|satisfaction|refrigerat|produced in|made in|product of|packaged|facility|contains less than|may contain|www|http)\b/;
+  var COMMENTARY_RE = /\b(would you like|do you want|quick breakdown|what you consume|this ingredient list|generally corresponds|here is a breakdown|souhaitez-vous|voulez-vous|voici un d[eé]cryptage|ce que vous consommez|cette liste d.ingr[eé]dients|correspond g[eé]n[eé]ralement)\b/i;
   // A standalone number followed by a measurement unit (e.g. "200mg", "2 g",
   // "120 kcal") is a nutrition value, not an ingredient.
   var NUTRITION_VALUE_RE = /\b\d+(\.\d+)?\s?(mg|mcg|g|kg|kcal|iu|ml|oz)\b/;
+  // Bare nutrient-panel words that some sources (e.g. Open Food Facts) wrongly
+  // dump into the ingredient list. Only an EXACT match is dropped, so real
+  // ingredients like "soy protein" or "calcium propionate" are never affected.
+  var NUTRIENT_ONLY = {
+    "fiber": 1, "fibre": 1, "dietary fiber": 1, "soluble fiber": 1, "insoluble fiber": 1,
+    "protein": 1, "proteins": 1, "carbohydrate": 1, "carbohydrates": 1, "total carbohydrate": 1,
+    "sugar": 0, "sugars": 1, "total sugars": 1, "calories": 1, "energy": 1, "kilojoules": 1,
+    "potassium": 1, "sodium": 1, "cholesterol": 1, "phosphorus": 1, "magnesium": 1,
+    "fat": 1, "total fat": 1, "saturated fat": 1, "trans fat": 1, "calcium": 1
+  };
+  var LABEL_NOISE_RE = /\b(allergy advice|allergen information|warning|warnings|directions|instructions|storage instructions|store in a cool|keep refrigerated|recycle|scan here|learn more|customer service|consumer information|certified organic|non gmo project verified|gluten free|no artificial|good source of|excellent source of|phone|telephone|copyright|trademark|lot code|batch code|barcode|the composition of the product|for more details|more details|niet ionogene oppervlakteactieve stoffen|oppervlakteactieve stoffen|info|pepsico)\b/i;
   function isNonIngredient(n) {
-    return NON_INGREDIENT_RE.test(n) || NUTRITION_VALUE_RE.test(n);
+    return NON_INGREDIENT_RE.test(n) || COMMENTARY_RE.test(n) || LABEL_NOISE_RE.test(n) ||
+      NUTRITION_VALUE_RE.test(n) || NUTRIENT_ONLY[n] === 1;
   }
-  function parseIngredients(text) {
-    if (!text) return [];
-    var cleaned = text
+  function ignoredReason(raw, n) {
+    if (COMMENTARY_RE.test(raw) || COMMENTARY_RE.test(n)) return "explanatory prose";
+    if (LABEL_NOISE_RE.test(raw) || LABEL_NOISE_RE.test(n) || NON_INGREDIENT_RE.test(n) || NUTRIENT_ONLY[n] === 1)
+      return "label text";
+    if (NUTRITION_VALUE_RE.test(n)) return "nutrition value";
+    if (tokenize(n).length > 14) return "sentence-like text";
+    if (/([a-z])\1{3,}/i.test(n) || /[�]/.test(raw)) return "OCR gibberish";
+    var compact = n.replace(/[^a-z]/g, "");
+    if (compact.length >= 7 && !/[aeiouy]/.test(compact)) return "OCR gibberish";
+    return "";
+  }
+  function ingredientTextQuality(text) {
+    text = String(text || "").trim();
+    if (text.replace(/\s/g, "").length < 3) return { usable: false, suspicious: false };
+    var suspicious = COMMENTARY_RE.test(text) || (text.length > 350 && (text.match(/[?!]/g) || []).length > 1);
+    return { usable: !suspicious, suspicious: suspicious };
+  }
+  function parseIngredientsDetailed(text) {
+    if (!text) return { items: [], ignored: [] };
+    var sourceText = decodeEntities(text);
+    var commentaryMatch = COMMENTARY_RE.exec(sourceText);
+    var trailingCommentary = commentaryMatch ? sourceText.slice(commentaryMatch.index).trim() : "";
+    // Some crowd-sourced product records contain an ingredient list followed
+    // by prose or an AI-generated explanation. Never score that commentary.
+    var cleaned = sourceText.split(COMMENTARY_RE)[0]
       .replace(/\b(?:https?:\/\/|www\.)\S+/gi, " ")
       .replace(/\S+@\S+\.\S+/g, " ")
       .replace(/\b[\w.-]+\.(?:com|net|org|co|us)\b/gi, " ")
-      .replace(/ingredients?:?/i, " ")
+      .replace(/\b(?:ingredients?|ingredienten|ingredientenlijst)(?:\s+list)?:?/i, " ")
       .replace(/contains( 2% or less of| less than 2% of)?:?/ig, ",")
-      .replace(/[\[\]{}]/g, ",").replace(/\band\b/gi, ",");
-    var parts = cleaned.split(/[,;.]+/), out = [];
+      // Expand parenthetical / bracketed sub-ingredients into their own items so
+      // hidden flags inside a parent (e.g. "enriched flour (niacin, reduced iron)",
+      // "color (red 40)") are detected instead of being thrown away.
+      .replace(/[\[\]{}()]/g, ",").replace(/\band\/or\b/gi, ",").replace(/\band\b/gi, ",");
+    // Split on the full range of real-world separators: commas, semicolons,
+    // newlines, bullets/middots, pipes, slashes and asterisks — plus a period
+    // that is NOT part of a decimal number. This catches labels that wrap lines
+    // or use dots/bullets between ingredients so we read the WHOLE list.
+    var parts = cleaned.split(/[,;\n\r•·‣▪●∙|/*]+|\.(?!\d)/), out = [], ignored = [], seen = {};
+    if (trailingCommentary) ignored.push({
+      raw: trailingCommentary.slice(0, 180), norm: norm(trailingCommentary.slice(0, 180)), reason: "explanatory prose"
+    });
     for (var i = 0; i < parts.length; i++) {
       var raw = parts[i].replace(/\([^)]*\)/g, "").trim();
       if (!raw) continue;
       var n = norm(raw);
       if (!n || n.length < 2) continue;
-      if (isNonIngredient(n)) continue;
-      if (out.length && out[out.length - 1].norm === n) continue;
+      var reason = ignoredReason(raw, n);
+      if (reason) {
+        if (ignored.length < 30) ignored.push({ raw: raw.replace(/\s+/g, " ").trim(), norm: n, reason: reason });
+        continue;
+      }
+      if (seen[n]) continue;            // global de-dup (not just adjacent repeats)
+      seen[n] = 1;
       out.push({ raw: raw.replace(/\s+/g, " ").trim(), norm: n });
-      if (out.length > 80) break;
+      if (out.length > 150) break;      // raised cap so long labels aren't truncated
     }
-    return out;
+    return { items: out, ignored: ignored };
+  }
+  function parseIngredients(text) {
+    return parseIngredientsDetailed(text).items;
   }
 
   /* ------------------------------------------------------------- engine */
@@ -134,6 +195,7 @@
     var addedSugarsT = tokList(DATA.addedSugars);
     var sweetenersT = tokList(DATA.artificialSweeteners);
     var vagueT = tokList(DATA.vagueTerms);
+    var fortifiedT = tokList(DATA.fortifiedVitamins);
     var cleanT = tokList(DATA.cleanIngredients);
     // Cosmetic concern keyword buckets (optional).
     var cosmeticListsT = {};
@@ -190,19 +252,32 @@
             return { status: meta.status, group: ck[ci], reason: meta.reason };
           }
         }
+        // Many preservatives, salts, acids and thickeners are used in both food
+        // and personal care. Reuse their researched record instead of calling
+        // them unknown when they appear on a beauty/household label.
+        var dualUse = findInIndex(foodIndex, toks);
+        if (dualUse) return { status: canonStatus(dualUse.risk), additive: dualUse, name: dualUse.names[0], reason: dualUse.category };
         if (listHitTok(vagueT, toks)) return { status: "limit", group: "vague", reason: "Undisclosed ingredient" };
         if (listHitTok(cleanT, toks)) return { status: "good", group: "clean", reason: "Recognized ingredient" };
         return { status: "unknown", group: "unknown", reason: "Not catalogued yet" };
       }
 
-      // Food path (preserves original precedence).
+      // Food path (Bobby-Approved-style strictness: industrial seed oils,
+      // undisclosed flavors and artificial sweeteners are flagged hard).
       var a = findInIndex(foodIndex, toks);
       if (a) return { status: canonStatus(a.risk), additive: a, name: a.names[0], reason: a.category };
-      if (listHitTok(sweetenersT, toks)) return { status: "caution", group: "sweetener", reason: "Artificial sweetener" };
-      if (listHitTok(seedOilsT, toks)) return { status: "limit", group: "seedOil", reason: "Industrial seed oil" };
-      if (listHitTok(vagueT, toks)) return { status: "limit", group: "vague", reason: "Undisclosed ingredient" };
+      if (listHitTok(sweetenersT, toks)) return { status: "avoid", group: "sweetener", reason: "Artificial sweetener" };
+      if (listHitTok(seedOilsT, toks)) return { status: "avoid", group: "seedOil", reason: "Industrial seed oil" };
+      var vh = listHitTok(vagueT, toks);
+      if (vh) {
+        // Undisclosed flavorings are flagged hardest; vague spice/seasoning blends are a caution.
+        var isFlavor = /flavo/.test(vh);
+        return { status: isFlavor ? "avoid" : "caution", group: "vague",
+          reason: isFlavor ? "Undisclosed flavoring" : "Undisclosed ingredient" };
+      }
       var en = findENumberByName(toks) || findENumberByCode(raw);
       if (en) return { status: canonStatus(en.risk), group: egroup(en.risk), name: en.name, enumber: en.code, reason: "Food additive" + (en.code ? " · " + en.code : "") };
+      if (listHitTok(fortifiedT, toks)) return { status: "good", group: "fortified", reason: "Added vitamin/mineral" };
       if (listHitTok(addedSugarsT, toks)) return { status: "limit", group: "addedSugar", reason: "Added sugar" };
       if (listHitTok(cleanT, toks)) return { status: "good", group: "clean", reason: "Whole-food ingredient" };
       if (/\be ?\d{3,4}[a-z]?\b/.test(String(raw || ""))) return { status: "caution", group: "eCaution", reason: "Unrecognized additive" };
@@ -226,22 +301,32 @@
       var out = { hasData: false, negatives: [], positives: [] };
       if (!off || !off.nutriments) return out;
       var nu = off.nutriments;
-      function row(label, val, unit, sev, note) {
+      // `pen` is the score impact: a penalty for negatives, a bonus for positives.
+      function row(label, val, unit, sev, note, pen) {
         var v = (val == null) ? "—" : (Math.round(val * 10) / 10 + unit);
-        (sev === "good" ? out.positives : out.negatives).push({ label: label, value: v, sev: sev, note: note });
+        (sev === "good" ? out.positives : out.negatives).push({ label: label, value: v, sev: sev, note: note, pen: pen || 0 });
       }
       var kcal = num(nu["energy-kcal_100g"]);
-      if (kcal != null) row("Calories", kcal, " kcal", kcal <= 120 ? "good" : kcal <= 300 ? "mid" : "bad", kcal <= 120 ? "Low-calorie" : kcal <= 300 ? "Moderate" : "Calorie-dense");
+      if (kcal != null) row("Calories", kcal, " kcal", kcal <= 120 ? "good" : kcal <= 300 ? "mid" : "bad",
+        kcal <= 120 ? "Low-calorie" : kcal <= 300 ? "Moderate" : "Calorie-dense",
+        kcal <= 300 ? 0 : Math.min(12, Math.round((kcal - 300) / 40) + 2));
       var sat = num(nu["saturated-fat_100g"]);
-      if (sat != null) row("Saturated fat", sat, "g", sat <= 1.5 ? "good" : sat <= 5 ? "mid" : "bad", sat <= 1.5 ? "Low" : sat <= 5 ? "A bit high" : "High");
+      if (sat != null) row("Saturated fat", sat, "g", sat <= 1.5 ? "good" : sat <= 5 ? "mid" : "bad",
+        sat <= 1.5 ? "Low" : sat <= 5 ? "A bit high" : "High",
+        sat <= 5 ? 0 : Math.min(18, Math.round((sat - 5) * 1.5) + 3));
       var sug = num(nu["sugars_100g"]);
-      if (sug != null) row("Sugar", sug, "g", sug <= 5 ? "good" : sug <= 22.5 ? "mid" : "bad", sug <= 5 ? "Low" : sug <= 22.5 ? "Moderate" : "Too much sugar");
+      if (sug != null) row("Sugar", sug, "g", sug <= 5 ? "good" : sug <= 22.5 ? "mid" : "bad",
+        sug <= 5 ? "Low" : sug <= 22.5 ? "Moderate" : "Too much sugar",
+        // Sugar dominates: a product that is mostly sugar should score badly.
+        sug <= 22.5 ? (sug > 10 ? Math.round((sug - 10) * 0.4) : 0) : Math.min(50, Math.round((sug - 22.5) * 0.9) + 8));
       var salt = num(nu["salt_100g"]); if (salt == null && num(nu["sodium_100g"]) != null) salt = num(nu["sodium_100g"]) * 2.5;
-      if (salt != null) row("Salt", salt, "g", salt <= 0.3 ? "good" : salt <= 1.5 ? "mid" : "bad", salt <= 0.3 ? "Low" : salt <= 1.5 ? "Moderate" : "Too much salt");
+      if (salt != null) row("Salt", salt, "g", salt <= 0.3 ? "good" : salt <= 1.5 ? "mid" : "bad",
+        salt <= 0.3 ? "Low" : salt <= 1.5 ? "Moderate" : "Too much salt",
+        salt <= 1.5 ? 0 : Math.min(18, Math.round((salt - 1.5) * 6) + 3));
       var fib = num(nu["fiber_100g"]);
-      if (fib != null && fib >= 3) row("Fiber", fib, "g", "good", fib >= 6 ? "Excellent source" : "Good source");
+      if (fib != null && fib >= 3) row("Fiber", fib, "g", "good", fib >= 6 ? "Excellent source" : "Good source", fib >= 6 ? 5 : 3);
       var pro = num(nu["proteins_100g"]);
-      if (pro != null && pro >= 8) row("Protein", pro, "g", "good", "Good source");
+      if (pro != null && pro >= 8) row("Protein", pro, "g", "good", "Good source", 3);
       out.hasData = (out.negatives.length + out.positives.length) > 0;
       return out;
     }
@@ -254,9 +339,51 @@
       return { label: "Bad", cls: "bad" };
     }
 
+    // Strict scan verdict: a product only earns approval when every listed
+    // ingredient is known and none are in an avoid/caution/limit bucket. A missing or
+    // partly unknown list must never be presented as approved.
+    function strictVerdict(classified) {
+      classified = classified || [];
+      if (!classified.length) return {
+        approved: false, needsReview: true, label: "Needs ingredients", cls: "review",
+        summary: "No complete ingredient list was available.", blockers: []
+      };
+      var blockers = classified.filter(function (c) {
+        return c.status === "avoid" || c.status === "caution" || c.status === "limit";
+      });
+      var unknown = classified.filter(function (c) { return c.status === "unknown"; });
+      if (blockers.length) return {
+        approved: false, needsReview: false, label: "Not approved", cls: "fail",
+        summary: "Fails the strict ingredient standard.", blockers: blockers
+      };
+      if (unknown.length) return {
+        approved: false, needsReview: true, label: "Needs review", cls: "review",
+        summary: "Unknown ingredients prevent strict approval.", blockers: unknown
+      };
+      return {
+        approved: true, needsReview: false, label: "Strict approved", cls: "pass",
+        summary: "No avoid, caution, limit, or unknown ingredients found.", blockers: []
+      };
+    }
+
+    function ingredientConfidence(classified) {
+      classified = classified || [];
+      if (!classified.length) return { level: "low", label: "Low confidence", summary: "No ingredient list available." };
+      var unknown = classified.filter(function (c) { return c.status === "unknown"; }).length;
+      var ratio = unknown / classified.length;
+      if (classified.length >= 3 && ratio === 0) return {
+        level: "high", label: "High confidence", summary: "Full listed ingredients were recognized."
+      };
+      if (ratio <= 0.25) return {
+        level: "medium", label: "Medium confidence", summary: "Most listed ingredients were recognized."
+      };
+      return { level: "low", label: "Low confidence", summary: "Too many listed ingredients need review." };
+    }
+
     function analyze(off, ingredientsText, productType) {
       var isFood = isFoodType(productType);
-      var items = parseIngredients(ingredientsText);
+      var parsed = parseIngredientsDetailed(ingredientsText);
+      var items = parsed.items;
       var classified = items.map(function (it) {
         var c = classify(it.norm, (it.raw || "").toLowerCase(), productType);
         return { raw: it.raw, norm: it.norm, status: c.status, reason: c.reason,
@@ -276,12 +403,19 @@
       // Nutrition / processing adjustments apply to food only.
       var nutrition = isFood ? evalNutrition(off) : { hasData: false, negatives: [], positives: [] };
       if (isFood && off) {
-        if (off.nova_group === 4) { score -= 8; reasons.push({ d: -8, t: "Ultra-processed (NOVA group 4)" }); }
+        if (off.nova_group === 4) { score -= 10; reasons.push({ d: -10, t: "Ultra-processed (NOVA group 4)" }); }
         var ns = String(off.nutriscore_grade || "").toLowerCase();
         if (ns === "e") { score -= 12; reasons.push({ d: -12, t: "Nutri-Score E" }); }
         else if (ns === "d") { score -= 7; reasons.push({ d: -7, t: "Nutri-Score D" }); }
         else if (ns === "a") { score += 5; reasons.push({ d: 5, t: "Nutri-Score A" }); }
-        nutrition.negatives.forEach(function (r) { if (r.sev === "bad") { score -= 4; reasons.push({ d: -4, t: "High " + r.label.toLowerCase() }); } });
+        // Graduated nutrition impact: big sugar/salt/fat loads cost real points,
+        // strong fiber/protein gives a small bonus.
+        nutrition.negatives.forEach(function (r) {
+          if (r.pen) { score -= r.pen; reasons.push({ d: -r.pen, t: (r.note && r.sev === "bad") ? r.note : "High " + r.label.toLowerCase() }); }
+        });
+        nutrition.positives.forEach(function (r) {
+          if (r.pen) { score += r.pen; reasons.push({ d: r.pen, t: "Good source of " + r.label.toLowerCase() }); }
+        });
       }
 
       var hasAvoid = avoidN > 0;
@@ -293,7 +427,9 @@
       else if (classified.length) nutrition.positives.unshift({ label: "Additives", value: "None", sev: "good", note: "No risky ingredients" });
 
       return { classified: classified, score: score, badge: bandFor(score, hasAvoid), nutrition: nutrition,
-        flaggedCount: flaggedCount, scoreReasons: reasons, productType: productType || "food" };
+        flaggedCount: flaggedCount, scoreReasons: reasons, productType: productType || "food",
+        strictVerdict: strictVerdict(classified), ingredientConfidence: ingredientConfidence(classified),
+        ignoredFragments: parsed.ignored };
     }
 
     function personalAlerts(classified, profile) {
@@ -419,11 +555,15 @@
         groups: groups, bannedMap: bannedMap, eNumbers: DATA.eNumbers || [],
         seedOils: DATA.seedOils || [], addedSugars: DATA.addedSugars || [],
         artificialSweeteners: DATA.artificialSweeteners || [], vagueTerms: DATA.vagueTerms || [],
-        cleanIngredients: DATA.cleanIngredients || [], allergenMap: DATA.allergenMap || {}
+        cleanIngredients: DATA.cleanIngredients || [], fortifiedVitamins: DATA.fortifiedVitamins || [],
+        allergenMap: DATA.allergenMap || {}
       },
       norm: norm, titleCase: titleCase, num: num, cap: cap, canonStatus: canonStatus,
       tokenize: tokenize, phraseInTokens: phraseInTokens, isFoodType: isFoodType,
-      parseIngredients: parseIngredients, classify: classify, ingredientDetail: ingredientDetail,
+      parseIngredients: parseIngredients, parseIngredientsDetailed: parseIngredientsDetailed,
+      ingredientTextQuality: ingredientTextQuality,
+      classify: classify, ingredientDetail: ingredientDetail,
+      strictVerdict: strictVerdict, ingredientConfidence: ingredientConfidence,
       evalNutrition: evalNutrition, analyze: analyze, bandFor: bandFor, personalAlerts: personalAlerts,
       computeTargets: computeTargets, computeKcal: computeKcal, computeMacros: computeMacros,
       diffProducts: diffProducts
