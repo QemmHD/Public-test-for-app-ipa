@@ -43,7 +43,7 @@
     compareB: null, compareCands: [],
     insightsFilter: "all", editHealth: false, encQuery: "", ingFrom: "result",
     research: { term: "", loading: false, data: null, error: false },
-    busy: false, statusMsg: ""
+    busy: false, statusMsg: "", toast: null
   };
   var app;
   var researchCache = {};
@@ -59,6 +59,13 @@
   }
   function saveHealth() { try { localStorage.setItem("cb_health", JSON.stringify(state.health)); } catch (e) {} }
   function saveSettings() { try { localStorage.setItem("cb_settings", JSON.stringify(state.settings)); } catch (e) {} }
+  var toastTimer = null;
+  function notify(msg, kind) {
+    state.toast = { msg: msg, kind: kind || "info" };
+    render();
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { state.toast = null; render(); }, 3200);
+  }
 
   // Mifflin-St Jeor BMR -> TDEE -> calorie/macro target (engine).
   function computeTargets(h) { return ENG.computeTargets(h); }
@@ -129,8 +136,8 @@
   function parseIngredients(text) { return ENG.parseIngredients(text); }
   function classify(n, raw, productType) { return ENG.classify(n, raw, productType); }
 
-  var STATUS_RANK = { avoid: 4, caution: 3, limit: 2, unknown: 1, good: 0 };
-  var STATUS_LABEL = { avoid: "Avoid", caution: "Caution", limit: "Limit", unknown: "Unknown", good: "Clean" };
+  var STATUS_RANK = { avoid: 4, caution: 3, limit: 2, unknown: 1, ok: 0, good: 0 };
+  var STATUS_LABEL = { avoid: "Avoid", caution: "Caution", limit: "Limit", unknown: "Unknown", ok: "Clean", good: "Clean" };
   var STATUS_GROUPS = ["avoid", "caution", "limit", "unknown", "good"];
   // Human label + emoji per product family for the result-screen type badge.
   var PROD_TYPE_LABEL = {
@@ -189,7 +196,7 @@
   function fetchJson(url, opts) { return fetchWithTimeout(url, opts).then(function (r) { return r.ok ? r.json() : null; }); }
 
   /* -------------------------------------------------- Open*Facts family */
-  var OFF_FIELDS = "code,product_name,brands,image_front_small_url,image_front_url,ingredients_text,ingredients_text_en,additives_tags,categories_tags,labels_tags,serving_quantity,nova_group,nutriscore_grade,nutriments";
+  var OFF_FIELDS = "code,product_name,brands,image_front_small_url,image_front_url,ingredients_text,ingredients_text_en,ingredients_text_with_allergens,ingredients,additives_tags,categories_tags,labels_tags,serving_quantity,nova_group,nutriscore_grade,nutriments";
   // Certified-only kosher detection: trust an official Open*Facts kosher label
   // (e.g. "en:kosher", "en:ou-kosher"). We never guess kosher status from
   // ingredients — only report a certification the product data actually carries.
@@ -200,6 +207,35 @@
     }
     return false;
   }
+  // Best-available ingredient text: prefer English, then default text, then
+  // reconstruct from Open Food Facts' structured `ingredients` array so a
+  // product with no free-text list still resolves automatically (no photo).
+  function offIngredientsText(p) {
+    var txt = p.ingredients_text_en || p.ingredients_text || p.ingredients_text_with_allergens || "";
+    var structured = "";
+    if (Array.isArray(p.ingredients) && p.ingredients.length) {
+      structured = p.ingredients.map(function (x) {
+        return (x && x.text) || (x && x.id && String(x.id).replace(/^[a-z]{2}:/, "").replace(/-/g, " ")) || "";
+      }).filter(Boolean).join(", ");
+    }
+    // Crowd-sourced free text can contain descriptions or AI commentary.
+    // Prefer the structured list whenever the free-text field is suspicious.
+    var quality = ENG.ingredientTextQuality(txt);
+    if ((!quality.usable || !txt || txt.replace(/\s/g, "").length < 3) && structured) txt = structured;
+    if (!ENG.ingredientTextQuality(txt).usable) txt = "";
+    return txt;
+  }
+  // Additive E-numbers Open Food Facts detected for this product (e.g. "en:e102").
+  // These are available even when the ingredient text is incomplete, so we use
+  // them to fill gaps and flag additives the text alone would miss.
+  function offAdditiveCodes(p) {
+    var tags = (p && p.additives_tags) || [], out = [];
+    tags.forEach(function (t) {
+      var code = String(t).split(":").pop().toLowerCase().replace(/\s/g, "");
+      if (/^e\d{3,4}[a-z]?$/.test(code)) out.push(code);
+    });
+    return out;
+  }
   function mapOff(p, code, src) {
     if (!p) return null;
     var cats = p.categories_tags || [], catTag = "";
@@ -207,7 +243,7 @@
     if (!catTag && cats.length) catTag = String(cats[cats.length - 1]).replace(/^[a-z]{2}:/, "");
     return { barcode: code || p.code || "", name: p.product_name || "Unknown product", brand: p.brands || "",
       image: p.image_front_small_url || p.image_front_url || "", category: catTag, serving_quantity: p.serving_quantity,
-      ingredientsText: p.ingredients_text_en || p.ingredients_text || "",
+      ingredientsText: offIngredientsText(p), additiveCodes: offAdditiveCodes(p),
       productType: (src && src.type) || "food", source: (src && src.label) || "Open Food Facts",
       kosher: detectKosher(p),
       nova_group: p.nova_group, nutriscore_grade: p.nutriscore_grade, nutriments: p.nutriments || {} };
@@ -230,6 +266,57 @@
   }
   // Query each Open*Facts source in order; first product with data wins. The
   // detected source sets productType (food / beauty / household / petfood).
+  // ---- USDA FoodData Central (public-domain UPC + ingredient source) ----
+  // Used to gap-fill when Open Food Facts has no ingredient list. A free
+  // data.gov key (Settings) raises limits; the shared DEMO_KEY works otherwise.
+  function usdaKey() { var s = state.settings || {}; return (s.usdaKey && s.usdaKey.trim()) || "DEMO_KEY"; }
+  function mapUsdaFood(f, code) {
+    if (!f) return null;
+    var nu = {};
+    (f.foodNutrients || []).forEach(function (n) {
+      var num = String(n.nutrientNumber || n.number || (n.nutrient && n.nutrient.number) || "");
+      var val = n.value != null ? n.value : (n.amount != null ? n.amount : null);
+      if (val == null) return;
+      if (num === "208") nu["energy-kcal_100g"] = val;
+      else if (num === "203") nu["proteins_100g"] = val;
+      else if (num === "269" || num === "2000") nu["sugars_100g"] = val;
+      else if (num === "606") nu["saturated-fat_100g"] = val;
+      else if (num === "291") nu["fiber_100g"] = val;
+      else if (num === "307") nu["sodium_100g"] = val / 1000; // mg -> g
+      else if (num === "205") nu["carbohydrates_100g"] = val;
+      else if (num === "204") nu["fat_100g"] = val;
+    });
+    return { barcode: code || f.gtinUpc || "", name: f.description || "Unknown product",
+      brand: f.brandName || f.brandOwner || "", image: "", category: (f.brandedFoodCategory || "").toLowerCase(),
+      ingredientsText: f.ingredients || "", additiveCodes: [], productType: "food",
+      source: "USDA FoodData Central", kosher: false, nutriments: nu };
+  }
+  function lookupUsda(code) {
+    var url = "https://api.nal.usda.gov/fdc/v1/foods/search?api_key=" + encodeURIComponent(usdaKey()) +
+      "&query=" + encodeURIComponent(code) + "&dataType=Branded&pageSize=5";
+    return fetchJson(url).then(function (j) {
+      var foods = (j && j.foods) || [];
+      var norm0 = function (x) { return String(x || "").replace(/^0+/, ""); };
+      // FoodData Central search is relevance-ranked and can return unrelated
+      // products for an unknown UPC. Never attach the first fuzzy result to a
+      // scanned barcode; only an exact GTIN/UPC match is trustworthy.
+      var hit = foods.filter(function (f) { return norm0(f.gtinUpc) === norm0(code); })[0];
+      return hit ? mapUsdaFood(hit, code) : null;
+    }).catch(function () { return null; });
+  }
+  // Merge a USDA result into an Open Food Facts result, filling only the gaps.
+  function mergeSources(off, u) {
+    if (!off) return u || null;
+    if (!u) return off;
+    if (!off.ingredientsText && u.ingredientsText) {
+      off.ingredientsText = u.ingredientsText;
+      off.source = (off.source && off.source.indexOf("USDA") === -1) ? (off.source + " + USDA") : "USDA FoodData Central";
+    }
+    if ((!off.nutriments || !Object.keys(off.nutriments).length) && u.nutriments) off.nutriments = u.nutriments;
+    if (!off.name || off.name === "Unknown product") off.name = u.name;
+    if (!off.brand) off.brand = u.brand;
+    return off;
+  }
   function lookupBarcode(code) {
     var cached = cachedProduct(code);
     if (cached) return Promise.resolve(cached);
@@ -238,15 +325,35 @@
       var src = OFF_SOURCES[i];
       var url = src.base + encodeURIComponent(code) + ".json?fields=" + OFF_FIELDS;
       return fetchJson(url).then(function (j) {
-        if (j && j.status === 1 && j.product) {
-          var off = mapOff(j.product, code, src);
-          cacheProduct(code, off);
-          return off;
-        }
+        if (j && j.status === 1 && j.product) return mapOff(j.product, code, src);
         return tryAt(i + 1);
       }).catch(function () { return tryAt(i + 1); });
     }
-    return tryAt(0);
+    return tryAt(0).then(function (off) {
+      if (offHasIngredients(off)) { cacheProduct(code, off); return off; }
+      // Gap-fill from USDA when Open*Facts had nothing useful.
+      return lookupUsda(code).then(function (u) {
+        var merged = mergeSources(off, u);
+        if (merged) cacheProduct(code, merged);
+        return merged;
+      });
+    });
+  }
+  // ---- openFDA CAERS: count of consumer-reported reaction events mentioning a term ----
+  function fetchFdaReports(term) {
+    var s = state.settings || {};
+    if (s.openfda === false) return;
+    var key = norm(term);
+    state.fdaReports = state.fdaReports || {};
+    if (state.fdaReports[key] !== undefined) return; // already fetched/fetching
+    state.fdaReports[key] = null; // mark in-flight
+    var q = '"' + String(term).replace(/"/g, "") + '"';
+    var url = "https://api.fda.gov/food/event.json?search=" + encodeURIComponent(q) + "&limit=1";
+    fetchJson(url).then(function (j) {
+      var total = (j && j.meta && j.meta.results && j.meta.results.total) || 0;
+      state.fdaReports[key] = total;
+      if (state.view === "ingredient") render();
+    }).catch(function () { state.fdaReports[key] = 0; });
   }
   function searchProducts(query) {
     // Search every Open*Facts database (food, beauty, household, pet food) in
@@ -254,13 +361,25 @@
     // source tags its results with the right productType via mapOff(src), so
     // opening a result builds it through the correct (food vs cosmetic) path.
     // A single source failing (timeout / down) must not sink the whole search.
-    var jobs = OFF_SOURCES.map(function (src) {
+    var jobs = [];
+    OFF_SOURCES.forEach(function (src, sourceIndex) {
       var host = src.base.split("/api/")[0];
       var url = host + "/cgi/search.pl?search_terms=" + encodeURIComponent(query) +
         "&search_simple=1&action=process&json=1&page_size=20&fields=" + OFF_FIELDS;
-      return fetchJson(url).then(function (j) {
-        return ((j && j.products) || []).map(function (p) { return mapOff(p, "", src); });
-      }).catch(function () { return []; });
+      var brandUrl = host + "/cgi/search.pl?action=process&json=1&page_size=20&tagtype_0=brands" +
+        "&tag_contains_0=contains&tag_0=" + encodeURIComponent(query) + "&fields=" + OFF_FIELDS;
+      [url, brandUrl].forEach(function (searchUrl, kindIndex) {
+        jobs.push(fetchJson(searchUrl).then(function (j) {
+          return ((j && j.products) || []).map(function (p, resultIndex) {
+            var o = mapOff(p, "", src);
+            if (o) {
+              o._brandHit = kindIndex === 1;
+              o._searchOrder = sourceIndex * 1000 + kindIndex * 100 + resultIndex;
+            }
+            return o;
+          });
+        }).catch(function () { return []; }));
+      });
     });
     return Promise.all(jobs).then(function (lists) {
       var seen = {}, out = [];
@@ -272,15 +391,50 @@
           out.push(o);
         });
       });
+      out.forEach(function (o) {
+        var q = ENG.norm(query), brand = ENG.norm(o.brand), name = ENG.norm(o.name);
+        var qt = ENG.tokenize(q), bt = ENG.tokenize(brand), nt = ENG.tokenize(name), score = 0;
+        if (brand === q) score += 160;
+        else if (brand.indexOf(q) === 0) score += 120;
+        else if (brand.indexOf(q) !== -1) score += 85;
+        if (name === q) score += 145;
+        else if (name.indexOf(q) === 0) score += 105;
+        else if (name.indexOf(q) !== -1) score += 70;
+        qt.forEach(function (t) {
+          if (bt.indexOf(t) !== -1) score += 24;
+          if (nt.indexOf(t) !== -1) score += 14;
+        });
+        if (o._brandHit) score += 35;
+        if (offHasFullIngredients(o)) score += 8;
+        o._searchRelevance = score;
+      });
+      out.sort(function (a, b) {
+        return b._searchRelevance - a._searchRelevance || a._searchOrder - b._searchOrder;
+      });
       return out;
     });
+  }
+  // Fold in any additives Open Food Facts detected (by E-number) that our own
+  // parse of the ingredient text didn't already catch — so flagged additives
+  // are found even when the printed ingredient list is incomplete.
+  function enrichWithAdditives(text, off, ptype) {
+    var codes = (off && off.additiveCodes) || [];
+    if (!codes.length) return text;
+    var have = {};
+    analyze(off, text, ptype).classified.forEach(function (c) {
+      if (c.enumber) have[String(c.enumber).toLowerCase().replace(/\s/g, "")] = 1;
+      if (c.additive && c.additive.enumber) have[String(c.additive.enumber).toLowerCase()] = 1;
+    });
+    var add = codes.filter(function (code) { return !have[code]; });
+    if (!add.length) return text;
+    return text ? (text + ", " + add.join(", ")) : add.join(", ");
   }
   function buildProduct(off, ingredientsText, opts) {
     opts = opts || {};
     var text = ingredientsText || (off && off.ingredientsText) || "";
     var ptype = opts.productType || (off && off.productType) || "food";
     var food = ENG.isFoodType(ptype);
-    var r = analyze(off, text, ptype);
+    var r = analyze(off, enrichWithAdditives(text, off, ptype), ptype);
     return {
       id: (off && off.barcode) || ("p" + Date.now()), barcode: (off && off.barcode) || "",
       name: (off && off.name) || opts.name || "Scanned product", brand: (off && off.brand) || "",
@@ -291,7 +445,10 @@
       kcal: food ? computeKcal(off) : null,
       macros: food ? ENG.computeMacros(off) : null,
       score: r.score, badge: r.badge, classified: r.classified, nutrition: r.nutrition,
-      flaggedCount: r.flaggedCount, scoreReasons: r.scoreReasons, logged: "checked", ateAt: 0, portion: 1, ts: Date.now()
+      flaggedCount: r.flaggedCount, scoreReasons: r.scoreReasons,
+      strictVerdict: r.strictVerdict, ingredientConfidence: r.ingredientConfidence,
+      ignoredFragments: r.ignoredFragments || [],
+      logged: "checked", ateAt: 0, portion: 1, ts: Date.now()
     };
   }
   // Adjust the serving multiplier on the current product (food only), keep
@@ -465,7 +622,48 @@
   // fallback for when the vendored ZBar module failed to load.
   var zxingReader = null;
   var camStream = null, scanRAF = null, scanBusy = false, scanCanvas = null, scanCtx = null;
+  var camTrack = null, torchOn = false, scanTick = 0;
   function zbarReady() { return !!(window.zbarWasm && window.zbarWasm.scanImageData); }
+  // Tactile feedback: native Capacitor Haptics when available (real taps on the
+  // phone), with a navigator.vibrate fallback. Silent no-op if neither exists.
+  function haptic(kind) {
+    try {
+      var C = window.Capacitor, H = C && C.Plugins && C.Plugins.Haptics;
+      if (H) {
+        if (kind === "success" && H.notification) { H.notification({ type: "SUCCESS" }); return; }
+        if (kind === "error" && H.notification) { H.notification({ type: "ERROR" }); return; }
+        if (H.impact) { H.impact({ style: kind === "heavy" ? "HEAVY" : kind === "light" ? "LIGHT" : "MEDIUM" }); return; }
+      }
+    } catch (e) {}
+    try {
+      if (navigator.vibrate) navigator.vibrate(kind === "success" ? [10, 40, 14] : kind === "error" ? [28, 30, 28] : 9);
+    } catch (e) {}
+  }
+  // Quick white pulse over the camera to confirm a capture, like a shutter flash.
+  function scanFlash() {
+    var f = document.getElementById("scanFlash");
+    if (!f) return;
+    f.classList.remove("on"); void f.offsetWidth; f.classList.add("on");
+  }
+  // Show/wire the torch button only on devices that actually support it
+  // (Android Chrome). iOS WebViews don't expose torch, so the button stays hidden.
+  function setupTorch() {
+    torchOn = false; camTrack = null;
+    var btn = document.getElementById("torchBtn"); if (btn) btn.hidden = true;
+    try {
+      var tracks = camStream && camStream.getVideoTracks && camStream.getVideoTracks();
+      var track = tracks && tracks[0]; if (!track || !track.getCapabilities) return;
+      var caps = track.getCapabilities();
+      if (caps && caps.torch) { camTrack = track; if (btn) { btn.hidden = false; btn.classList.remove("on"); } }
+    } catch (e) {}
+  }
+  function toggleTorch() {
+    if (!camTrack) return;
+    torchOn = !torchOn;
+    try { camTrack.applyConstraints({ advanced: [{ torch: torchOn }] }); } catch (e) {}
+    var btn = document.getElementById("torchBtn"); if (btn) btn.classList.toggle("on", torchOn);
+    haptic("light");
+  }
   // Decode any barcode ZBar finds in a canvas; return the first decoded text.
   function zbarDecodeCanvas(canvas) {
     if (!zbarReady()) return Promise.resolve(null);
@@ -490,8 +688,11 @@
     setStatus("Starting camera…");
     // facingMode:{ideal} is only a soft hint — iOS may hand back the FRONT
     // camera, so try an exact environment lock first and fall back progressively.
+    // Request the sharpest feasible back-camera frame (1080p) so dense UPC bars
+    // resolve; iOS hands back what it can and we fall back progressively.
     var tries = [
-      { video: { facingMode: { exact: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } } },
+      { video: { facingMode: { exact: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } } },
+      { video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } } },
       { video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } } },
       { video: true }
     ];
@@ -512,6 +713,7 @@
       video.setAttribute("playsinline", "");
       var pl = video.play();
       if (pl && pl.catch) pl.catch(function () {});
+      setupTorch();
       scanCanvas = document.createElement("canvas");
       scanCtx = scanCanvas.getContext("2d", { willReadFrequently: true });
       if (!zbarReady()) return startScannerZXing(video);
@@ -522,7 +724,7 @@
       var msg = "Camera unavailable. Enter the barcode manually.";
       if (e && e.name === "NotAllowedError") msg = "Camera access is blocked. Allow camera for this site in Settings, then retry — or enter the barcode manually.";
       else if (e && e.name === "NotFoundError") msg = "No camera was found. Enter the barcode manually.";
-      alert(msg);
+      notify(msg, "error");
       go("manual");
     });
   }
@@ -535,8 +737,13 @@
     if (!scanBusy && video.readyState >= 2 && video.videoWidth) {
       scanBusy = true;
       var vw = video.videoWidth, vh = video.videoHeight;
-      var cropH = Math.round(vh * 0.6), sy = Math.round((vh - cropH) / 2);
-      var scale = Math.min(1, 960 / vw);
+      // Alternate between a tight centred band (fast, where the guide sits) and
+      // the full frame every few passes, so an off-centre or angled code is still
+      // caught without slowing the common case. Downscale to ~1100px for sharpness.
+      scanTick++;
+      var fullPass = (scanTick % 4 === 0);
+      var cropH = fullPass ? vh : Math.round(vh * 0.55), sy = Math.round((vh - cropH) / 2);
+      var scale = Math.min(1, 1100 / vw);
       var dw = Math.max(1, Math.round(vw * scale)), dh = Math.max(1, Math.round(cropH * scale));
       scanCanvas.width = dw; scanCanvas.height = dh;
       scanCtx.drawImage(video, 0, sy, vw, cropH, 0, 0, dw, dh);
@@ -545,6 +752,7 @@
         if (!code || state.view !== "scanner") return;
         // Ignore noise / partial reads — a real EAN/UPC is 8+ digits.
         if (String(code).replace(/\D/g, "").length < 8) return;
+        scanFlash(); haptic("success");
         stopScanner();
         handleBarcode(code);
       });
@@ -573,6 +781,8 @@
     scanBusy = false;
     try { if (zxingReader) zxingReader.reset(); } catch (e) {}
     zxingReader = null;
+    if (torchOn && camTrack) { try { camTrack.applyConstraints({ advanced: [{ torch: false }] }); } catch (e) {} }
+    torchOn = false; camTrack = null;
     if (camStream) { try { camStream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {} camStream = null; }
     var v = document.getElementById("cam");
     if (v) { try { v.srcObject = null; } catch (e) {} }
@@ -687,9 +897,20 @@
       busy(false, ""); state.searchRaw = results; render();
     }).catch(function () { busy(false, ""); state.searchRaw = []; render(); });
   }
+  // Enough to score automatically (no photo) when we have a printed ingredient
+  // list OR Open Food Facts already detected the product's additives.
+  function offHasIngredients(off) {
+    return !!(off && (off.ingredientsText || (off.additiveCodes && off.additiveCodes.length)));
+  }
+  function offHasFullIngredients(off) {
+    return !!(off && off.ingredientsText && off.ingredientsText.replace(/\s/g, "").length >= 3);
+  }
   function openOff(off) {
     if (!off) return;
-    if (!off.ingredientsText) { state.pending = { barcode: off.barcode, off: off }; go("addPhoto"); return; }
+    // Search results need a real ingredient list before we rank or score them.
+    // A partial additive tag is useful after a barcode scan, but not enough to
+    // call a lookup result reviewed.
+    if (!offHasFullIngredients(off)) { state.pending = { barcode: off.barcode, off: off }; go("addPhoto"); return; }
     showProduct(buildProduct(off));
   }
 
@@ -699,9 +920,9 @@
     busy(true, "Looking up product…");
     lookupBarcode(code).then(function (off) {
       busy(false, "");
-      if (!off || !off.ingredientsText) { state.pending = { barcode: code, off: off }; go("addPhoto"); return; }
+      if (!offHasIngredients(off)) { state.pending = { barcode: code, off: off }; go("addPhoto"); return; }
       showProduct(buildProduct(off));
-    }).catch(function () { busy(false, ""); alert("Network error reaching the food database. Check your connection."); });
+    }).catch(function () { busy(false, ""); notify("Network error reaching the food database. Check your connection.", "error"); });
   }
 
   /* ------------------------------------------------------------ OCR */
@@ -750,10 +971,13 @@
   }
   // Editable OCR result so the user can fix misreads before scoring.
   function ocrReviewBlock(text, conf, low) {
+    var preview = ENG.parseIngredientsDetailed(text || "");
+    var scanNote = preview.ignored.length ? '<div class="ocr-cleanup">' + preview.items.length + ' likely ingredients · ' +
+      preview.ignored.length + ' weird/noise fragment' + (preview.ignored.length === 1 ? "" : "s") + ' will be ignored</div>' : "";
     return '<div class="panel glass ocr-review"><div class="panel-h">Check the scanned text' +
       '<span class="cnt">' + Math.round(conf || 0) + '% read</span></div>' +
       (low ? '<div class="ocr-warn">Hard to read — fix any wrong or missing words below, or retake a closer, well-lit photo of just the ingredients.</div>'
-           : '<div class="ocr-tip">Tap to fix anything the scan got wrong, then analyze.</div>') +
+           : '<div class="ocr-tip">Tap to fix anything the scan got wrong, then analyze.</div>') + scanNote +
       '<textarea id="ocrText" class="text-input ocr-text" rows="7" placeholder="Ingredients…">' + esc(text || "") + '</textarea>' +
       '<button class="big-btn" data-act="analyzeOcr">Analyze ingredients</button></div>';
   }
@@ -840,7 +1064,7 @@
   function busy(on, msg) { state.busy = on; setStatus(msg || ""); render(); }
   function sevColor(s) { return s === "good" ? "var(--good)" : s === "mid" ? "var(--mid)" : s === "bad" ? "var(--bad)" : "var(--mut)"; }
   function scoreColor(cls) { return cls === "exc" ? "#1fae54" : cls === "good" ? "#7ac943" : cls === "mid" ? "#ff9f1c" : "#ff3b30"; }
-  function statusColor(st) { return st === "avoid" ? "#ff3b30" : st === "caution" ? "#ff7a45" : st === "limit" ? "#ff9f1c" : st === "good" ? "#2fd07a" : "#8a8a99"; }
+  function statusColor(st) { return st === "avoid" ? "#ff3b30" : st === "caution" ? "#ff7a45" : st === "limit" ? "#ff9f1c" : (st === "good" || st === "ok") ? "#2fd07a" : "#8a8a99"; }
   function dot(color) { return '<span class="dot" style="background:' + color + '"></span>'; }
   var ICONS = {
     scan: '<path d="M4 8V6a2 2 0 0 1 2-2h2"/><path d="M16 4h2a2 2 0 0 1 2 2v2"/><path d="M20 16v2a2 2 0 0 1-2 2h-2"/><path d="M8 20H6a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/>',
@@ -883,6 +1107,42 @@
     };
     var txt = m[p.badge.cls];
     return txt ? '<div class="verdict">' + txt + '</div>' : "";
+  }
+  function strictBlock(p) {
+    var v = p.strictVerdict || ENG.strictVerdict(p.classified || []);
+    var conf = p.ingredientConfidence || ENG.ingredientConfidence(p.classified || []);
+    var blockers = (v.blockers || []).slice(0, 3).map(function (b) {
+      return '<span class="strict-chip">' + esc(titleCase(b.raw || b.name || "Unknown ingredient")) + '</span>';
+    }).join("");
+    return '<div class="strict-card ' + v.cls + '">' +
+      '<div class="strict-top"><div><div class="strict-kicker">Strict scan standard</div>' +
+      '<div class="strict-label">' + esc(v.label) + '</div></div>' +
+      '<div class="confidence ' + conf.level + '">' + esc(conf.label) + '</div></div>' +
+      '<div class="strict-summary">' + esc(v.summary) + ' ' + esc(conf.summary) + '</div>' +
+      (blockers ? '<div class="strict-blockers">' + blockers + '</div>' : "") +
+      '</div>';
+  }
+  function vagueScanBlock(p) {
+    var vague = (p.classified || []).filter(function (c) {
+      return c.group === "vague" || (c.additive && /^generic/.test(c.additive.id || ""));
+    });
+    if (!vague.length) return "";
+    return '<div class="panel glass vague-scan-panel"><div class="panel-h">More detail needed <span class="cnt">' +
+      vague.length + ' vague</span></div><div class="vague-scan-copy">Tap a vague ingredient below to look it up online, or scan the full label so NutriCheck can identify the exact compounds.</div>' +
+      '<button class="ghost-btn" data-act="scanIngredients">' + icon("camera") + ' Scan full ingredient label</button></div>';
+  }
+  function cleanupBlock(p) {
+    var ignored = p.ignoredFragments || [];
+    if (!ignored.length) return "";
+    var byReason = {}, samples = [];
+    ignored.forEach(function (x) {
+      byReason[x.reason] = (byReason[x.reason] || 0) + 1;
+      if (samples.length < 4) samples.push(x.raw);
+    });
+    var summary = Object.keys(byReason).map(function (k) { return byReason[k] + " " + k; }).join(" · ");
+    return '<div class="panel glass cleanup-panel"><div class="panel-h"><span>Scan cleanup</span><span class="cnt">' +
+      ignored.length + ' ignored</span></div><div class="cleanup-copy">Excluded from the ingredient score: ' + esc(summary) + '.</div>' +
+      '<div class="cleanup-chips">' + samples.map(function (x) { return '<span>' + esc(x) + '</span>'; }).join("") + '</div></div>';
   }
   function animateScore() {
     var ring = document.querySelector(".score-ring"), numEl = document.querySelector(".score-num");
@@ -930,9 +1190,13 @@
   function viewScanner() {
     return '<div class="screen scanner">' +
       '<video id="cam" playsinline autoplay muted></video>' +
-      '<div class="scan-frame"></div>' +
+      '<div class="scan-frame"><span class="scan-corner tl"></span><span class="scan-corner tr"></span>' +
+        '<span class="scan-corner bl"></span><span class="scan-corner br"></span>' +
+        '<div class="scan-laser"></div></div>' +
+      '<div class="scan-flash" id="scanFlash"></div>' +
+      '<button class="torch-btn" id="torchBtn" data-act="torch" aria-label="Toggle flashlight" hidden>🔦</button>' +
       '<div class="scan-status" id="status">' + esc(state.statusMsg) + '</div>' +
-      '<div class="scan-hint">Trouble scanning? Tap below to snap a photo of the barcode — sharper and more reliable.</div>' +
+      '<div class="scan-hint">Hold steady — the barcode scans automatically. Trouble? Snap a photo below for a sharper read.</div>' +
       '<div class="scan-actions">' +
         '<label class="big-btn photo-cap"><input id="bcphoto" type="file" accept="image/*" capture="environment" hidden> 📷 Take a photo of the barcode</label>' +
         '<button class="link-btn" data-act="manual">Enter code manually</button>' +
@@ -947,9 +1211,11 @@
     if (list && list.length && state.searchSort === "health") {
       var rank = { a: 0, b: 1, c: 2, d: 3, e: 4 };
       list.sort(function (x, y) {
+        var knownX = offHasFullIngredients(x), knownY = offHasFullIngredients(y);
+        if (knownX !== knownY) return knownX ? -1 : 1;
         var rx = rank[String(x.nutriscore_grade || "").toLowerCase()]; rx = (rx == null ? 9 : rx);
         var ry = rank[String(y.nutriscore_grade || "").toLowerCase()]; ry = (ry == null ? 9 : ry);
-        return rx - ry;
+        return rx - ry || (y._searchRelevance || 0) - (x._searchRelevance || 0);
       });
     }
     state.searchResults = list; // the click handler indexes into this exact (displayed) array
@@ -964,8 +1230,9 @@
       // food); show a small type tag on non-food rows so mixed results read clearly.
       var tl = o.productType && o.productType !== "food" && PROD_TYPE_LABEL[o.productType];
       var typeTag = tl ? '<span class="srch-type">' + tl[0] + ' ' + esc(tl[1]) + '</span>' : "";
-      var sub = esc(o.brand || (o.ingredientsText ? "" : "No ingredient data"));
-      return '<div class="row card tappable" data-search-idx="' + i + '">' +
+      var needsScan = !offHasFullIngredients(o);
+      var sub = needsScan ? "Needs ingredient scan - tap to scan label" : esc(o.brand || o.source);
+      return '<div class="row card tappable' + (needsScan ? " scan-needed" : "") + '" data-search-idx="' + i + '">' +
         (o.image ? '<img class="srch-img" src="' + esc(o.image) + '" alt="">' : '<div class="srch-img ph">🥫</div>') +
         '<div class="row-main"><div class="row-title">' + esc(o.name) + '</div>' +
         '<div class="row-sub">' + typeTag + (typeTag && sub ? " · " : "") + sub + '</div></div>' +
@@ -991,7 +1258,9 @@
     var groupsHtml = "";
     STATUS_GROUPS.forEach(function (st) {
       var rows = [];
-      p.classified.forEach(function (c, i) { if (c.status === st) rows.push(ingredientRow(c, i)); });
+      p.classified.forEach(function (c, i) {
+        if (c.status === st || (st === "good" && c.status === "ok")) rows.push(ingredientRow(c, i));
+      });
       if (!rows.length) return;
       groupsHtml += '<div class="ing-group-h"><span class="dot" style="background:' + statusColor(st) + '"></span>' +
         STATUS_LABEL[st] + ' <span class="cnt">' + rows.length + '</span></div>' + rows.join("");
@@ -1000,6 +1269,8 @@
     var c = scoreColor(p.badge.cls);
     var fav = isFav(p.id);
     return '<div class="screen result">' + backBar("") +
+      strictBlock(p) +
+      vagueScanBlock(p) +
       '<div class="hero glass" style="--c:' + c + '">' +
         '<button class="fav-btn' + (fav ? " on" : "") + '" data-fav="1" aria-label="Favorite">' + (fav ? "★" : "☆") + '</button>' +
         '<div class="product-head">' +
@@ -1019,6 +1290,7 @@
         '</div>' +
       '</div>' +
       whyBlock(p) +
+      cleanupBlock(p) +
       // Yuka-style: the verdict detail (what's bad / what's good) comes FIRST,
       // right under the score — that's the core of the result screen.
       // Bobby-Approved-better: surface the actual flagged INGREDIENT names as
@@ -1219,8 +1491,20 @@
       '<div class="status-tag ' + c.status + '">' + STATUS_LABEL[c.status] + ' ›</div></div>';
   }
 
+  // openFDA consumer-report callout for an ingredient (lazy-loaded, optional).
+  function fdaNote(term) {
+    var s = state.settings || {};
+    if (s.openfda === false) return "";
+    var v = state.fdaReports && state.fdaReports[norm(term)];
+    if (v == null) return ""; // not loaded yet (or in-flight) — stay quiet
+    if (v <= 0) return "";
+    return '<div class="fda-note"><span class="fn-num">' + (v > 999 ? "999+" : v) + '</span>' +
+      '<span class="fn-lbl">consumer-reported reactions mention this in the FDA adverse-event database. ' +
+      'Reports aren’t medically verified — context, not proof.</span></div>';
+  }
   function viewIngredient() {
     var d = state.ingDetail; if (!d) return viewResult();
+    fetchFdaReports(d.title);
     var tabs = [["what", "What it is"], ["why", "Why flagged"], ["risk", "Health effects"], ["studies", "Studies"]];
     var body;
     if (state.ingTab === "what") body = '<p>' + esc(d.whatIs) + '</p>';
@@ -1237,6 +1521,7 @@
         '<div class="ing-summary">' + esc(d.summary) + '</div></div>' +
         '<div class="status-tag ' + d.status + '">' + STATUS_LABEL[d.status] + '</div></div>' +
       (d.banned ? '<div class="banned-note">🌍 <b>Banned / restricted:</b> ' + esc(d.banned) + '</div>' : "") +
+      fdaNote(d.title) +
       '<div class="tabs">' + tabs.map(function (t) {
         return '<button class="tab' + (state.ingTab === t[0] ? " on" : "") + '" data-tab="' + t[0] + '">' + t[1] + '</button>';
       }).join("") + '</div>' +
@@ -1341,9 +1626,21 @@
       return '<button class="chip' + ((s.theme || "dark") === o ? " on" : "") + '" data-theme="' + o + '">' + cap(o) + '</button>';
     }).join("");
     var settings = '<div class="section-title">Settings</div><div class="panel glass">' +
+      '<div class="lrow"><div class="row-main"><div class="row-title">Strict scan standard</div>' +
+        '<div class="row-sub">Always on. Any avoid, caution, or limit ingredient fails approval; unknown ingredients require review.</div></div>' +
+        '<div class="status-tag good">On</div></div>' +
       '<div class="lrow"><div class="row-main"><div class="row-title">Theme</div></div><div class="chips sm">' + themeSel + '</div></div>' +
       '<div class="lrow tappable" data-act="exportData"><div class="row-main"><div class="row-title">Export my data</div><div class="row-sub">Download a backup file</div></div><div class="chev">›</div></div>' +
       '<label class="lrow tappable"><div class="row-main"><div class="row-title">Import data</div><div class="row-sub">Restore from a backup</div></div><input id="importfile" type="file" accept="application/json" hidden><div class="chev">›</div></label></div>';
+
+    var dataSrc = '<div class="section-title">Data sources</div><div class="panel glass">' +
+      '<div class="lrow"><div class="row-main"><div class="row-title">USDA FoodData Central</div>' +
+        '<div class="row-sub">Adds a public-domain UPC + ingredient source to fill gaps. Paste a free data.gov API key for higher limits — leave blank to use the shared demo key.</div></div></div>' +
+      '<div class="lrow"><input id="usdaKey" class="text-input" style="margin:0" placeholder="USDA API key (optional)" value="' + esc(s.usdaKey || "") + '">' +
+        '<button class="search-go" data-act="saveUsdaKey" style="margin-left:8px" aria-label="Save key">Save</button></div>' +
+      '<div class="lrow"><div class="row-main"><div class="row-title">openFDA reports</div>' +
+        '<div class="row-sub">Shows consumer-reported reaction counts on ingredient pages. Free, no key.</div></div>' +
+        '<div class="switch ' + (s.openfda !== false ? "on" : "") + '" data-act="toggleOpenfda"><span></span></div></div></div>';
 
     var allergens = '<div class="section-title">Diet & allergens</div>' + PROFILE_OPTS.map(function (o) {
       var on = !!state.profile[o[0]];
@@ -1354,7 +1651,7 @@
     return '<div class="screen">' +
       '<header class="hd"><div class="logo">My profile</div><div class="sub">Health goal, diet & settings</div></header>' +
       '<div class="section-title">Health & calorie goal</div>' + health +
-      settings + allergens +
+      settings + dataSrc + allergens +
       '<div class="disclaimer">Stored only on this device. Calorie targets are estimates, not medical advice.</div></div>';
   }
 
@@ -1386,7 +1683,7 @@
       var a = document.createElement("a"); a.href = url; a.download = "nutricheck-backup.json";
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
-    } catch (e) { alert("Couldn't export on this device."); }
+    } catch (e) { notify("Couldn't export on this device.", "error"); }
   }
 
   function viewAddPhoto() {
@@ -1442,6 +1739,9 @@
     if (state.busy) app.insertAdjacentHTML("beforeend",
       '<div class="overlay"><div class="spinner"></div><div class="ov-msg">' + esc(state.statusMsg || "Working…") + '</div></div>');
 
+    if (state.toast) app.insertAdjacentHTML("beforeend",
+      '<div class="toast ' + esc(state.toast.kind) + '">' + esc(state.toast.msg) + '</div>');
+
     window.scrollTo(0, keepY);
     lastRenderedView = v;
     if (v === "result" && state.product && state.product.id !== lastAnimatedId) { lastAnimatedId = state.product.id; animateScore(); }
@@ -1452,7 +1752,7 @@
     var t = e.target.closest("[data-act],[data-nav],[data-open],[data-ingidx],[data-tab],[data-toggle],[data-research],[data-search-idx],[data-alt],[data-cmp],[data-fav],[data-hist],[data-log],[data-portion],[data-ins],[data-theme],[data-enc],[data-sort]");
     if (!t) return;
     if (t.dataset.fav != null) { toggleFav(state.product); render(); return; }
-    if (t.dataset.log != null) { setLogged(t.dataset.log); return; }
+    if (t.dataset.log != null) { haptic("light"); setLogged(t.dataset.log); return; }
     if (t.dataset.portion != null) { setPortion(+t.dataset.portion); return; }
     if (t.dataset.ins != null) { state.insightsFilter = t.dataset.ins; render(); return; }
     if (t.dataset.hist != null) { state.historyFilter = t.dataset.hist; render(); return; }
@@ -1483,7 +1783,8 @@
         state.ingTab = "what"; state.ingFrom = "result";
         state.research = { term: "", loading: false, data: null, error: false };
         go("ingredient");
-        if (item.status === "unknown") doResearch(state.ingDetail.title);
+        if (item.status === "unknown" || item.group === "vague" || (item.additive && /^generic/.test(item.additive.id || "")))
+          doResearch(state.ingDetail.title);
       }
       return;
     }
@@ -1491,13 +1792,23 @@
     if (t.dataset.toggle) { var k = t.dataset.toggle; state.profile[k] = !state.profile[k]; saveProfile(); render(); return; }
 
     var act = t.dataset.act;
-    if (act === "scan") go("scanner");
+    if (act === "torch") { toggleTorch(); return; }
+    if (act === "scan") { haptic("light"); go("scanner"); }
+    else if (act === "scanIngredients") {
+      var cp = state.product || {};
+      state.pending = { barcode: cp.barcode || "", off: {
+        barcode: cp.barcode || "", name: cp.name || "Scanned product", brand: cp.brand || "",
+        image: cp.image || "", category: cp.category || "", productType: cp.productType || "food",
+        source: cp.source || "Ingredient scan", nutriments: cp.nutriments || {}
+      } };
+      go("addPhoto");
+    }
     else if (act === "home") go("home");
     else if (act === "addPhoto") go("addPhoto");
     else if (act === "analyzeOcr") {
       var ta = document.getElementById("ocrText");
       var txt = ta ? ta.value.trim() : "";
-      if (txt.replace(/\s/g, "").length < 6) { alert("Please enter or fix the ingredients text first."); return; }
+      if (txt.replace(/\s/g, "").length < 6) { notify("Please enter or fix the ingredients text first.", "error"); return; }
       var ctx = state.ocrPending || {};
       var product = buildProduct(ctx.off || null, txt, { photoKey: ctx.photoKey, source: "Photo / OCR", name: ctx.name || "Scanned product" });
       if (ctx.barcode) product.barcode = ctx.barcode;
@@ -1513,10 +1824,19 @@
     else if (act === "encGo") { var ec = document.getElementById("encq"); state.encQuery = ec ? ec.value.trim() : ""; render(); }
     else if (act === "editHealth") { state.editHealth = true; render(); }
     else if (act === "exportData") { exportData(); }
+    else if (act === "saveUsdaKey") {
+      var uk = document.getElementById("usdaKey");
+      state.settings.usdaKey = uk ? uk.value.trim() : "";
+      saveSettings(); haptic("success"); notify("USDA key saved.", "success");
+    }
+    else if (act === "toggleOpenfda") {
+      state.settings.openfda = state.settings.openfda === false ? true : false;
+      saveSettings(); render();
+    }
     else if (act === "saveHealth") {
       var g = function (id) { var el = document.getElementById(id); return el ? el.value : ""; };
       var age = +g("h_age"), ft = +g("h_ft"), inch = +g("h_in"), lb = +g("h_lb");
-      if (!age || (!ft && !inch) || !lb) { alert("Please fill in age, height and weight."); return; }
+      if (!age || (!ft && !inch) || !lb) { notify("Please fill in age, height and weight.", "error"); return; }
       var cm = Math.round((ft * 12 + inch) * 2.54), kg = Math.round(lb * 0.45359 * 10) / 10;
       state.health = { sex: g("h_sex"), age: age, ft: ft, in: inch, lb: lb, activity: g("h_act"), goal: g("h_goal"), cm: cm, kg: kg };
       saveHealth(); state.editHealth = false; render();
@@ -1537,8 +1857,8 @@
           if (d.health) state.health = d.health;
           if (d.settings) state.settings = d.settings;
           saveHistory(); saveFavs(); saveProfile(); saveHealth(); saveSettings(); applyTheme(); render();
-          alert("Data imported successfully.");
-        } catch (err) { alert("That backup file couldn't be read."); }
+          notify("Data imported successfully.", "success");
+        } catch (err) { notify("That backup file couldn't be read.", "error"); }
       };
       fr.readAsText(e.target.files[0]); return;
     }
@@ -1550,10 +1870,10 @@
       }).then(function (code) {
         busy(false, "");
         if (code) { stopScanner(); handleBarcode(code); }
-        else alert("Couldn't read a barcode in that photo. Fill the frame with the barcode, hold steady so it's sharp, and try again — or enter the code manually.");
+        else notify("Couldn't read a barcode. Fill the frame, hold steady, and try again or enter the code.", "error");
       }).catch(function () {
         busy(false, "");
-        alert("Couldn't read a barcode in that photo. Try again or enter the code manually.");
+        notify("Couldn't read a barcode in that photo. Try again or enter the code manually.", "error");
       });
       return;
     }
@@ -1581,7 +1901,7 @@
           var ta = document.getElementById("ocrText");
           if (ta) { try { ta.focus(); } catch (e) {} }
         });
-      }).catch(function () { busy(false, ""); alert("Couldn't process that image. Try again."); });
+      }).catch(function () { busy(false, ""); notify("Couldn't process that image. Try again.", "error"); });
     }
   }
 
@@ -1591,10 +1911,21 @@
     else if (e.target.id === "bc" && e.target.value.trim()) { e.preventDefault(); handleBarcode(e.target.value.trim()); }
     else if (e.target.id === "encq") { e.preventDefault(); state.encQuery = e.target.value.trim(); render(); }
   }
+  // Keep the app right-side-up. Info.plist already locks the native shell to
+  // portrait; this is a best-effort web-layer lock for any browser context.
+  function lockPortrait() {
+    try {
+      if (screen.orientation && screen.orientation.lock) {
+        var pr = screen.orientation.lock("portrait");
+        if (pr && pr.catch) pr.catch(function () {});
+      }
+    } catch (e) {}
+  }
   function init() {
     app = document.getElementById("app");
     loadLocal();
     applyTheme();
+    lockPortrait();
     if (!state.onboarded) state.view = "onboard";
     document.addEventListener("click", onClick);
     document.addEventListener("change", onChange);

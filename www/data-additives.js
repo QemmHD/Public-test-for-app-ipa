@@ -15,7 +15,7 @@ var CB_DATA = (function () {
   const additives = [
     {
       id: "red40", names: ["red 40", "allura red", "red dye 40", "fd&c red no. 40", "e129"], enumber: "E129",
-      category: "Artificial color", risk: "caution",
+      category: "Artificial color", risk: "avoid",
       summary: "Synthetic petroleum-derived red dye linked to hyperactivity in children.",
       whatIs: "Allura Red AC is a synthetic azo dye made from petroleum, used to color candy, drinks, cereal and snacks. It has no nutritional purpose.",
       whyFlagged: "Purely cosmetic. Associated with behavioral effects in sensitive children and may contain trace carcinogenic contaminants (benzidine).",
@@ -27,7 +27,7 @@ var CB_DATA = (function () {
     },
     {
       id: "yellow5", names: ["yellow 5", "tartrazine", "fd&c yellow no. 5", "e102"], enumber: "E102",
-      category: "Artificial color", risk: "caution",
+      category: "Artificial color", risk: "avoid",
       summary: "Synthetic yellow dye tied to hyperactivity and allergic reactions.",
       whatIs: "Tartrazine is a synthetic lemon-yellow azo dye used in soft drinks, chips, candy and sauces.",
       whyFlagged: "Cosmetic only; one of the dyes in the Southampton hyperactivity study. Can trigger reactions in aspirin-sensitive and asthmatic individuals.",
@@ -38,7 +38,7 @@ var CB_DATA = (function () {
     },
     {
       id: "yellow6", names: ["yellow 6", "sunset yellow", "fd&c yellow no. 6", "e110"], enumber: "E110",
-      category: "Artificial color", risk: "caution",
+      category: "Artificial color", risk: "avoid",
       summary: "Synthetic orange-yellow dye with the same hyperactivity concerns.",
       whatIs: "Sunset Yellow FCF is a synthetic azo dye used in snacks, cheese products and beverages.",
       whyFlagged: "Cosmetic only; part of the Southampton dye study; possible contamination with carcinogenic byproducts.",
@@ -60,7 +60,7 @@ var CB_DATA = (function () {
     },
     {
       id: "blue1", names: ["blue 1", "brilliant blue", "fd&c blue no. 1", "e133"], enumber: "E133",
-      category: "Artificial color", risk: "caution",
+      category: "Artificial color", risk: "avoid",
       summary: "Synthetic blue dye; cosmetic, with limited safety data.",
       whatIs: "Brilliant Blue FCF is a synthetic dye used in drinks, candy and ice cream.",
       whyFlagged: "No nutritional value; part of the synthetic-dye group flagged for neurobehavioral effects in children.",
@@ -138,7 +138,7 @@ var CB_DATA = (function () {
     },
     {
       id: "aspartame", names: ["aspartame", "e951", "nutrasweet", "equal"], enumber: "E951",
-      category: "Artificial sweetener", risk: "caution",
+      category: "Artificial sweetener", risk: "avoid",
       summary: "Artificial sweetener classified 'possibly carcinogenic' by IARC in 2023.",
       whatIs: "Aspartame is a low-calorie sweetener in diet sodas, sugar-free gum and 'light' products.",
       whyFlagged: "IARC classified it Group 2B (possibly carcinogenic) in 2023, though JECFA kept the acceptable daily intake. Unsafe for people with PKU.",
@@ -149,7 +149,7 @@ var CB_DATA = (function () {
     },
     {
       id: "sucralose", names: ["sucralose", "e955", "splenda"], enumber: "E955",
-      category: "Artificial sweetener", risk: "caution",
+      category: "Artificial sweetener", risk: "avoid",
       summary: "Chlorinated sweetener; recent research raised genotoxicity questions.",
       whatIs: "Sucralose is a zero-calorie sweetener used in diet drinks, protein products and baked goods.",
       whyFlagged: "A 2023 study reported that a breakdown product, sucralose-6-acetate, may be genotoxic and affect gut health.",
@@ -160,7 +160,7 @@ var CB_DATA = (function () {
     },
     {
       id: "acesulfame", names: ["acesulfame potassium", "acesulfame k", "ace-k", "e950"], enumber: "E950",
-      category: "Artificial sweetener", risk: "caution",
+      category: "Artificial sweetener", risk: "avoid",
       summary: "Synthetic sweetener often paired with aspartame/sucralose.",
       whatIs: "Acesulfame-K is a calorie-free sweetener used in diet sodas and sugar-free foods.",
       whyFlagged: "Limited long-term human data; some animal and microbiome concerns.",
@@ -171,7 +171,7 @@ var CB_DATA = (function () {
     },
     {
       id: "saccharin", names: ["saccharin", "e954", "sweet'n low"], enumber: "E954",
-      category: "Artificial sweetener", risk: "limit",
+      category: "Artificial sweetener", risk: "avoid",
       summary: "Oldest artificial sweetener; historic (now-delisted) cancer concern.",
       whatIs: "Saccharin is a calorie-free sweetener used in tabletop packets and some diet products.",
       whyFlagged: "Caused bladder tumors in rats; removed from the U.S. carcinogen list in 2000 as the rat mechanism doesn't apply to humans, but still commonly limited.",
@@ -182,7 +182,7 @@ var CB_DATA = (function () {
     },
     {
       id: "hfcs", names: ["high fructose corn syrup", "hfcs", "high-fructose corn syrup", "corn syrup"], enumber: "",
-      category: "Added sugar", risk: "caution",
+      category: "Added sugar", risk: "avoid",
       summary: "Cheap liquid sweetener tied to metabolic and obesity concerns.",
       whatIs: "HFCS is a corn-derived sweetener in sodas, sauces, bread and countless processed foods.",
       whyFlagged: "A marker of ultra-processed food; high intake is associated with obesity, fatty liver and type-2 diabetes.",
@@ -345,7 +345,7 @@ var CB_DATA = (function () {
     },
     {
       id: "carmine", names: ["carmine", "cochineal", "carminic acid", "e120"], enumber: "E120",
-      category: "Natural color", risk: "caution",
+      category: "Natural color", risk: "avoid",
       summary: "Insect-derived red color that can cause severe allergic reactions.",
       whatIs: "Carmine is a red dye made from cochineal insects, used in yogurt, juice and candy.",
       whyFlagged: "Can trigger serious allergic reactions/anaphylaxis in sensitive people; not vegetarian/vegan.",
@@ -421,6 +421,15 @@ var CB_DATA = (function () {
       ]
     },
     {
+      id: "sodiumtriphosphate", names: ["sodium triphosphate", "sodium tripolyphosphate", "triphosphate", "triphosphates", "e451"], enumber: "E451",
+      category: "Phosphate additive", risk: "limit",
+      summary: "Phosphate salt used to retain moisture and control texture.",
+      whatIs: "Sodium triphosphate is an inorganic phosphate used in processed foods to stabilize texture and retain moisture.",
+      whyFlagged: "Added inorganic phosphates are readily absorbed and are best limited, especially in heavily processed foods.",
+      healthRisk: "High phosphate intake can be a concern for kidney and cardiovascular health.",
+      studies: []
+    },
+    {
       id: "edta", names: ["disodium edta", "calcium disodium edta", "edta", "e385"], enumber: "E385",
       category: "Preservative (chelator)", risk: "limit",
       summary: "Preservative that binds metals; fine in small amounts.",
@@ -471,7 +480,7 @@ var CB_DATA = (function () {
     },
     {
       id: "quinolineyellow", names: ["quinoline yellow", "e104"], enumber: "E104",
-      category: "Artificial color", risk: "caution",
+      category: "Artificial color", risk: "avoid",
       summary: "Synthetic yellow dye not approved for food in the U.S.",
       whatIs: "Quinoline Yellow is a synthetic dye used in some sweets, drinks and medicines outside the U.S.",
       whyFlagged: "One of the 'Southampton Six' dyes linked to hyperactivity; not approved as a food color in the United States and carries a warning label in the EU.",
@@ -482,7 +491,7 @@ var CB_DATA = (function () {
     },
     {
       id: "ponceau4r", names: ["ponceau 4r", "ponceau", "e124", "cochineal red a"], enumber: "E124",
-      category: "Artificial color", risk: "caution",
+      category: "Artificial color", risk: "avoid",
       summary: "Synthetic red dye banned in the U.S. and Norway.",
       whatIs: "Ponceau 4R is a synthetic azo dye used to color sweets, drinks and desserts in some countries.",
       whyFlagged: "Banned in the United States and Norway; part of the Southampton hyperactivity study; possible carcinogenic concerns in animal studies.",
@@ -573,7 +582,7 @@ var CB_DATA = (function () {
       studies: [{ title: "Scientific opinion on the re-evaluation of ascorbic acid (E 300)", source: "EFSA Journal", year: 2015 }]
     },
     {
-      id: "tocopherols", names: ["tocopherols", "mixed tocopherols", "alpha-tocopherol", "vitamin e", "e306", "e307", "e308", "e309"], enumber: "E306",
+      id: "tocopherols", names: ["tocopherols", "mixed tocopherols", "alpha-tocopherol", "tocopherol-rich extract", "tocopherol rich extract", "tocopherol-rich extracts", "vitamin e", "e306", "e307", "e308", "e309"], enumber: "E306",
       category: "Antioxidant (vitamin E)", risk: "ok",
       summary: "Vitamin-E antioxidants used to keep oils from going rancid; beneficial.",
       whatIs: "Tocopherols are forms of vitamin E used as natural antioxidants to protect fats and oils from oxidation.",
@@ -772,7 +781,7 @@ var CB_DATA = (function () {
     },
     {
       id: "yeastextract", names: ["yeast extract", "autolyzed yeast", "autolyzed yeast extract", "hydrolyzed yeast"], enumber: "",
-      category: "Flavor enhancer (natural glutamate)", risk: "limit",
+      category: "Flavor enhancer (natural glutamate)", risk: "caution",
       summary: "Savory flavoring naturally rich in glutamate — a label-friendly MSG source.",
       whatIs: "Yeast extract is made by breaking down yeast cells, releasing natural glutamates that add savory/umami flavor without declaring 'MSG.'",
       whyFlagged: "Often used as a 'clean label' way to add free glutamate; a marker of processed savory foods rather than a toxin.",
@@ -781,7 +790,7 @@ var CB_DATA = (function () {
     },
     {
       id: "naturalflavors", names: ["natural flavors", "natural flavor", "natural flavoring", "natural flavour", "natural flavours"], enumber: "",
-      category: "Undisclosed flavoring", risk: "limit",
+      category: "Undisclosed flavoring", risk: "avoid",
       summary: "Catch-all flavor term that can hide many undisclosed compounds.",
       whatIs: "'Natural flavors' are flavoring extracts of plant or animal origin; the term can legally cover dozens of undisclosed component chemicals and solvents.",
       whyFlagged: "Lack of transparency — the exact contents are proprietary, so allergen and additive detail is hidden, and it is a hallmark of processed food.",
@@ -850,6 +859,204 @@ var CB_DATA = (function () {
       whyFlagged: "Generally beneficial for lowering sodium; a slightly bitter taste, and people with kidney disease or on certain medications should watch potassium.",
       healthRisk: "Benign for most; caution with impaired kidney function or potassium-affecting drugs.",
       studies: [{ title: "Re-evaluation of potassium chloride (E 508) as a food additive", source: "EFSA Journal", year: 2019 }]
+    },
+    {
+      id: "enrichedflour", names: ["enriched flour", "enriched wheat flour", "enriched bleached flour", "enriched bleached wheat flour", "bleached flour", "bleached wheat flour", "enriched unbleached flour", "enriched white flour"], enumber: "",
+      category: "Refined grain", risk: "caution",
+      summary: "Stripped, refined white flour with synthetic nutrients added back.",
+      whatIs: "Enriched flour is white flour whose bran and germ (and most fiber, vitamins and minerals) have been milled out, then a few synthetic vitamins (iron, niacin, thiamine, folic acid) are added back. 'Bleached' flour is additionally whitened with chemical agents.",
+      whyFlagged: "A refined, rapidly-digested carbohydrate stripped of fiber and most nutrients — a hallmark of ultra-processed food. Bleaching uses agents such as benzoyl peroxide or chlorine.",
+      healthRisk: "Spikes blood sugar, low in fiber/nutrients; frequent intake is linked to weight gain and metabolic issues.",
+      studies: [{ title: "Whole grains vs. refined grains and chronic disease risk (review)", source: "Nutrients", year: 2020 }]
+    },
+    {
+      id: "bioengineered", names: ["bioengineered", "bioengineered food ingredient", "bioengineered food ingredients", "made with genetic engineering", "genetically engineered"], enumber: "",
+      category: "Genetically engineered (GMO)", risk: "caution",
+      summary: "Genetically modified ingredient; commonly paired with heavy pesticide use.",
+      whatIs: "A 'bioengineered' (GMO) disclosure means the ingredient was produced with genetic engineering. Most bioengineered crops (corn, soy, canola, sugar beet) are engineered to tolerate herbicides like glyphosate.",
+      whyFlagged: "A marker of industrial, herbicide-intensive agriculture. Bobby-Approved-style scanning flags GMO ingredients for transparency and pesticide-residue concerns.",
+      healthRisk: "GMO foods are regulator-approved, but the associated herbicide residues (e.g., glyphosate) are a live area of safety debate.",
+      studies: [{ title: "Glyphosate residues in food and human exposure (review)", source: "Environmental Sciences Europe", year: 2016 }]
+    },
+    {
+      id: "hydrolyzedprotein", names: ["hydrolyzed protein", "hydrolyzed soy protein", "hydrolyzed corn protein", "hydrolyzed vegetable protein", "hydrolyzed wheat protein", "hydrolised vegetable protein", "textured vegetable protein", "hydrolyzed plant protein"], enumber: "",
+      category: "Flavor enhancer (free glutamate)", risk: "caution",
+      summary: "Protein broken down to release free glutamate — hidden MSG-style flavoring.",
+      whatIs: "Hydrolyzed proteins are broken down with acid or enzymes to release free glutamic acid, adding savory/umami flavor without declaring 'MSG.'",
+      whyFlagged: "A 'clean label' way to add free glutamate; processing can also create chloropropanol contaminants (3-MCPD). A marker of heavily processed savory foods.",
+      healthRisk: "Relevant to people sensitive to free glutamate; possible 3-MCPD contaminant concern; a processing marker.",
+      studies: [{ title: "3-MCPD esters in foods and processing (review)", source: "EFSA Journal", year: 2016 }]
+    },
+    {
+      id: "soyproteinisolate", names: ["soy protein isolate", "isolated soy protein", "soy protein concentrate", "soy protein", "soya protein isolate"], enumber: "",
+      category: "Ultra-processed protein", risk: "caution",
+      summary: "Highly processed soy protein extracted with solvents like hexane.",
+      whatIs: "Soy protein isolate is soybean protein stripped from the bean using high heat, alkali and often hexane solvent, then spray-dried into a powder used in bars, shakes and meat substitutes.",
+      whyFlagged: "An ultra-processed, fractionated ingredient; processing can leave solvent residues and create off-flavors masked with added flavorings. Usually GMO-derived.",
+      healthRisk: "Generally safe as protein, but a marker of ultra-processed formulation; contains phytoestrogens and possible hexane residue.",
+      studies: [{ title: "Solvent extraction and processing of soy protein (review)", source: "Journal of Food Science", year: 2018 }]
+    },
+    {
+      id: "artificialcolor", names: ["artificial color", "artificial colors", "artificial colour", "artificial colours", "artificial coloring", "artificial colouring", "color added", "colored with", "us certified color", "fd&c color", "artificial colors added"], enumber: "",
+      category: "Artificial color", risk: "avoid",
+      summary: "Undisclosed synthetic petroleum dye with no nutritional purpose.",
+      whatIs: "A generic 'artificial color' declaration means one or more synthetic, petroleum-derived dyes were added purely for appearance, without naming the specific dye.",
+      whyFlagged: "Purely cosmetic and undisclosed. Synthetic dyes as a class are linked to behavioral effects in sensitive children; the EU requires warning labels on several of them.",
+      healthRisk: "Possible hyperactivity/attention effects in some children; allergic reactions in a subset.",
+      studies: [{ title: "Health effects of synthetic food dyes", source: "California OEHHA report", year: 2021 }]
+    },
+    {
+      id: "vanillin", names: ["vanillin", "ethyl vanillin", "ethylvanillin", "artificial vanilla", "imitation vanilla", "vanillin flavor"], enumber: "",
+      category: "Artificial flavor", risk: "caution",
+      summary: "Synthetic vanilla flavor, often petroleum- or wood-pulp-derived.",
+      whatIs: "Vanillin is a lab-made imitation of vanilla, commonly synthesized from petrochemicals (guaiacol) or wood-pulp byproducts (lignin), used in place of real vanilla.",
+      whyFlagged: "An artificial flavoring and a marker of processed food formulated to taste like a whole ingredient it doesn't contain.",
+      healthRisk: "Generally recognized as safe; mainly a processing/quality marker rather than a toxin.",
+      studies: [{ title: "Production and safety of vanillin (review)", source: "Journal of Agricultural and Food Chemistry", year: 2014 }]
+    },
+    {
+      id: "olestra", names: ["olestra", "olean"], enumber: "",
+      category: "Fat substitute", risk: "avoid",
+      summary: "Indigestible fake fat that blocks nutrient absorption and causes GI distress.",
+      whatIs: "Olestra (Olean) is a synthetic, calorie-free fat substitute once used in 'light' chips; it passes through the body undigested.",
+      whyFlagged: "Inhibits absorption of fat-soluble vitamins (A, D, E, K) and carotenoids and historically caused cramping and loose stools; required a warning label for years.",
+      healthRisk: "Reduced fat-soluble vitamin absorption; gastrointestinal distress.",
+      studies: [{ title: "Olestra and the absorption of fat-soluble vitamins and carotenoids", source: "Journal of Nutrition", year: 1997 }]
+    },
+    {
+      id: "doughconditioner", names: ["potassium iodate", "calcium iodate", "potassium bromate and iodate", "dough conditioner", "dough conditioners"], enumber: "",
+      category: "Dough conditioner", risk: "caution",
+      summary: "Industrial dough oxidizer used to speed up commercial bread making.",
+      whatIs: "Dough conditioners and oxidizers such as potassium iodate strengthen and bleach dough so factory bread rises fast and uniformly.",
+      whyFlagged: "Markers of industrial baking; iodate oxidizers are restricted in several countries and unnecessary in real bread making.",
+      healthRisk: "Excess iodate intake is a concern; primarily a processing marker.",
+      studies: [{ title: "Use and safety of oxidizing agents in bread making (review)", source: "Comprehensive Reviews in Food Science", year: 2017 }]
+    },
+    {
+      id: "calciumperoxide", names: ["calcium peroxide", "benzoyl peroxide", "e928", "e930"], enumber: "E930",
+      category: "Flour bleaching agent", risk: "caution",
+      summary: "Chemical bleach/oxidizer used to whiten and age flour fast.",
+      whatIs: "Calcium peroxide and benzoyl peroxide are oxidizing agents used to bleach flour and condition dough in industrial baking.",
+      whyFlagged: "Chemical bleaching agents banned for flour in the EU; a hallmark of ultra-processed white flour products.",
+      healthRisk: "Banned for this use in some regions; mainly a processing marker.",
+      studies: [{ title: "Re-evaluation of benzoyl peroxide as a food additive", source: "EFSA Journal", year: 2016 }]
+    },
+    {
+      id: "diacetyl", names: ["diacetyl", "starter distillate", "alpha-acetolactate"], enumber: "",
+      category: "Artificial butter flavor", risk: "caution",
+      summary: "Buttery flavor compound linked to lung damage in workers.",
+      whatIs: "Diacetyl is the compound that gives artificial butter flavor (e.g., in microwave popcorn and some snacks) its taste.",
+      whyFlagged: "Inhaling diacetyl during manufacturing causes 'popcorn lung' (bronchiolitis obliterans). Safe to eat at food levels, but a marker of synthetic butter flavoring.",
+      healthRisk: "Respiratory risk is occupational (inhalation); in food it is mainly a synthetic-flavor marker.",
+      studies: [{ title: "Diacetyl and bronchiolitis obliterans in flavoring workers", source: "U.S. NIOSH", year: 2016 }]
+    },
+    {
+      id: "lcysteine", names: ["l-cysteine", "l cysteine", "cysteine", "cysteine hydrochloride", "e920"], enumber: "E920",
+      category: "Dough conditioner", risk: "caution",
+      summary: "Dough softener often derived from duck feathers or human hair.",
+      whatIs: "L-cysteine is an amino acid used to soften commercial dough and extend shelf life; it is frequently produced from feathers, hog hair or human hair.",
+      whyFlagged: "A marker of industrial baking with an off-putting sourcing story; unnecessary in real bread. Not vegetarian/halal/kosher when animal-derived.",
+      healthRisk: "Safe to eat as an amino acid; mainly a processing and sourcing concern.",
+      studies: [{ title: "Production sources of L-cysteine (E920) (review)", source: "Food Additives & Contaminants", year: 2013 }]
+    },
+    {
+      id: "magnesiumstearate", names: ["magnesium stearate", "vegetable magnesium stearate", "stearic acid magnesium salt"], enumber: "E470b",
+      category: "Anti-caking / flow agent", risk: "limit",
+      summary: "Lubricant filler used to keep powders flowing; a processing marker.",
+      whatIs: "Magnesium stearate is a manufacturing flow agent that stops powders sticking to machinery, common in supplements, powders and tablets.",
+      whyFlagged: "Generally recognized as safe, but a sign of an industrially formulated product and a common filler in supplements.",
+      healthRisk: "Benign at the tiny amounts used; mainly a processing marker.",
+      studies: [{ title: "Safety of magnesium salts of fatty acids as food additives", source: "EFSA Journal", year: 2018 }]
+    },
+    {
+      id: "microcellulose", names: ["microcrystalline cellulose", "powdered cellulose", "e460", "cellulose powder"], enumber: "E460",
+      category: "Bulking agent / filler", risk: "limit",
+      summary: "Refined wood-pulp fiber used as a cheap filler and anti-caking agent.",
+      whatIs: "Microcrystalline cellulose is purified cellulose (often from wood pulp) used to bulk up, bind and prevent caking in shredded cheese, supplements and baked goods.",
+      whyFlagged: "Inert and calorie-free, but a hallmark of cheapened, fillered processed food.",
+      healthRisk: "Considered safe and non-digestible; a processing/filler marker.",
+      studies: [{ title: "Re-evaluation of celluloses as food additives", source: "EFSA Journal", year: 2018 }]
+    },
+    {
+      id: "polyphosphates", names: ["sodium hexametaphosphate", "sodium tripolyphosphate", "tetrasodium pyrophosphate", "sodium acid pyrophosphate", "sapp", "e451", "e452", "e450"], enumber: "E452",
+      category: "Phosphate additive", risk: "limit",
+      summary: "Added phosphates that boost dietary phosphate load; limit intake.",
+      whatIs: "Polyphosphates retain moisture, emulsify and texturize processed meats, cheese and seafood.",
+      whyFlagged: "Added inorganic phosphates are absorbed far more than natural ones; high intake stresses kidneys and is linked to cardiovascular risk. A processed-food marker.",
+      healthRisk: "Excess phosphate intake; concern for kidney and heart health, especially with frequent consumption.",
+      studies: [{ title: "Phosphate additives in food and health (review)", source: "Deutsches Ärzteblatt International", year: 2012 }]
+    },
+    {
+      id: "polydextrose", names: ["polydextrose", "e1200"], enumber: "E1200",
+      category: "Synthetic fiber / bulking agent", risk: "limit",
+      summary: "Lab-made soluble fiber used to replace sugar/fat and add bulk.",
+      whatIs: "Polydextrose is a synthetic fiber made by polymerizing glucose, used to add bulk and fiber to low-sugar and low-fat processed foods.",
+      whyFlagged: "A synthetic ultra-processed ingredient; large amounts can cause bloating and gas.",
+      healthRisk: "Generally safe; GI upset in larger amounts; a processing marker.",
+      studies: [{ title: "Safety of polydextrose (E1200) as a food additive", source: "EFSA Journal", year: 2021 }]
+    },
+    {
+      id: "fastgreen", names: ["fast green", "fast green fcf", "green 3", "fd&c green no. 3", "e143"], enumber: "E143",
+      category: "Artificial color", risk: "avoid",
+      summary: "Synthetic green dye not permitted for food in the EU.",
+      whatIs: "Fast Green FCF (Green 3) is a synthetic dye used in some candy, drinks and canned vegetables in the U.S.",
+      whyFlagged: "A petroleum-derived cosmetic dye; not approved for food in the EU and part of the synthetic-dye group consumers increasingly avoid.",
+      healthRisk: "Limited safety data; possible bladder/testicular effects in early animal studies.",
+      studies: [{ title: "Toxicology review of synthetic food colorants", source: "California OEHHA report", year: 2021 }]
+    },
+    {
+      id: "orangeb", names: ["orange b"], enumber: "",
+      category: "Artificial color", risk: "avoid",
+      summary: "Synthetic orange dye historically limited to hot-dog casings.",
+      whatIs: "Orange B is a synthetic azo dye once approved only for sausage and hot-dog casings.",
+      whyFlagged: "A petroleum-derived azo dye in the group flagged for behavioral effects; effectively phased out.",
+      healthRisk: "Azo-dye class concerns; possible contamination with carcinogenic byproducts.",
+      studies: [{ title: "Synthetic azo dyes and health (review)", source: "California OEHHA report", year: 2021 }]
+    },
+    {
+      id: "commoncaramel", names: ["common caramel", "plain caramel", "plain caramel color", "plain caramel colour"], enumber: "E150a",
+      category: "Caramel color", risk: "limit",
+      summary: "Plain caramel coloring made by heating sugars; a cosmetic processing additive.",
+      whatIs: "Common or plain caramel (E150a) is made by controlled heating of sugars and is used to give foods a brown color.",
+      whyFlagged: "E150a is the simplest caramel color and is considered low-risk, but it is still an unnecessary cosmetic additive and processing marker.",
+      healthRisk: "Low direct risk at food-use levels; best limited as part of reducing ultra-processed foods.",
+      studies: [{ title: "Scientific opinion on the re-evaluation of caramel colours", source: "EFSA Journal", year: 2011 }]
+    },
+    {
+      id: "disodiumribonucleotides", names: ["5'-disodium ribonucleotide", "5'-disodium ribonucleotides", "disodium ribonucleotide", "disodium ribonucleotides", "disodium 5'-ribonucleotides", "e635"], enumber: "E635",
+      category: "Flavor enhancer", risk: "limit",
+      summary: "Umami flavor enhancer commonly paired with MSG in processed savory foods.",
+      whatIs: "Disodium 5'-ribonucleotides (E635) is a blend of nucleotide salts used to intensify savory flavor.",
+      whyFlagged: "Approved at food-use levels, but it is a strong marker of heavily formulated savory snacks and instant foods.",
+      healthRisk: "Generally low direct risk; some sensitive people prefer to limit concentrated flavor enhancers.",
+      studies: [{ title: "Evaluation of disodium ribonucleotides as flavor enhancers", source: "JECFA", year: 1993 }]
+    },
+    {
+      id: "genericacidityregulator", names: ["acidity regulator", "acidity regulators"], enumber: "",
+      category: "Undisclosed acidity regulator", risk: "caution",
+      summary: "A functional class is listed without naming the actual acidity-regulating compounds.",
+      whatIs: "Acidity regulators control a product's pH, tartness, preservation, or texture. Many are benign, but this label does not identify which ones were used.",
+      whyFlagged: "Strict scans require the actual ingredients. An undisclosed functional class cannot be fully evaluated.",
+      healthRisk: "Depends on the unnamed compounds; the main concern is missing ingredient transparency.",
+      studies: []
+    },
+    {
+      id: "genericantioxidants", names: ["antioxidant", "antioxidants"], enumber: "",
+      category: "Undisclosed antioxidant", risk: "caution",
+      summary: "The label names a functional class but not the antioxidant compounds used.",
+      whatIs: "Antioxidants slow oxidation and rancidity. They range from vitamin C and tocopherols to additives such as BHA or BHT.",
+      whyFlagged: "The exact antioxidant matters, so a strict scan cannot approve an unnamed category.",
+      healthRisk: "Depends on the unnamed antioxidant; the main concern is missing ingredient transparency.",
+      studies: []
+    },
+    {
+      id: "genericcolors", names: ["color", "colors", "colour", "colours", "coloring", "colouring", "colorant", "colorants"], enumber: "",
+      category: "Undisclosed color", risk: "caution",
+      summary: "One or more color additives are present but not specifically named.",
+      whatIs: "Colors may be plant-derived pigments or synthetic dyes. This generic label does not reveal which colorants were used.",
+      whyFlagged: "Some colors are benign and others are strict avoid ingredients, so an undisclosed color category cannot be approved.",
+      healthRisk: "Depends on the unnamed colorants; synthetic dyes can affect sensitive individuals.",
+      studies: []
     }
   ];
 
@@ -891,7 +1098,23 @@ var CB_DATA = (function () {
     "fruit juice concentrate", "honey solids", "caramel syrup", "sucrose"
   ];
 
-  const artificialSweeteners = ["aspartame", "sucralose", "acesulfame", "saccharin", "neotame", "advantame"];
+  const artificialSweeteners = ["aspartame", "sucralose", "acesulfame", "saccharin", "neotame", "advantame", "cyclamate", "alitame"];
+
+  // Synthetic vitamins/minerals added back to fortify/enrich processed foods.
+  // Not whole foods, but not "bad" either — recognized so they don't read as Unknown.
+  const fortifiedVitamins = [
+    "niacin", "niacinamide", "nicotinic acid", "nicotinamide", "thiamine", "thiamin",
+    "thiamine mononitrate", "thiamin mononitrate", "thiamine hydrochloride", "riboflavin",
+    "folic acid", "folate", "folacin", "pyridoxine hydrochloride", "pyridoxine",
+    "reduced iron", "ferrous sulfate", "ferrous fumarate", "ferric orthophosphate", "iron",
+    "zinc oxide", "zinc sulfate", "zinc gluconate", "vitamin a palmitate", "retinyl palmitate",
+    "vitamin a acetate", "vitamin d3", "vitamin d", "cholecalciferol", "vitamin b12",
+    "cyanocobalamin", "vitamin b6", "vitamin b1", "vitamin b2", "vitamin b3",
+    "calcium pantothenate", "pantothenic acid", "d-calcium pantothenate", "biotin",
+    "vitamin e acetate", "dl-alpha tocopheryl acetate", "tocopheryl acetate",
+    "potassium iodide", "sodium selenite", "manganese sulfate", "copper gluconate",
+    "vitamin k1", "phytonadione", "choline bitartrate"
+  ];
 
   // Vague / low-transparency terms.
   const vagueTerms = [
@@ -936,25 +1159,25 @@ var CB_DATA = (function () {
   const eNumbers = [
     // Colors (E100–E199)
     ["E100", "Curcumin (turmeric color)", "ok"], ["E101", "Riboflavin (B2)", "ok"],
-    ["E102", "Tartrazine (Yellow 5)", "caution"], ["E104", "Quinoline Yellow", "caution"],
-    ["E110", "Sunset Yellow (Yellow 6)", "caution"], ["E120", "Carmine / Cochineal", "caution"],
-    ["E122", "Carmoisine / Azorubine", "caution"], ["E123", "Amaranth (Red 2)", "avoid"],
-    ["E124", "Ponceau 4R", "caution"], ["E127", "Erythrosine (Red 3)", "avoid"],
-    ["E128", "Red 2G", "avoid"], ["E129", "Allura Red (Red 40)", "caution"],
-    ["E131", "Patent Blue V", "caution"], ["E132", "Indigotine (Blue 2)", "caution"],
-    ["E133", "Brilliant Blue (Blue 1)", "caution"], ["E140", "Chlorophyll", "ok"],
-    ["E141", "Copper chlorophyll", "ok"], ["E142", "Green S", "caution"],
+    ["E102", "Tartrazine (Yellow 5)", "avoid"], ["E104", "Quinoline Yellow", "avoid"],
+    ["E110", "Sunset Yellow (Yellow 6)", "avoid"], ["E120", "Carmine / Cochineal", "avoid"],
+    ["E122", "Carmoisine / Azorubine", "avoid"], ["E123", "Amaranth (Red 2)", "avoid"],
+    ["E124", "Ponceau 4R", "avoid"], ["E127", "Erythrosine (Red 3)", "avoid"],
+    ["E128", "Red 2G", "avoid"], ["E129", "Allura Red (Red 40)", "avoid"],
+    ["E131", "Patent Blue V", "avoid"], ["E132", "Indigotine (Blue 2)", "avoid"],
+    ["E133", "Brilliant Blue (Blue 1)", "avoid"], ["E140", "Chlorophyll", "ok"],
+    ["E141", "Copper chlorophyll", "ok"], ["E142", "Green S", "avoid"],
     ["E150a", "Plain caramel color", "limit"], ["E150b", "Caustic sulphite caramel", "limit"],
     ["E150c", "Ammonia caramel color", "caution"],
-    ["E150d", "Sulphite ammonia caramel (4-MEI)", "caution"], ["E151", "Brilliant Black BN", "caution"],
-    ["E153", "Vegetable carbon", "ok"], ["E154", "Brown FK", "caution"], ["E155", "Brown HT", "caution"],
+    ["E150d", "Sulphite ammonia caramel (4-MEI)", "caution"], ["E151", "Brilliant Black BN", "avoid"],
+    ["E153", "Vegetable carbon", "ok"], ["E154", "Brown FK", "avoid"], ["E155", "Brown HT", "avoid"],
     ["E160a", "Beta-carotene", "ok"], ["E160b", "Annatto", "limit"], ["E160c", "Paprika extract", "ok"],
     ["E160d", "Lycopene", "ok"], ["E160e", "Beta-apo-8'-carotenal", "limit"],
     ["E161b", "Lutein", "ok"], ["E161g", "Canthaxanthin", "caution"],
     ["E162", "Beetroot red", "ok"], ["E163", "Anthocyanins", "ok"],
     ["E170", "Calcium carbonate", "ok"], ["E171", "Titanium dioxide", "avoid"],
     ["E172", "Iron oxides", "ok"], ["E173", "Aluminium", "caution"], ["E174", "Silver", "limit"],
-    ["E175", "Gold", "ok"], ["E180", "Litholrubine BK", "caution"],
+    ["E175", "Gold", "ok"], ["E180", "Litholrubine BK", "avoid"],
     // Preservatives (E200–E299)
     ["E200", "Sorbic acid", "limit"], ["E202", "Potassium sorbate", "limit"],
     ["E203", "Calcium sorbate", "limit"], ["E210", "Benzoic acid", "caution"],
@@ -1065,13 +1288,13 @@ var CB_DATA = (function () {
     ["E924", "Potassium bromate", "avoid"], ["E927a", "Azodicarbonamide", "avoid"],
     ["E927b", "Carbamide (urea)", "ok"], ["E938", "Argon", "ok"], ["E939", "Helium", "ok"],
     ["E941", "Nitrogen", "ok"], ["E942", "Nitrous oxide", "ok"], ["E943a", "Butane", "limit"],
-    ["E944", "Propane", "limit"], ["E948", "Oxygen", "ok"], ["E950", "Acesulfame K", "caution"],
-    ["E951", "Aspartame", "caution"], ["E952", "Cyclamate", "caution"], ["E953", "Isomalt", "limit"],
-    ["E954", "Saccharin", "limit"], ["E955", "Sucralose", "caution"], ["E957", "Thaumatin", "ok"],
+    ["E944", "Propane", "limit"], ["E948", "Oxygen", "ok"], ["E950", "Acesulfame K", "avoid"],
+    ["E951", "Aspartame", "avoid"], ["E952", "Cyclamate", "avoid"], ["E953", "Isomalt", "limit"],
+    ["E954", "Saccharin", "avoid"], ["E955", "Sucralose", "avoid"], ["E957", "Thaumatin", "ok"],
     ["E959", "Neohesperidine DC", "limit"], ["E960", "Steviol glycosides (stevia)", "ok"],
-    ["E961", "Neotame", "caution"], ["E962", "Aspartame-acesulfame salt", "caution"],
+    ["E961", "Neotame", "avoid"], ["E962", "Aspartame-acesulfame salt", "avoid"],
     ["E965", "Maltitol", "limit"], ["E966", "Lactitol", "limit"], ["E967", "Xylitol", "limit"],
-    ["E968", "Erythritol", "limit"], ["E969", "Advantame", "caution"],
+    ["E968", "Erythritol", "limit"], ["E969", "Advantame", "avoid"],
     // Additional / modified starches, enzymes (E1000–E1525)
     ["E1100", "Amylase", "ok"], ["E1101", "Protease", "ok"], ["E1105", "Lysozyme", "limit"],
     ["E1200", "Polydextrose", "ok"], ["E1201", "Polyvinylpyrrolidone (PVP)", "limit"],
@@ -1145,7 +1368,7 @@ var CB_DATA = (function () {
     ["E926", "Chlorine dioxide", "caution"], ["E928", "Benzoyl peroxide", "caution"],
     ["E930", "Calcium peroxide", "limit"], ["E940", "Dichlorodifluoromethane", "limit"],
     ["E943b", "Isobutane", "limit"], ["E945", "Chloropentafluoroethane", "limit"],
-    ["E949", "Hydrogen", "ok"], ["E956", "Alitame", "caution"],
+    ["E949", "Hydrogen", "ok"], ["E956", "Alitame", "avoid"],
     ["E964", "Polyglycitol syrup", "limit"], ["E999", "Quillaia extract", "limit"],
     // Additional / modified starches, enzymes (E1000–E1525)
     ["E1000", "Cholic acid", "limit"], ["E1001", "Choline salts", "ok"],
@@ -1316,6 +1539,187 @@ var CB_DATA = (function () {
     if (cleanIngredients.indexOf(extraClean4[c4]) === -1) cleanIngredients.push(extraClean4[c4]);
   }
 
+  // Fifth pass: Bobby-Approved-style whole foods, superfoods and "real" pantry
+  // staples, plus quality descriptors so good ingredients read as Clean.
+  const extraClean5 = [
+    // superfoods / greens
+    "spirulina", "chlorella", "matcha", "matcha powder", "acai", "acai berry", "goji berries",
+    "goji berry", "maca", "maca powder", "cacao nibs", "raw cacao", "moringa", "wheatgrass",
+    "barley grass", "microgreens", "dandelion greens", "dulse", "wakame", "kelp",
+    // fruit / produce
+    "blackberry", "raspberry", "blueberry", "strawberry", "cranberry", "elderberries",
+    "pomegranate seeds", "passionfruit", "starfruit", "jackfruit", "lychee", "longan",
+    "rambutan", "dragonfruit", "ataulfo mango", "concord grapes", "medjool dates",
+    "kabocha squash", "rainbow chard", "fennel bulb", "garlic scapes", "ramps",
+    // proteins (Bobby favors pasture-raised / wild)
+    "grass-fed beef", "grass fed beef", "pasture-raised eggs", "pasture raised eggs",
+    "wild-caught salmon", "wild caught salmon", "wild salmon", "chicken liver", "beef liver",
+    "ground bison", "lamb shoulder", "pork rinds", "uncured bacon", "wild cod", "fresh tuna",
+    "free-range chicken", "free range chicken", "bone-in chicken thigh",
+    // fats / dairy Bobby approves
+    "grass-fed butter", "grass fed butter", "raw honey", "manuka honey", "raw milk",
+    "cold pressed olive oil", "extra virgin coconut oil", "macadamia nut oil", "duck fat",
+    "cultured butter", "raw cheese", "a2 milk",
+    // pantry / ferments / flours / salts
+    "himalayan pink salt", "pink himalayan salt", "celtic sea salt", "real salt", "redmond salt",
+    "flaky sea salt", "nutritional yeast", "coconut aminos", "fish sauce", "raw apple cider vinegar",
+    "kombucha", "kimchi", "sauerkraut", "miso paste", "tempeh", "natto",
+    "almond flour", "cassava flour", "coconut flour", "tigernut flour", "tapioca flour",
+    "arrowroot powder", "psyllium husk", "ground flaxseed", "hemp hearts", "hemp seeds",
+    "chia seeds", "sacha inchi", "collagen peptides", "bone broth", "beef gelatin",
+    // grains / legumes
+    "buckwheat groats", "sprouted oats", "sprouted lentils", "black rice", "forbidden rice",
+    "green lentils", "beluga lentils", "great northern beans", "heirloom beans"
+  ];
+  for (var c5 = 0; c5 < extraClean5.length; c5++) {
+    if (cleanIngredients.indexOf(extraClean5[c5]) === -1) cleanIngredients.push(extraClean5[c5]);
+  }
+
+  // Sixth pass: more everyday whole foods, herbs/spices, legumes and pantry
+  // basics so common real-world labels read as Clean rather than Unknown.
+  const extraClean6 = [
+    // produce
+    "shallots", "leeks", "scallion", "green onion", "bok choy", "napa cabbage",
+    "swiss chard", "collards", "mustard greens", "turnip greens", "beet greens",
+    "watercress", "endive", "radicchio", "frisee", "escarole", "sorrel",
+    "habanero", "scotch bonnet", "thai chili", "shishito", "banana pepper",
+    "delicata", "honeynut squash", "sugar pumpkin", "calabaza",
+    "persian cucumber", "english cucumber", "heirloom tomato", "roma tomato",
+    "grape tomato", "tomatillo", "nopales", "chayote", "bitter melon",
+    "horseradish root", "lotus root", "burdock root", "celeriac",
+    "blood orange", "cara cara", "kumquat", "calamansi", "yuzu", "finger lime",
+    "soursop", "cherimoya", "sapodilla", "mangosteen", "loquat", "feijoa",
+    // herbs & spices
+    "lemongrass", "kaffir lime leaves", "curry leaves", "epazote", "shiso",
+    "marjoram", "lovage", "chervil", "summer savory", "winter savory",
+    "grains of paradise", "sumac", "amchur", "asafoetida", "annatto seed",
+    "juniper berries", "long pepper", "aleppo pepper", "urfa pepper", "gochugaru",
+    // grains / legumes / nuts / seeds
+    "fonio", "job's tears", "purple barley", "red quinoa", "tricolor quinoa",
+    "black beluga lentils", "french green lentils", "marrow beans", "gigante beans",
+    "scarlet runner beans", "moth beans", "horse gram", "bambara beans",
+    "tiger nuts", "baru nuts", "sacha inchi seeds", "watermelon seeds", "perilla seeds",
+    // proteins / dairy
+    "guinea fowl", "squab", "elk", "wild boar", "octopus", "cuttlefish",
+    "sea scallops", "bay scallops", "razor clams", "geoduck", "uni",
+    "skyr", "labneh", "quark", "farmer cheese", "paneer", "halloumi", "cotija",
+    // pantry / fats / ferments
+    "yuzu juice", "verjus", "pomegranate molasses", "tamarind paste", "date paste",
+    "cashew cream", "tahini paste", "black garlic", "fermented black beans",
+    "doenjang", "gochujang", "fish roe", "bonito flakes", "dashi", "kombu",
+    "extra virgin avocado oil", "unrefined coconut oil", "cold-pressed flax oil",
+    "grass-fed ghee", "cultured cream", "creme fraiche", "a2 yogurt"
+  ];
+  for (var c6 = 0; c6 < extraClean6.length; c6++) {
+    if (cleanIngredients.indexOf(extraClean6[c6]) === -1) cleanIngredients.push(extraClean6[c6]);
+  }
+
+  // Seventh pass: broad international label coverage. Keep entries specific
+  // enough for whole-phrase matching; avoid generic words such as "oil" or
+  // "powder" that could hide a flagged ingredient.
+  const extraClean7 = [
+    // fruit
+    "ambarella", "aronia berry", "barberry", "bilberry", "black currant", "red currant",
+    "white currant", "boysenberry", "cloudberry", "elderberry", "gooseberry", "huckleberry",
+    "lingonberry", "marionberry", "mulberry", "salmonberry", "serviceberry", "tayberry",
+    "acerola cherry", "buddha's hand", "clementine", "damson plum", "greengage plum",
+    "key lime", "meyer lemon", "prickly pear", "quince", "rambutan", "rose apple",
+    "surinam cherry", "ugli fruit", "white peach", "yellow watermelon",
+    // vegetables and mushrooms
+    "broccolini", "romanesco", "kohlrabi", "rutabaga", "sunchoke", "jerusalem artichoke",
+    "daikon radish", "watermelon radish", "black radish", "fennel bulb", "garlic scapes",
+    "pea shoots", "sunflower shoots", "microgreens", "mung bean sprouts", "alfalfa sprouts",
+    "bamboo shoots", "hearts of palm", "palm heart", "young jackfruit", "green papaya",
+    "king oyster mushroom", "oyster mushroom", "maitake mushroom", "morel mushroom",
+    "porcini mushroom", "shiitake mushroom", "wood ear mushroom", "lion's mane mushroom",
+    "enoki mushroom", "chanterelle mushroom", "cremini mushroom", "portobello mushroom",
+    // herbs, spices, aromatics
+    "anise seed", "black cardamom", "green cardamom", "caraway seed", "celery seed",
+    "coriander seed", "cumin seed", "dill seed", "fenugreek seed", "fennel seed",
+    "mustard seed", "nigella seed", "poppy seed", "saffron threads", "star anise",
+    "ceylon cinnamon", "cassia cinnamon", "vanilla bean", "vanilla powder", "cacao nibs",
+    "fresh ginger", "fresh turmeric", "roasted garlic", "granulated garlic", "minced onion",
+    "parsley flakes", "crushed red pepper", "chipotle pepper", "ancho chile", "guajillo chile",
+    "pasilla chile", "new mexico chile", "serrano pepper", "poblano pepper",
+    // grains, flours, noodles
+    "whole oat flour", "whole wheat flour", "whole rye flour", "whole spelt flour",
+    "whole barley flour", "brown rice flour", "white rice flour", "black rice flour",
+    "chickpea flour", "lentil flour", "pea flour", "lupin flour", "cassava flour",
+    "tigernut flour", "green banana flour", "buckwheat flour", "teff flour", "sorghum flour",
+    "millet flour", "quinoa flour", "amaranth flour", "almond flour", "coconut flour",
+    "rolled barley", "steel cut oats", "oat groats", "wheat berries", "rye berries",
+    "freekeh", "bulgur wheat", "pearl couscous", "rice noodles", "soba noodles",
+    // beans, pulses, nuts, seeds
+    "aduki beans", "adzuki beans", "anasazi beans", "black soybeans", "borlotti beans",
+    "cannellini beans", "cranberry beans", "flageolet beans", "great northern beans",
+    "navy beans", "pink beans", "pinto beans", "yellow split peas", "green split peas",
+    "whole green peas", "whole yellow peas", "roasted chickpeas", "sprouted lentils",
+    "sprouted mung beans", "sprouted chickpeas", "hemp hearts", "ground flaxseed",
+    "golden flaxseed", "black sesame seeds", "white sesame seeds", "pumpkin seed kernels",
+    "sunflower seed kernels", "raw almonds", "roasted almonds", "raw cashews",
+    "roasted cashews", "raw walnuts", "roasted peanuts", "natural peanut butter",
+    "natural almond butter", "natural cashew butter", "sunflower seed butter",
+    // animal proteins and seafood
+    "beef liver", "chicken liver", "chicken breast", "chicken thigh", "turkey breast",
+    "ground turkey", "ground chicken", "ground beef", "beef bone broth", "chicken bone broth",
+    "wild caught salmon", "wild caught tuna", "wild caught sardines", "wild caught anchovies",
+    "atlantic mackerel", "pacific mackerel", "rainbow trout", "arctic char", "albacore tuna",
+    "skipjack tuna", "yellowfin tuna", "sockeye salmon", "coho salmon", "pink salmon",
+    "smoked salmon", "canned salmon", "canned sardines", "canned tuna", "whole egg",
+    "egg whites", "egg yolks", "pasture raised eggs", "free range eggs",
+    // dairy and simple alternatives
+    "whole milk", "skim milk", "goat milk", "sheep milk", "buttermilk", "plain kefir",
+    "plain greek yogurt", "plain yogurt", "cottage cheese", "ricotta cheese", "mozzarella cheese",
+    "parmesan cheese", "pecorino romano", "cheddar cheese", "goat cheese", "sheep cheese",
+    "unsalted butter", "salted butter", "cultured butter", "coconut cream", "coconut milk",
+    // minimally processed pantry
+    "tomato puree", "tomato paste", "crushed tomatoes", "diced tomatoes", "whole peeled tomatoes",
+    "unsweetened applesauce", "pumpkin puree", "sweet potato puree", "roasted red peppers",
+    "sun dried tomatoes", "apple cider vinegar", "red wine vinegar", "white wine vinegar",
+    "balsamic vinegar", "rice vinegar", "sherry vinegar", "coconut vinegar", "lemon juice",
+    "lime juice", "orange juice", "pickle brine", "sauerkraut juice", "coconut aminos",
+    "extra virgin olive oil", "virgin olive oil", "cold pressed olive oil", "avocado oil",
+    "virgin coconut oil", "mct oil", "beef tallow", "duck fat", "chicken fat", "pork lard",
+    "sea salt", "kosher salt", "pink salt", "black salt", "smoked salt", "mineral water",
+    "sparkling water", "carbonated water", "filtered water", "spring water"
+  ];
+  for (var c7 = 0; c7 < extraClean7.length; c7++) {
+    if (cleanIngredients.indexOf(extraClean7[c7]) === -1) cleanIngredients.push(extraClean7[c7]);
+  }
+
+  // Strict-scan aliases frequently printed on labels.
+  const extraSeedOils = [
+    "rapeseed oil", "expeller pressed canola oil", "high oleic canola oil",
+    "high oleic sunflower oil", "high oleic safflower oil", "soy oil",
+    "corn germ oil", "cotton seed oil", "grape seed oil", "rice bran oil",
+    "vegetable shortening", "soybean shortening", "hydrogenated vegetable oil",
+    "partially hydrogenated vegetable oil", "interesterified vegetable oil"
+  ];
+  for (var so = 0; so < extraSeedOils.length; so++) {
+    if (seedOils.indexOf(extraSeedOils[so]) === -1) seedOils.push(extraSeedOils[so]);
+  }
+  const extraSweeteners = [
+    "acesulfame potassium", "acesulfame k", "ace k", "aspartame-acesulfame salt",
+    "sucralose powder", "saccharin sodium", "sodium saccharin", "calcium saccharin",
+    "neohesperidin dihydrochalcone", "neohesperidin dc", "thaumatin"
+  ];
+  for (var sw = 0; sw < extraSweeteners.length; sw++) {
+    if (artificialSweeteners.indexOf(extraSweeteners[sw]) === -1) artificialSweeteners.push(extraSweeteners[sw]);
+  }
+  const extraFortified = [
+    "vitamin a acetate", "retinyl acetate", "retinyl palmitate", "beta carotene",
+    "vitamin d2", "ergocalciferol", "vitamin d3", "cholecalciferol", "vitamin e acetate",
+    "dl alpha tocopheryl acetate", "phytonadione", "vitamin k1", "menaquinone", "vitamin k2",
+    "calcium carbonate", "calcium citrate", "calcium phosphate", "ferrous fumarate",
+    "ferrous sulfate", "ferric pyrophosphate", "zinc oxide", "zinc sulfate", "zinc gluconate",
+    "magnesium oxide", "magnesium citrate", "potassium iodide", "potassium chloride",
+    "sodium selenite", "selenium yeast", "copper gluconate", "manganese sulfate",
+    "chromium chloride", "chromium picolinate", "molybdenum", "biotin", "inositol"
+  ];
+  for (var fv = 0; fv < extraFortified.length; fv++) {
+    if (fortifiedVitamins.indexOf(extraFortified[fv]) === -1) fortifiedVitamins.push(extraFortified[fv]);
+  }
+
   // More added-sugar synonyms seen on U.S. labels.
   const extraSugars = [
     "turbinado", "demerara", "muscovado", "powdered sugar", "confectioners sugar",
@@ -1326,28 +1730,89 @@ var CB_DATA = (function () {
     "evaporated cane juice", "cane sugar", "cane juice", "rice syrup", "barley malt",
     "barley malt syrup", "fruit juice concentrate", "grape juice concentrate", "carob syrup",
     "rice malt syrup", "yacon syrup", "panela", "jaggery",
-    "anhydrous dextrose", "glucose-fructose syrup", "glucose syrup", "isoglucose"
+    "anhydrous dextrose", "glucose-fructose syrup", "glucose syrup", "isoglucose",
+    "corn syrup solids", "glucose solids", "dried glucose syrup", "brown rice syrup solids",
+    "tapioca syrup", "tapioca dextrose", "dextrose monohydrate", "fructose syrup",
+    "high maltose corn syrup", "refiners syrup", "sugar cane", "sucanat", "florida crystals",
+    "barley malt extract"
   ];
   for (var s2 = 0; s2 < extraSugars.length; s2++) {
     if (addedSugars.indexOf(extraSugars[s2]) === -1) addedSugars.push(extraSugars[s2]);
   }
 
   // More vague / undisclosed terms.
-  const extraVague = ["flavor", "flavors", "flavour", "flavours", "natural and artificial flavors", "seasoning", "seasonings", "smoke flavor", "natural smoke flavor", "natural flavor", "natural flavors", "artificial flavor", "artificial flavors", "natural flavoring", "spices", "spice", "spice extract", "flavoring", "flavorings", "natural flavour", "artificial flavour"];
+  const extraVague = ["flavor", "flavors", "flavour", "flavours", "natural and artificial flavors", "seasoning", "seasonings", "smoke flavor", "natural smoke flavor", "natural flavor", "natural flavors", "artificial flavor", "artificial flavors", "natural flavoring", "spices", "spice", "spice extract", "flavoring", "flavorings", "natural flavour", "artificial flavour",
+    // word-form variants seen on real labels ("ARTIFICIALLY FLAVORED PINK LEMONADE")
+    "artificially flavored", "artificially flavoured", "artificial flavored", "natural flavored", "naturally flavored", "naturally flavoured", "artificially colored", "artificially coloured", "artificial flavors added", "flavored", "flavoured"];
   for (var v2 = 0; v2 < extraVague.length; v2++) {
     if (vagueTerms.indexOf(extraVague[v2]) === -1) vagueTerms.push(extraVague[v2]);
   }
+
+  // Recognizable label-form ingredients seen in processed-food ingredient lists.
+  const labelFormClean = [
+    "whey", "whey powder", "sweet whey powder", "whey protein", "whey protein concentrate",
+    "cheese powder", "cheddar cheese powder", "parmesan cheese powder", "milk powder",
+    "whole milk powder", "skim milk powder", "nonfat dry milk", "dry milk", "milk solids",
+    "buttermilk powder", "cream powder", "cheese cultures", "gluten", "wheat gluten",
+    "vital wheat gluten", "corn flour", "maize flour", "rice powder", "onion flakes",
+    "dehydrated onion", "dehydrated garlic", "tomato powder", "lemon powder", "herb extract",
+    "enriched macaroni", "durum flour", "durum wheat flour", "milkfat", "milk fat",
+    "cheese culture", "cheese cultures", "rosemary extracts"
+  ];
+  for (var lc = 0; lc < labelFormClean.length; lc++) {
+    if (cleanIngredients.indexOf(labelFormClean[lc]) === -1) cleanIngredients.push(labelFormClean[lc]);
+  }
+
+  // Recognize incomplete functional-class titles, but keep them as strict
+  // blockers until lookup or a clearer scan identifies the actual compound.
+  const genericFunctionalClasses = [
+    ["emulsifier", "Emulsifier"], ["emulsifiers", "Emulsifier"],
+    ["stabilizer", "Stabilizer"], ["stabilizers", "Stabilizer"],
+    ["stabiliser", "Stabilizer"], ["stabilisers", "Stabilizer"],
+    ["thickener", "Thickener"], ["thickeners", "Thickener"],
+    ["preservative", "Preservative"], ["preservatives", "Preservative"],
+    ["raising agent", "Raising agent"], ["raising agents", "Raising agent"],
+    ["leavening agent", "Leavening agent"], ["leavening agents", "Leavening agent"],
+    ["flavor enhancer", "Flavor enhancer"], ["flavor enhancers", "Flavor enhancer"],
+    ["flavour enhancer", "Flavor enhancer"], ["flavour enhancers", "Flavor enhancer"],
+    ["anti-caking agent", "Anti-caking agent"], ["anti-caking agents", "Anti-caking agent"],
+    ["humectant", "Humectant"], ["humectants", "Humectant"],
+    ["firming agent", "Firming agent"], ["firming agents", "Firming agent"],
+    ["glazing agent", "Glazing agent"], ["glazing agents", "Glazing agent"]
+    , ["enzyme", "Enzyme"], ["enzymes", "Enzyme"],
+    ["cheese sauce mix", "Cheese sauce mix"], ["sauce mix", "Sauce mix"],
+    ["conserveermiddel", "Preservative"], ["conserveermiddelen", "Preservative"]
+  ];
+  genericFunctionalClasses.forEach(function (fc, i) {
+    additives.push({
+      id: "genericfunctional" + i, names: [fc[0]], enumber: "",
+      category: "Undisclosed " + fc[1].toLowerCase(), risk: "caution",
+      summary: "A functional ingredient class is listed without naming the actual compound.",
+      whatIs: fc[1] + " is a label function that may refer to several different food additives.",
+      whyFlagged: "Strict scans require the exact compound. Use online lookup or scan the full label to identify it.",
+      healthRisk: "Depends on the unnamed compound; the main concern is missing ingredient transparency.",
+      studies: []
+    });
+  });
 
   /* Category-level explanations so EVERY ingredient has a meaningful detail
      page even when it isn't one of the individually-written additives. */
   const groups = {
     seedOil: {
-      category: "Industrial seed/vegetable oil", status: "limit",
-      summary: "Highly refined oil rich in omega-6 fat and a marker of processed food.",
-      whatIs: "Seed and vegetable oils (canola, soybean, corn, sunflower, cottonseed, etc.) are extracted from seeds using high heat and chemical solvents, then bleached and deodorized.",
-      whyFlagged: "They are very high in omega-6 linoleic acid and oxidize easily during processing and cooking. A diet heavily skewed toward omega-6 is a hallmark of ultra-processed eating.",
-      effects: "May contribute to inflammation and an unbalanced omega-6:omega-3 ratio; heart-health evidence is debated. Mostly a sign the product is highly processed.",
+      category: "Industrial seed/vegetable oil", status: "avoid",
+      summary: "Highly refined, solvent-extracted oil rich in oxidized omega-6 fat.",
+      whatIs: "Seed and vegetable oils (canola, soybean, corn, sunflower, safflower, cottonseed, grapeseed, rice bran, etc.) are extracted from seeds using high heat and chemical solvents like hexane, then bleached and deodorized.",
+      whyFlagged: "Avoid: these refined oils are very high in omega-6 linoleic acid and oxidize easily during processing and cooking, and they are one of the most reliable markers of ultra-processed food. Bobby-Approved-style scanning flags them red.",
+      effects: "A heavily skewed omega-6:omega-3 ratio and oxidized-fat intake; an indicator the product is industrially processed. Choose butter, olive, avocado or coconut oil instead.",
       studies: [{ title: "Dietary linoleic acid and the omega-6/omega-3 balance (review)", source: "Nutrients", year: 2018 }]
+    },
+    fortified: {
+      category: "Added vitamin/mineral", status: "ok",
+      summary: "A synthetic vitamin or mineral added to fortify or enrich the food.",
+      whatIs: "Nutrients like folic acid, reduced iron, niacin, thiamine and added vitamins/minerals are put into processed foods to replace what refining removed or to meet fortification standards.",
+      whyFlagged: "Not a harmful additive — but its presence usually signals a refined product that needed nutrients added back. The nutrients themselves are generally recognized as safe.",
+      effects: "No known concerns at the amounts used; mainly a marker that the base ingredient was refined.",
+      studies: []
     },
     addedSugar: {
       category: "Added sugar", status: "limit",
@@ -1361,19 +1826,19 @@ var CB_DATA = (function () {
       ]
     },
     sweetener: {
-      category: "Artificial sweetener", status: "caution",
-      summary: "Synthetic non-nutritive sweetener with mixed long-term evidence.",
-      whatIs: "Non-nutritive sweeteners deliver sweetness with little or no calories and are many times sweeter than sugar.",
-      whyFlagged: "Regulator-approved, but emerging research raises questions about effects on the gut microbiome, appetite and metabolism; the WHO advises against using them for weight control.",
-      effects: "Possible gut-microbiome and metabolic effects; some people report digestive upset. Evidence is still evolving.",
+      category: "Artificial sweetener", status: "avoid",
+      summary: "Synthetic non-nutritive sweetener best avoided.",
+      whatIs: "Non-nutritive sweeteners (aspartame, sucralose, acesulfame-K, saccharin, neotame, etc.) deliver sweetness with little or no calories and are many times sweeter than sugar.",
+      whyFlagged: "Avoid: regulator-approved, but research links them to effects on the gut microbiome, appetite and metabolism, and the WHO advises against using them for weight control. Bobby-Approved-style scanning flags artificial sweeteners red.",
+      effects: "Possible gut-microbiome and metabolic effects; some people report digestive upset and increased cravings.",
       studies: [{ title: "Use of non-sugar sweeteners — WHO guideline", source: "World Health Organization", year: 2023 }]
     },
     vague: {
-      category: "Undisclosed ingredient", status: "limit",
+      category: "Undisclosed ingredient", status: "caution",
       summary: "A vague catch-all term that can hide many undisclosed compounds.",
-      whatIs: "Terms like 'natural flavors', 'artificial flavors' and 'spices' are umbrella labels that can each represent dozens of individual compounds a manufacturer isn't required to disclose.",
-      whyFlagged: "Lack of transparency — you can't tell exactly what's in it, and these blends may contain solvents, preservatives or allergens.",
-      effects: "Usually harmless, but a real problem for people with sensitivities or allergies who can't verify the contents.",
+      whatIs: "Terms like 'natural flavors', 'artificial flavors', 'flavoring' and 'spices' are umbrella labels that can each represent dozens of individual compounds — including solvents and carriers — a manufacturer isn't required to disclose.",
+      whyFlagged: "Lack of transparency — you can't tell exactly what's in it, and flavor blends may contain solvents, preservatives or allergens. Undisclosed flavorings are flagged hardest.",
+      effects: "A transparency problem and a hallmark of processed food; a real issue for people with sensitivities or allergies who can't verify the contents.",
       studies: []
     },
     clean: {
@@ -1430,7 +1895,8 @@ var CB_DATA = (function () {
     groups: groups, bannedMap: bannedMap,
     additives: additives, seedOils: seedOils, addedSugars: addedSugars,
     artificialSweeteners: artificialSweeteners, vagueTerms: vagueTerms,
-    cleanIngredients: cleanIngredients, allergenMap: allergenMap, eNumbers: eNumbers
+    cleanIngredients: cleanIngredients, fortifiedVitamins: fortifiedVitamins,
+    allergenMap: allergenMap, eNumbers: eNumbers
   };
 })();
 // UMD-style export: browser global + Node require (for engine unit tests).
