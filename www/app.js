@@ -2,6 +2,9 @@
 (function () {
   "use strict";
 
+  // Keep in sync with package.json "version" (stamped into the IPA by CI).
+  var APP_VERSION = "5.1.0";
+
   var DATA = window.CB_DATA;
   var COS = window.CB_DATA_COSMETICS || null;
   // Shared pure engine (parsing/classification/scoring). Initialized with both
@@ -1354,7 +1357,7 @@
       '<header class="hd"><div class="logo">My profile</div><div class="sub">Health goal, diet & settings</div></header>' +
       '<div class="section-title">Health & calorie goal</div>' + health +
       settings + allergens +
-      '<div class="disclaimer">Stored only on this device. Calorie targets are estimates, not medical advice.</div></div>';
+      '<div class="disclaimer">Stored only on this device. Calorie targets are estimates, not medical advice.<br>NutriCheck v' + APP_VERSION + '</div></div>';
   }
 
   // Full researched knowledge base: food additives + cosmetic/household INCI

@@ -41,6 +41,21 @@ jobs:
             || /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryUsageDescription 'NutriCheck can read ingredient labels from your photos.'" "$PLIST"
           echo "== Info.plist camera keys ==" && /usr/libexec/PlistBuddy -c "Print :NSCameraUsageDescription" "$PLIST"
 
+      # Stamp the real app version into the freshly-generated iOS project.
+      # `cap add ios` recreates the project each build, so without this the
+      # sideloaded IPA always reports Capacitor's default 1.0. Marketing
+      # version comes from package.json; the build number is the CI run.
+      - name: Set app version
+        run: |
+          PLIST=ios/App/App/Info.plist
+          APP_VERSION=$(node -p "require('./package.json').version")
+          echo "APP_VERSION=$APP_VERSION" >> "$GITHUB_ENV"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $APP_VERSION" "$PLIST" \
+            || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $APP_VERSION" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ github.run_number }}" "$PLIST" \
+            || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string ${{ github.run_number }}" "$PLIST"
+          echo "== App version ==" && /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PLIST"
+
       # Generate the custom NutriCheck app icon from assets/logo.png into the
       # iOS AppIcon set. Non-fatal: if it fails the build still ships.
       - name: Generate app icon
@@ -68,6 +83,8 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             ONLY_ACTIVE_ARCH=NO \
+            MARKETING_VERSION="${{ env.APP_VERSION }}" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
             build
 
       - name: Package IPA
@@ -100,10 +117,10 @@ jobs:
       - name: Publish IPA to a GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: build-${{ github.run_number }}
-          name: NutriCheck build ${{ github.run_number }}
+          tag_name: v${{ env.APP_VERSION }}-build-${{ github.run_number }}
+          name: NutriCheck ${{ env.APP_VERSION }} (build ${{ github.run_number }})
           body: |
-            Unsigned **device (arm64)** IPA for sideloading.
+            NutriCheck **${{ env.APP_VERSION }}** — unsigned **device (arm64)** IPA for sideloading.
 
             Download `NutriCheck.ipa` below and upload it to the iOSGods
             signer (App+ / VIP online sign, or Sideloadly). They re-sign it
