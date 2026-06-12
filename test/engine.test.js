@@ -260,7 +260,8 @@ test("diffProducts emits per-shared-nutrient deltas and counts flagged additives
 /* ------------------------------------------ expanded E-number coverage */
 test("expanded eNumbers tuple resolves a long-tail code (E160a)", () => {
   const c = engine.classify(engine.norm("e160a"), "e160a", "food");
-  assert.strictEqual(c.status, "ok");
+  // Low-risk "ok" data ratings are canonicalized to "good" on the way out.
+  assert.strictEqual(c.status, "good");
   // Resolves either via the lightweight tuple (enumber) or a promoted rich
   // additive entry (additive.enumber) — both are correct.
   const en = c.enumber || (c.additive && c.additive.enumber);
@@ -317,9 +318,9 @@ test("diffProducts is symmetric on a tie", () => {
 });
 
 /* ------------------------------------ expanded E-number coverage (food) */
-test("newly-added gum (E414 gum arabic) classifies ok", () => {
+test("newly-added gum (E414 gum arabic) classifies as canonical good", () => {
   const c = engine.classify(engine.norm("Gum Arabic"), "gum arabic", "food");
-  assert.strictEqual(c.status, "ok");
+  assert.strictEqual(c.status, "good");
 });
 
 test("newly-added emulsifier polysorbate 80 classifies caution", () => {
@@ -342,9 +343,9 @@ test("flavour enhancer maltol (E636) classifies limit", () => {
   assert.strictEqual(c.status, "limit");
 });
 
-test("polysaccharide pullulan (E1204) classifies ok", () => {
+test("polysaccharide pullulan (E1204) classifies as canonical good", () => {
   const c = engine.classify(engine.norm("Pullulan"), "pullulan", "food");
-  assert.strictEqual(c.status, "ok");
+  assert.strictEqual(c.status, "good");
 });
 
 /* ------------------------------- new cosmetic concern buckets (beauty) */
@@ -484,4 +485,61 @@ test("evidence-backed avoid ratings remain unchanged after calibration", () => {
       const c = engine.classify(engine.norm(n), n, "food");
       assert.strictEqual(c.status, exp, n + " should stay " + exp);
     });
+});
+
+/* --------------- REGRESSION: "ok" data ratings canonicalize to "good" */
+// The data files rate low-risk entries "ok", but the UI's status set is
+// avoid/caution/limit/good/unknown. Raw "ok" used to leak out of classify /
+// ingredientDetail, so those ingredients vanished from the result-screen
+// list and rendered "undefined" status labels. Lock the mapping in.
+test('canonStatus maps "ok" to "good" and passes other statuses through', () => {
+  assert.strictEqual(ENGINE_FACTORY.canonStatus("ok"), "good");
+  ["avoid", "caution", "limit", "good", "unknown"].forEach((s) => {
+    assert.strictEqual(ENGINE_FACTORY.canonStatus(s), s);
+  });
+});
+
+test('ok-rated food additive classifies as canonical "good" (xanthan gum)', () => {
+  const c = engine.classify(engine.norm("xanthan gum"), "xanthan gum", "food");
+  assert.ok(c.additive, "xanthan gum should resolve to a rich additive entry");
+  assert.strictEqual(c.status, "good");
+});
+
+test('ok-rated cosmetic ingredient classifies as canonical "good" (glycerin)', () => {
+  const c = engine.classify(engine.norm("glycerin"), "glycerin", "beauty");
+  assert.ok(c.additive, "glycerin should resolve to a rich cosmetic entry");
+  assert.strictEqual(c.status, "good");
+});
+
+test('ingredientDetail never returns a raw "ok" status', () => {
+  const c = engine.classify(engine.norm("xanthan gum"), "xanthan gum", "food");
+  const d = engine.ingredientDetail(c);
+  assert.strictEqual(d.status, "good");
+  // eNumber-group path (eOk group metadata carries status:"ok")
+  const e = engine.classify(engine.norm("e160a"), "e160a", "food");
+  const de = engine.ingredientDetail(e);
+  assert.strictEqual(de.status, "good");
+});
+
+test('analyze keeps ok-rated ingredients in a canonical status bucket', () => {
+  const res = engine.analyze(null, "Water, Xanthan Gum, Sugar", "food");
+  const statuses = res.classified.map((c) => c.status);
+  assert.ok(!statuses.includes("ok"), "no raw ok status should survive analyze");
+  const xg = res.classified.find((c) => /xanthan/.test(c.norm));
+  assert.ok(xg, "xanthan gum should be in the classified list");
+  assert.strictEqual(xg.status, "good");
+});
+
+/* --------------- REGRESSION: personalAlerts is token-boundary safe */
+test("personalAlerts does not substring-match across words (eggplant ≠ egg)", () => {
+  const items = engine.analyze(null, "Grilled Eggplant, Olive Oil", "food").classified;
+  const alerts = engine.personalAlerts(items, { egg: true });
+  assert.strictEqual(alerts.length, 0, "eggplant must not trigger an egg allergen alert");
+});
+
+test("personalAlerts still catches a real allergen hit", () => {
+  const items = engine.analyze(null, "Wheat Flour, Egg Yolk, Salt", "food").classified;
+  const alerts = engine.personalAlerts(items, { egg: true });
+  assert.strictEqual(alerts.length, 1);
+  assert.strictEqual(alerts[0].key, "egg");
 });

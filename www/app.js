@@ -98,6 +98,16 @@
       });
     }).catch(function () {});
   }
+  function getPhoto(key) {
+    if (!key) return Promise.resolve(null);
+    return idb().then(function (db) {
+      return new Promise(function (res) {
+        var rq = db.transaction("photos").objectStore("photos").get(key);
+        rq.onsuccess = function () { res(rq.result || null); };
+        rq.onerror = function () { res(null); };
+      });
+    }).catch(function () { return null; });
+  }
 
   /* ------------------------------------------------------------- helpers */
   function esc(s) {
@@ -152,19 +162,9 @@
   function analyze(off, ingredientsText, productType) { return ENG.analyze(off, ingredientsText, productType); }
   function bandFor(score, hasAvoid) { return ENG.bandFor(score, hasAvoid); }
 
-  function personalAlerts(classified) {
-    var alerts = [];
-    Object.keys(state.profile).forEach(function (key) {
-      if (!state.profile[key]) return;
-      var kws = DATA.allergenMap[key]; if (!kws) return;
-      var hits = [];
-      classified.forEach(function (c) {
-        for (var i = 0; i < kws.length; i++) if (c.norm.indexOf(kws[i]) !== -1) { hits.push(c.raw); break; }
-      });
-      if (hits.length) alerts.push({ key: key, hits: hits.slice(0, 4) });
-    });
-    return alerts;
-  }
+  // Engine version matches on whole-word token boundaries, so a "soy" or "egg"
+  // profile no longer false-alarms on "eggplant" / "soy-free" style names.
+  function personalAlerts(classified) { return ENG.personalAlerts(classified, state.profile); }
 
   /* ----------------------------------------- network: timeout + retry */
   // Wrap fetch with an AbortController timeout and a small retry so a slow or
@@ -323,11 +323,10 @@
   function searchByCategory(cat) {
     var url = "https://world.openfoodfacts.org/cgi/search.pl?action=process&json=1&page_size=40" +
       "&tagtype_0=categories&tag_contains_0=contains&tag_0=" + encodeURIComponent(cat) + "&fields=" + OFF_FIELDS;
-    return fetch(url, { headers: { "Accept": "application/json" } }).then(function (r) { return r.json(); })
-      .then(function (j) {
-        return ((j && j.products) || []).map(function (p) { return mapOff(p); })
-          .filter(function (o) { return o && o.ingredientsText && o.name !== "Unknown product"; });
-      });
+    return fetchJson(url).then(function (j) {
+      return ((j && j.products) || []).map(function (p) { return mapOff(p); })
+        .filter(function (o) { return o && o.ingredientsText && o.name !== "Unknown product"; });
+    });
   }
   function findAlternatives(p) {
     if (!p.category) return Promise.resolve([]);
@@ -1003,7 +1002,7 @@
       '<div class="hero glass" style="--c:' + c + '">' +
         '<button class="fav-btn' + (fav ? " on" : "") + '" data-fav="1" aria-label="Favorite">' + (fav ? "★" : "☆") + '</button>' +
         '<div class="product-head">' +
-          (p.image ? '<img class="phead-img" src="' + esc(p.image) + '" alt="">' : '<div class="phead-img ph">🥫</div>') +
+          (p.image ? '<img class="phead-img" src="' + esc(p.image) + '" alt="">' : '<div class="phead-img ph" id="pheadPh">🥫</div>') +
           '<div class="phead-txt"><div class="phead-name">' + esc(p.name) + '</div>' +
           '<div class="phead-brand">' + esc(p.brand || "") + '</div>' +
           '<div class="phead-src">via ' + esc(p.source) + '</div>' +
@@ -1358,22 +1357,32 @@
       '<div class="disclaimer">Stored only on this device. Calorie targets are estimates, not medical advice.</div></div>';
   }
 
+  // Full researched knowledge base: food additives + cosmetic/household INCI
+  // entries (engine merges both). De-duped by id — a few ingredients (EDTA,
+  // propylparaben) exist in both files; the food write-up wins.
+  function encyclopediaEntries() {
+    var all = (ENG.DATA && ENG.DATA.all) || DATA.additives;
+    var seen = {}, out = [];
+    all.forEach(function (a) { if (!seen[a.id]) { seen[a.id] = 1; out.push(a); } });
+    return out;
+  }
   function viewEncyclopedia() {
     var q = norm(state.encQuery);
-    var list = DATA.additives.slice().sort(function (a, b) {
-      return (STATUS_RANK[b.risk] - STATUS_RANK[a.risk]) || a.names[0].localeCompare(b.names[0]);
+    var list = encyclopediaEntries().sort(function (a, b) {
+      return (STATUS_RANK[ENG.canonStatus(b.risk)] - STATUS_RANK[ENG.canonStatus(a.risk)]) || a.names[0].localeCompare(b.names[0]);
     });
     if (q) list = list.filter(function (a) {
       return a.names.some(function (n) { return norm(n).indexOf(q) !== -1; }) || norm(a.category).indexOf(q) !== -1;
     });
     var rows = list.map(function (a) {
-      return '<div class="lrow tappable" data-enc="' + a.id + '">' + dot(statusColor(a.risk)) +
+      var st = ENG.canonStatus(a.risk);
+      return '<div class="lrow tappable" data-enc="' + a.id + '">' + dot(statusColor(st)) +
         '<div class="row-main"><div class="row-title">' + esc(titleCase(a.names[0])) + (a.enumber ? " · " + esc(a.enumber) : "") + '</div>' +
         '<div class="row-sub">' + esc(a.category) + '</div></div>' +
-        '<div class="status-tag ' + a.risk + '">' + STATUS_LABEL[a.risk] + ' ›</div></div>';
+        '<div class="status-tag ' + st + '">' + STATUS_LABEL[st] + ' ›</div></div>';
     }).join("");
     return '<div class="screen">' + backBar("Ingredient encyclopedia") +
-      '<div class="searchbar"><input id="encq" class="text-input search-input" value="' + esc(state.encQuery) + '" placeholder="Search ' + DATA.additives.length + ' additives…" />' +
+      '<div class="searchbar"><input id="encq" class="text-input search-input" value="' + esc(state.encQuery) + '" placeholder="Search ' + encyclopediaEntries().length + ' ingredients…" />' +
       '<button class="search-go" data-act="encGo" aria-label="Search ingredients">' + icon("search") + '</button></div>' +
       '<div class="panel glass">' + (rows || '<div class="lrow"><div class="row-main"><div class="row-sub">No matches.</div></div></div>') + '</div></div>';
   }
@@ -1445,6 +1454,23 @@
     window.scrollTo(0, keepY);
     lastRenderedView = v;
     if (v === "result" && state.product && state.product.id !== lastAnimatedId) { lastAnimatedId = state.product.id; animateScore(); }
+    if (v === "result") hydrateResultPhoto();
+  }
+
+  // For photo/OCR products with no Open*Facts image, show the label photo the
+  // user actually took (stored in IndexedDB) instead of a placeholder.
+  function hydrateResultPhoto() {
+    var p = state.product;
+    if (!p || p.image || !p.photoKey) return;
+    var id = p.id;
+    getPhoto(p.photoKey).then(function (dataUrl) {
+      if (!dataUrl || state.view !== "result" || !state.product || state.product.id !== id) return;
+      var ph = document.getElementById("pheadPh");
+      if (!ph) return;
+      var img = document.createElement("img");
+      img.className = "phead-img"; img.alt = ""; img.src = dataUrl;
+      ph.replaceWith(img);
+    });
   }
 
   /* --------------------------------------------------------- events */
@@ -1459,7 +1485,7 @@
     if (t.dataset.theme != null) { state.settings.theme = t.dataset.theme; saveSettings(); applyTheme(); render(); return; }
     if (t.dataset.sort != null) { state.searchSort = t.dataset.sort; render(); return; }
     if (t.dataset.enc != null) {
-      var ea = DATA.additives.filter(function (x) { return x.id === t.dataset.enc; })[0];
+      var ea = encyclopediaEntries().filter(function (x) { return x.id === t.dataset.enc; })[0];
       if (ea) { state.ingDetail = ingredientDetail({ additive: ea }); state.ingTab = "what"; state.ingFrom = "encyclopedia";
         state.research = { term: "", loading: false, data: null, error: false }; go("ingredient"); }
       return;
@@ -1599,6 +1625,13 @@
     document.addEventListener("click", onClick);
     document.addEventListener("change", onChange);
     document.addEventListener("keydown", onKey);
+    // Theme "auto" should follow the system while the app is open, not just at launch.
+    if (window.matchMedia) {
+      var mq = window.matchMedia("(prefers-color-scheme: light)");
+      var onScheme = function () { if ((state.settings && state.settings.theme) === "auto") applyTheme(); };
+      if (mq.addEventListener) mq.addEventListener("change", onScheme);
+      else if (mq.addListener) mq.addListener(onScheme);
+    }
     render();
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);

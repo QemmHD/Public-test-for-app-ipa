@@ -31,6 +31,11 @@
       .replace(/[^a-z0-9&'\- ]/g, " ").replace(/\s+/g, " ").trim();
   }
   function titleCase(s) { return String(s || "").replace(/\b\w/g, function (m) { return m.toUpperCase(); }); }
+  // Data files rate low-risk entries as "ok"; the UI's canonical status set is
+  // avoid / caution / limit / good / unknown, so map "ok" -> "good" everywhere
+  // a status leaves the engine (otherwise those rows vanish from the result
+  // list and render "undefined" labels).
+  function canonStatus(r) { return r === "ok" ? "good" : r; }
   function num(v) { return typeof v === "number" && !isNaN(v) ? v : (v != null && v !== "" && !isNaN(+v) ? +v : null); }
   function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
 
@@ -175,7 +180,7 @@
       if (!isFood) {
         // Non-food (cosmetic / household): cosmetic DB first.
         var ca = findInIndex(cosmeticIndex, toks);
-        if (ca) return { status: ca.risk, additive: ca, name: ca.names[0], reason: ca.category };
+        if (ca) return { status: canonStatus(ca.risk), additive: ca, name: ca.names[0], reason: ca.category };
         // Cosmetic concern keyword buckets.
         var ck = Object.keys(cosmeticListsT);
         for (var ci = 0; ci < ck.length; ci++) {
@@ -192,12 +197,12 @@
 
       // Food path (preserves original precedence).
       var a = findInIndex(foodIndex, toks);
-      if (a) return { status: a.risk, additive: a, name: a.names[0], reason: a.category };
+      if (a) return { status: canonStatus(a.risk), additive: a, name: a.names[0], reason: a.category };
       if (listHitTok(sweetenersT, toks)) return { status: "caution", group: "sweetener", reason: "Artificial sweetener" };
       if (listHitTok(seedOilsT, toks)) return { status: "limit", group: "seedOil", reason: "Industrial seed oil" };
       if (listHitTok(vagueT, toks)) return { status: "limit", group: "vague", reason: "Undisclosed ingredient" };
       var en = findENumberByName(toks) || findENumberByCode(raw);
-      if (en) return { status: en.risk, group: egroup(en.risk), name: en.name, enumber: en.code, reason: "Food additive" + (en.code ? " · " + en.code : "") };
+      if (en) return { status: canonStatus(en.risk), group: egroup(en.risk), name: en.name, enumber: en.code, reason: "Food additive" + (en.code ? " · " + en.code : "") };
       if (listHitTok(addedSugarsT, toks)) return { status: "limit", group: "addedSugar", reason: "Added sugar" };
       if (listHitTok(cleanT, toks)) return { status: "good", group: "clean", reason: "Whole-food ingredient" };
       if (/\be ?\d{3,4}[a-z]?\b/.test(String(raw || ""))) return { status: "caution", group: "eCaution", reason: "Unrecognized additive" };
@@ -207,12 +212,12 @@
     function ingredientDetail(item) {
       if (item.additive) {
         var a = item.additive;
-        return { title: titleCase(a.names[0]), category: a.category, enumber: a.enumber || "", status: a.risk,
+        return { title: titleCase(a.names[0]), category: a.category, enumber: a.enumber || "", status: canonStatus(a.risk),
           summary: a.summary, whatIs: a.whatIs, whyFlagged: a.whyFlagged, effects: a.healthRisk,
           banned: (bannedMap && bannedMap[a.id]) || "", studies: a.studies || [] };
       }
       var g = groups[item.group] || groups.unknown;
-      return { title: titleCase(item.name || item.raw), category: g.category, enumber: item.enumber || "", status: item.status || g.status,
+      return { title: titleCase(item.name || item.raw), category: g.category, enumber: item.enumber || "", status: canonStatus(item.status || g.status),
         summary: g.summary, whatIs: g.whatIs, whyFlagged: g.whyFlagged, effects: g.effects, banned: "", studies: g.studies || [] };
     }
 
@@ -416,7 +421,7 @@
         artificialSweeteners: DATA.artificialSweeteners || [], vagueTerms: DATA.vagueTerms || [],
         cleanIngredients: DATA.cleanIngredients || [], allergenMap: DATA.allergenMap || {}
       },
-      norm: norm, titleCase: titleCase, num: num, cap: cap,
+      norm: norm, titleCase: titleCase, num: num, cap: cap, canonStatus: canonStatus,
       tokenize: tokenize, phraseInTokens: phraseInTokens, isFoodType: isFoodType,
       parseIngredients: parseIngredients, classify: classify, ingredientDetail: ingredientDetail,
       evalNutrition: evalNutrition, analyze: analyze, bandFor: bandFor, personalAlerts: personalAlerts,
@@ -433,7 +438,7 @@
    */
   function makeSingleton() {
     var facade = {
-      norm: norm, titleCase: titleCase, num: num, cap: cap,
+      norm: norm, titleCase: titleCase, num: num, cap: cap, canonStatus: canonStatus,
       tokenize: tokenize, phraseInTokens: phraseInTokens, isFoodType: isFoodType,
       parseIngredients: parseIngredients, _ready: false,
       init: function (data) {
@@ -449,6 +454,6 @@
   }
 
   return { buildEngine: buildEngine, makeSingleton: makeSingleton,
-    norm: norm, titleCase: titleCase, num: num, cap: cap, isFoodType: isFoodType,
+    norm: norm, titleCase: titleCase, num: num, cap: cap, isFoodType: isFoodType, canonStatus: canonStatus,
     tokenize: tokenize, phraseInTokens: phraseInTokens, parseIngredients: parseIngredients };
 });
