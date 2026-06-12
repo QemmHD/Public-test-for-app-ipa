@@ -304,8 +304,10 @@
   // detected source sets productType (food / beauty / household / petfood).
   // ---- USDA FoodData Central (public-domain UPC + ingredient source) ----
   // Used to gap-fill when Open Food Facts has no ingredient list. A free
-  // data.gov key (Settings) raises limits; the shared DEMO_KEY works otherwise.
-  function usdaKey() { var s = state.settings || {}; return (s.usdaKey && s.usdaKey.trim()) || "DEMO_KEY"; }
+  // App's registered data.gov key (1,000 req/hour vs DEMO_KEY's shared pool).
+  // A key pasted in Settings overrides it.
+  var USDA_DEFAULT_KEY = "nfNkvg4igapcY1e5JAl4QVVdVeLf8f2fgFBEBLcl";
+  function usdaKey() { var s = state.settings || {}; return (s.usdaKey && s.usdaKey.trim()) || USDA_DEFAULT_KEY; }
   function mapUsdaFood(f, code) {
     if (!f) return null;
     var nu = {};
@@ -1702,7 +1704,7 @@
 
     var dataSrc = '<div class="section-title">Data sources</div><div class="panel glass">' +
       '<div class="lrow"><div class="row-main"><div class="row-title">USDA FoodData Central</div>' +
-        '<div class="row-sub">Adds a public-domain UPC + ingredient source to fill gaps. Paste a free data.gov API key for higher limits — leave blank to use the shared demo key.</div></div></div>' +
+        '<div class="row-sub">Adds a public-domain UPC + ingredient source to fill gaps. A registered key is built in — paste your own data.gov key here only if you want to override it.</div></div></div>' +
       '<div class="lrow"><input id="usdaKey" class="text-input" style="margin:0" placeholder="USDA API key (optional)" value="' + esc(s.usdaKey || "") + '">' +
         '<button class="search-go" data-act="saveUsdaKey" style="margin-left:8px" aria-label="Save key">Save</button></div>' +
       '<div class="lrow"><div class="row-main"><div class="row-title">openFDA reports</div>' +
