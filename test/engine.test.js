@@ -609,3 +609,12 @@ test("polluted ingredient fields stop before explanatory prose", () => {
   assert.ok(got.includes("citric acid"));
   assert.ok(!got.some((x) => /souhaitez|correspond|boisson|decryptage/.test(x)), "commentary must not be scored");
 });
+
+test("parseIngredientsDetailed tracks weird label fragments without scoring them", () => {
+  const parsed = engine.parseIngredientsDetailed(
+    "Ingredients: Water, Sugar, WARNING, store in a cool dry place, qqqqzzzz, Red 40"
+  );
+  assert.deepStrictEqual(parsed.items.map((x) => x.norm), ["water", "sugar", "red 40"]);
+  assert.ok(parsed.ignored.filter((x) => x.reason === "label text").length >= 2);
+  assert.ok(parsed.ignored.some((x) => x.reason === "OCR gibberish"));
+});

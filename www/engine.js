@@ -74,8 +74,21 @@
     "potassium": 1, "sodium": 1, "cholesterol": 1, "phosphorus": 1, "magnesium": 1,
     "fat": 1, "total fat": 1, "saturated fat": 1, "trans fat": 1, "calcium": 1
   };
+  var LABEL_NOISE_RE = /\b(allergy advice|allergen information|warning|warnings|directions|instructions|storage instructions|store in a cool|keep refrigerated|recycle|scan here|learn more|customer service|consumer information|certified organic|non gmo project verified|gluten free|no artificial|good source of|excellent source of|phone|telephone|copyright|trademark|lot code|batch code|barcode)\b/i;
   function isNonIngredient(n) {
-    return NON_INGREDIENT_RE.test(n) || COMMENTARY_RE.test(n) || NUTRITION_VALUE_RE.test(n) || NUTRIENT_ONLY[n] === 1;
+    return NON_INGREDIENT_RE.test(n) || COMMENTARY_RE.test(n) || LABEL_NOISE_RE.test(n) ||
+      NUTRITION_VALUE_RE.test(n) || NUTRIENT_ONLY[n] === 1;
+  }
+  function ignoredReason(raw, n) {
+    if (COMMENTARY_RE.test(raw) || COMMENTARY_RE.test(n)) return "explanatory prose";
+    if (LABEL_NOISE_RE.test(raw) || LABEL_NOISE_RE.test(n) || NON_INGREDIENT_RE.test(n) || NUTRIENT_ONLY[n] === 1)
+      return "label text";
+    if (NUTRITION_VALUE_RE.test(n)) return "nutrition value";
+    if (tokenize(n).length > 14) return "sentence-like text";
+    if (/([a-z])\1{3,}/i.test(n) || /[�]/.test(raw)) return "OCR gibberish";
+    var compact = n.replace(/[^a-z]/g, "");
+    if (compact.length >= 7 && !/[aeiouy]/.test(compact)) return "OCR gibberish";
+    return "";
   }
   function ingredientTextQuality(text) {
     text = String(text || "").trim();
@@ -83,11 +96,14 @@
     var suspicious = COMMENTARY_RE.test(text) || (text.length > 350 && (text.match(/[?!]/g) || []).length > 1);
     return { usable: !suspicious, suspicious: suspicious };
   }
-  function parseIngredients(text) {
-    if (!text) return [];
+  function parseIngredientsDetailed(text) {
+    if (!text) return { items: [], ignored: [] };
+    var sourceText = String(text);
+    var commentaryMatch = COMMENTARY_RE.exec(sourceText);
+    var trailingCommentary = commentaryMatch ? sourceText.slice(commentaryMatch.index).trim() : "";
     // Some crowd-sourced product records contain an ingredient list followed
     // by prose or an AI-generated explanation. Never score that commentary.
-    var cleaned = String(text).split(COMMENTARY_RE)[0]
+    var cleaned = sourceText.split(COMMENTARY_RE)[0]
       .replace(/\b(?:https?:\/\/|www\.)\S+/gi, " ")
       .replace(/\S+@\S+\.\S+/g, " ")
       .replace(/\b[\w.-]+\.(?:com|net|org|co|us)\b/gi, " ")
@@ -101,20 +117,29 @@
     // newlines, bullets/middots, pipes, slashes and asterisks — plus a period
     // that is NOT part of a decimal number. This catches labels that wrap lines
     // or use dots/bullets between ingredients so we read the WHOLE list.
-    var parts = cleaned.split(/[,;\n\r•·‣▪●∙|/*]+|\.(?!\d)/), out = [], seen = {};
+    var parts = cleaned.split(/[,;\n\r•·‣▪●∙|/*]+|\.(?!\d)/), out = [], ignored = [], seen = {};
+    if (trailingCommentary) ignored.push({
+      raw: trailingCommentary.slice(0, 180), norm: norm(trailingCommentary.slice(0, 180)), reason: "explanatory prose"
+    });
     for (var i = 0; i < parts.length; i++) {
       var raw = parts[i].replace(/\([^)]*\)/g, "").trim();
       if (!raw) continue;
       var n = norm(raw);
       if (!n || n.length < 2) continue;
-      if (isNonIngredient(n)) continue;
-      if (tokenize(n).length > 14) continue; // sentence-like prose, not an ingredient
+      var reason = ignoredReason(raw, n);
+      if (reason) {
+        if (ignored.length < 30) ignored.push({ raw: raw.replace(/\s+/g, " ").trim(), norm: n, reason: reason });
+        continue;
+      }
       if (seen[n]) continue;            // global de-dup (not just adjacent repeats)
       seen[n] = 1;
       out.push({ raw: raw.replace(/\s+/g, " ").trim(), norm: n });
       if (out.length > 150) break;      // raised cap so long labels aren't truncated
     }
-    return out;
+    return { items: out, ignored: ignored };
+  }
+  function parseIngredients(text) {
+    return parseIngredientsDetailed(text).items;
   }
 
   /* ------------------------------------------------------------- engine */
@@ -339,7 +364,8 @@
 
     function analyze(off, ingredientsText, productType) {
       var isFood = isFoodType(productType);
-      var items = parseIngredients(ingredientsText);
+      var parsed = parseIngredientsDetailed(ingredientsText);
+      var items = parsed.items;
       var classified = items.map(function (it) {
         var c = classify(it.norm, (it.raw || "").toLowerCase(), productType);
         return { raw: it.raw, norm: it.norm, status: c.status, reason: c.reason,
@@ -384,7 +410,8 @@
 
       return { classified: classified, score: score, badge: bandFor(score, hasAvoid), nutrition: nutrition,
         flaggedCount: flaggedCount, scoreReasons: reasons, productType: productType || "food",
-        strictVerdict: strictVerdict(classified), ingredientConfidence: ingredientConfidence(classified) };
+        strictVerdict: strictVerdict(classified), ingredientConfidence: ingredientConfidence(classified),
+        ignoredFragments: parsed.ignored };
     }
 
     function personalAlerts(classified, profile) {
@@ -515,7 +542,8 @@
       },
       norm: norm, titleCase: titleCase, num: num, cap: cap,
       tokenize: tokenize, phraseInTokens: phraseInTokens, isFoodType: isFoodType,
-      parseIngredients: parseIngredients, ingredientTextQuality: ingredientTextQuality,
+      parseIngredients: parseIngredients, parseIngredientsDetailed: parseIngredientsDetailed,
+      ingredientTextQuality: ingredientTextQuality,
       classify: classify, ingredientDetail: ingredientDetail,
       strictVerdict: strictVerdict, ingredientConfidence: ingredientConfidence,
       evalNutrition: evalNutrition, analyze: analyze, bandFor: bandFor, personalAlerts: personalAlerts,

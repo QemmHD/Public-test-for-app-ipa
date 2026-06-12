@@ -43,7 +43,7 @@
     compareB: null, compareCands: [],
     insightsFilter: "all", editHealth: false, encQuery: "", ingFrom: "result",
     research: { term: "", loading: false, data: null, error: false },
-    busy: false, statusMsg: ""
+    busy: false, statusMsg: "", toast: null
   };
   var app;
   var researchCache = {};
@@ -59,6 +59,13 @@
   }
   function saveHealth() { try { localStorage.setItem("cb_health", JSON.stringify(state.health)); } catch (e) {} }
   function saveSettings() { try { localStorage.setItem("cb_settings", JSON.stringify(state.settings)); } catch (e) {} }
+  var toastTimer = null;
+  function notify(msg, kind) {
+    state.toast = { msg: msg, kind: kind || "info" };
+    render();
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { state.toast = null; render(); }, 3200);
+  }
 
   // Mifflin-St Jeor BMR -> TDEE -> calorie/macro target (engine).
   function computeTargets(h) { return ENG.computeTargets(h); }
@@ -408,6 +415,7 @@
       score: r.score, badge: r.badge, classified: r.classified, nutrition: r.nutrition,
       flaggedCount: r.flaggedCount, scoreReasons: r.scoreReasons,
       strictVerdict: r.strictVerdict, ingredientConfidence: r.ingredientConfidence,
+      ignoredFragments: r.ignoredFragments || [],
       logged: "checked", ateAt: 0, portion: 1, ts: Date.now()
     };
   }
@@ -684,7 +692,7 @@
       var msg = "Camera unavailable. Enter the barcode manually.";
       if (e && e.name === "NotAllowedError") msg = "Camera access is blocked. Allow camera for this site in Settings, then retry — or enter the barcode manually.";
       else if (e && e.name === "NotFoundError") msg = "No camera was found. Enter the barcode manually.";
-      alert(msg);
+      notify(msg, "error");
       go("manual");
     });
   }
@@ -876,7 +884,7 @@
       busy(false, "");
       if (!offHasIngredients(off)) { state.pending = { barcode: code, off: off }; go("addPhoto"); return; }
       showProduct(buildProduct(off));
-    }).catch(function () { busy(false, ""); alert("Network error reaching the food database. Check your connection."); });
+    }).catch(function () { busy(false, ""); notify("Network error reaching the food database. Check your connection.", "error"); });
   }
 
   /* ------------------------------------------------------------ OCR */
@@ -925,10 +933,13 @@
   }
   // Editable OCR result so the user can fix misreads before scoring.
   function ocrReviewBlock(text, conf, low) {
+    var preview = ENG.parseIngredientsDetailed(text || "");
+    var scanNote = preview.ignored.length ? '<div class="ocr-cleanup">' + preview.items.length + ' likely ingredients · ' +
+      preview.ignored.length + ' weird/noise fragment' + (preview.ignored.length === 1 ? "" : "s") + ' will be ignored</div>' : "";
     return '<div class="panel glass ocr-review"><div class="panel-h">Check the scanned text' +
       '<span class="cnt">' + Math.round(conf || 0) + '% read</span></div>' +
       (low ? '<div class="ocr-warn">Hard to read — fix any wrong or missing words below, or retake a closer, well-lit photo of just the ingredients.</div>'
-           : '<div class="ocr-tip">Tap to fix anything the scan got wrong, then analyze.</div>') +
+           : '<div class="ocr-tip">Tap to fix anything the scan got wrong, then analyze.</div>') + scanNote +
       '<textarea id="ocrText" class="text-input ocr-text" rows="7" placeholder="Ingredients…">' + esc(text || "") + '</textarea>' +
       '<button class="big-btn" data-act="analyzeOcr">Analyze ingredients</button></div>';
   }
@@ -1073,6 +1084,19 @@
       (blockers ? '<div class="strict-blockers">' + blockers + '</div>' : "") +
       '</div>';
   }
+  function cleanupBlock(p) {
+    var ignored = p.ignoredFragments || [];
+    if (!ignored.length) return "";
+    var byReason = {}, samples = [];
+    ignored.forEach(function (x) {
+      byReason[x.reason] = (byReason[x.reason] || 0) + 1;
+      if (samples.length < 4) samples.push(x.raw);
+    });
+    var summary = Object.keys(byReason).map(function (k) { return byReason[k] + " " + k; }).join(" · ");
+    return '<div class="panel glass cleanup-panel"><div class="panel-h"><span>Scan cleanup</span><span class="cnt">' +
+      ignored.length + ' ignored</span></div><div class="cleanup-copy">Excluded from the ingredient score: ' + esc(summary) + '.</div>' +
+      '<div class="cleanup-chips">' + samples.map(function (x) { return '<span>' + esc(x) + '</span>'; }).join("") + '</div></div>';
+  }
   function animateScore() {
     var ring = document.querySelector(".score-ring"), numEl = document.querySelector(".score-num");
     if (!ring || !numEl || !state.product) return;
@@ -1213,6 +1237,7 @@
         '</div>' +
       '</div>' +
       whyBlock(p) +
+      cleanupBlock(p) +
       // Yuka-style: the verdict detail (what's bad / what's good) comes FIRST,
       // right under the score — that's the core of the result screen.
       // Bobby-Approved-better: surface the actual flagged INGREDIENT names as
@@ -1605,7 +1630,7 @@
       var a = document.createElement("a"); a.href = url; a.download = "nutricheck-backup.json";
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
-    } catch (e) { alert("Couldn't export on this device."); }
+    } catch (e) { notify("Couldn't export on this device.", "error"); }
   }
 
   function viewAddPhoto() {
@@ -1660,6 +1685,9 @@
     app.innerHTML = '<div class="app-body">' + html + '</div>' + (showTabs ? tabBar() : "");
     if (state.busy) app.insertAdjacentHTML("beforeend",
       '<div class="overlay"><div class="spinner"></div><div class="ov-msg">' + esc(state.statusMsg || "Working…") + '</div></div>');
+
+    if (state.toast) app.insertAdjacentHTML("beforeend",
+      '<div class="toast ' + esc(state.toast.kind) + '">' + esc(state.toast.msg) + '</div>');
 
     window.scrollTo(0, keepY);
     lastRenderedView = v;
@@ -1717,7 +1745,7 @@
     else if (act === "analyzeOcr") {
       var ta = document.getElementById("ocrText");
       var txt = ta ? ta.value.trim() : "";
-      if (txt.replace(/\s/g, "").length < 6) { alert("Please enter or fix the ingredients text first."); return; }
+      if (txt.replace(/\s/g, "").length < 6) { notify("Please enter or fix the ingredients text first.", "error"); return; }
       var ctx = state.ocrPending || {};
       var product = buildProduct(ctx.off || null, txt, { photoKey: ctx.photoKey, source: "Photo / OCR", name: ctx.name || "Scanned product" });
       if (ctx.barcode) product.barcode = ctx.barcode;
@@ -1736,7 +1764,7 @@
     else if (act === "saveUsdaKey") {
       var uk = document.getElementById("usdaKey");
       state.settings.usdaKey = uk ? uk.value.trim() : "";
-      saveSettings(); haptic("success"); alert("USDA key saved.");
+      saveSettings(); haptic("success"); notify("USDA key saved.", "success");
     }
     else if (act === "toggleOpenfda") {
       state.settings.openfda = state.settings.openfda === false ? true : false;
@@ -1745,7 +1773,7 @@
     else if (act === "saveHealth") {
       var g = function (id) { var el = document.getElementById(id); return el ? el.value : ""; };
       var age = +g("h_age"), ft = +g("h_ft"), inch = +g("h_in"), lb = +g("h_lb");
-      if (!age || (!ft && !inch) || !lb) { alert("Please fill in age, height and weight."); return; }
+      if (!age || (!ft && !inch) || !lb) { notify("Please fill in age, height and weight.", "error"); return; }
       var cm = Math.round((ft * 12 + inch) * 2.54), kg = Math.round(lb * 0.45359 * 10) / 10;
       state.health = { sex: g("h_sex"), age: age, ft: ft, in: inch, lb: lb, activity: g("h_act"), goal: g("h_goal"), cm: cm, kg: kg };
       saveHealth(); state.editHealth = false; render();
@@ -1766,8 +1794,8 @@
           if (d.health) state.health = d.health;
           if (d.settings) state.settings = d.settings;
           saveHistory(); saveFavs(); saveProfile(); saveHealth(); saveSettings(); applyTheme(); render();
-          alert("Data imported successfully.");
-        } catch (err) { alert("That backup file couldn't be read."); }
+          notify("Data imported successfully.", "success");
+        } catch (err) { notify("That backup file couldn't be read.", "error"); }
       };
       fr.readAsText(e.target.files[0]); return;
     }
@@ -1779,10 +1807,10 @@
       }).then(function (code) {
         busy(false, "");
         if (code) { stopScanner(); handleBarcode(code); }
-        else alert("Couldn't read a barcode in that photo. Fill the frame with the barcode, hold steady so it's sharp, and try again — or enter the code manually.");
+        else notify("Couldn't read a barcode. Fill the frame, hold steady, and try again or enter the code.", "error");
       }).catch(function () {
         busy(false, "");
-        alert("Couldn't read a barcode in that photo. Try again or enter the code manually.");
+        notify("Couldn't read a barcode in that photo. Try again or enter the code manually.", "error");
       });
       return;
     }
@@ -1810,7 +1838,7 @@
           var ta = document.getElementById("ocrText");
           if (ta) { try { ta.focus(); } catch (e) {} }
         });
-      }).catch(function () { busy(false, ""); alert("Couldn't process that image. Try again."); });
+      }).catch(function () { busy(false, ""); notify("Couldn't process that image. Try again.", "error"); });
     }
   }
 
