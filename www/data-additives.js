@@ -573,7 +573,7 @@ var CB_DATA = (function () {
       studies: [{ title: "Scientific opinion on the re-evaluation of ascorbic acid (E 300)", source: "EFSA Journal", year: 2015 }]
     },
     {
-      id: "tocopherols", names: ["tocopherols", "mixed tocopherols", "alpha-tocopherol", "vitamin e", "e306", "e307", "e308", "e309"], enumber: "E306",
+      id: "tocopherols", names: ["tocopherols", "mixed tocopherols", "alpha-tocopherol", "tocopherol-rich extract", "tocopherol rich extract", "tocopherol-rich extracts", "vitamin e", "e306", "e307", "e308", "e309"], enumber: "E306",
       category: "Antioxidant (vitamin E)", risk: "ok",
       summary: "Vitamin-E antioxidants used to keep oils from going rancid; beneficial.",
       whatIs: "Tocopherols are forms of vitamin E used as natural antioxidants to protect fats and oils from oxidation.",
@@ -1003,6 +1003,51 @@ var CB_DATA = (function () {
       whyFlagged: "A petroleum-derived azo dye in the group flagged for behavioral effects; effectively phased out.",
       healthRisk: "Azo-dye class concerns; possible contamination with carcinogenic byproducts.",
       studies: [{ title: "Synthetic azo dyes and health (review)", source: "California OEHHA report", year: 2021 }]
+    },
+    {
+      id: "commoncaramel", names: ["common caramel", "plain caramel", "plain caramel color", "plain caramel colour"], enumber: "E150a",
+      category: "Caramel color", risk: "limit",
+      summary: "Plain caramel coloring made by heating sugars; a cosmetic processing additive.",
+      whatIs: "Common or plain caramel (E150a) is made by controlled heating of sugars and is used to give foods a brown color.",
+      whyFlagged: "E150a is the simplest caramel color and is considered low-risk, but it is still an unnecessary cosmetic additive and processing marker.",
+      healthRisk: "Low direct risk at food-use levels; best limited as part of reducing ultra-processed foods.",
+      studies: [{ title: "Scientific opinion on the re-evaluation of caramel colours", source: "EFSA Journal", year: 2011 }]
+    },
+    {
+      id: "disodiumribonucleotides", names: ["5'-disodium ribonucleotide", "5'-disodium ribonucleotides", "disodium ribonucleotide", "disodium ribonucleotides", "disodium 5'-ribonucleotides", "e635"], enumber: "E635",
+      category: "Flavor enhancer", risk: "limit",
+      summary: "Umami flavor enhancer commonly paired with MSG in processed savory foods.",
+      whatIs: "Disodium 5'-ribonucleotides (E635) is a blend of nucleotide salts used to intensify savory flavor.",
+      whyFlagged: "Approved at food-use levels, but it is a strong marker of heavily formulated savory snacks and instant foods.",
+      healthRisk: "Generally low direct risk; some sensitive people prefer to limit concentrated flavor enhancers.",
+      studies: [{ title: "Evaluation of disodium ribonucleotides as flavor enhancers", source: "JECFA", year: 1993 }]
+    },
+    {
+      id: "genericacidityregulator", names: ["acidity regulator", "acidity regulators"], enumber: "",
+      category: "Undisclosed acidity regulator", risk: "caution",
+      summary: "A functional class is listed without naming the actual acidity-regulating compounds.",
+      whatIs: "Acidity regulators control a product's pH, tartness, preservation, or texture. Many are benign, but this label does not identify which ones were used.",
+      whyFlagged: "Strict scans require the actual ingredients. An undisclosed functional class cannot be fully evaluated.",
+      healthRisk: "Depends on the unnamed compounds; the main concern is missing ingredient transparency.",
+      studies: []
+    },
+    {
+      id: "genericantioxidants", names: ["antioxidant", "antioxidants"], enumber: "",
+      category: "Undisclosed antioxidant", risk: "caution",
+      summary: "The label names a functional class but not the antioxidant compounds used.",
+      whatIs: "Antioxidants slow oxidation and rancidity. They range from vitamin C and tocopherols to additives such as BHA or BHT.",
+      whyFlagged: "The exact antioxidant matters, so a strict scan cannot approve an unnamed category.",
+      healthRisk: "Depends on the unnamed antioxidant; the main concern is missing ingredient transparency.",
+      studies: []
+    },
+    {
+      id: "genericcolors", names: ["color", "colors", "colour", "colours", "coloring", "colouring"], enumber: "",
+      category: "Undisclosed color", risk: "caution",
+      summary: "One or more color additives are present but not specifically named.",
+      whatIs: "Colors may be plant-derived pigments or synthetic dyes. This generic label does not reveal which colorants were used.",
+      whyFlagged: "Some colors are benign and others are strict avoid ingredients, so an undisclosed color category cannot be approved.",
+      healthRisk: "Depends on the unnamed colorants; synthetic dyes can affect sensitive individuals.",
+      studies: []
     }
   ];
 
@@ -1692,6 +1737,12 @@ var CB_DATA = (function () {
     "artificially flavored", "artificially flavoured", "artificial flavored", "natural flavored", "naturally flavored", "naturally flavoured", "artificially colored", "artificially coloured", "artificial flavors added", "flavored", "flavoured"];
   for (var v2 = 0; v2 < extraVague.length; v2++) {
     if (vagueTerms.indexOf(extraVague[v2]) === -1) vagueTerms.push(extraVague[v2]);
+  }
+
+  // Recognizable label-form ingredients seen in processed-food ingredient lists.
+  const labelFormClean = ["whey powder", "sweet whey powder", "cheese powder", "cheddar cheese powder", "gluten", "wheat gluten", "vital wheat gluten"];
+  for (var lc = 0; lc < labelFormClean.length; lc++) {
+    if (cleanIngredients.indexOf(labelFormClean[lc]) === -1) cleanIngredients.push(labelFormClean[lc]);
   }
 
   /* Category-level explanations so EVERY ingredient has a meaningful detail

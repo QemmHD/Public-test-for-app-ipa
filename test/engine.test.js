@@ -618,3 +618,22 @@ test("parseIngredientsDetailed tracks weird label fragments without scoring them
   assert.ok(parsed.ignored.filter((x) => x.reason === "label text").length >= 2);
   assert.ok(parsed.ignored.some((x) => x.reason === "OCR gibberish"));
 });
+
+test("real snack-label terms from scans no longer fall through as unknown", () => {
+  const expected = {
+    "whey powder": "good",
+    "cheese powder": "good",
+    "gluten": "good",
+    "common caramel": "limit",
+    "5'-disodium ribonucleotide": "limit",
+    "tocopherol-rich extract": "ok",
+    "acidity regulators": "caution",
+    "colours": "caution",
+    "antioxidants": "caution"
+  };
+  Object.entries(expected).forEach(([name, status]) => {
+    const c = engine.classify(engine.norm(name), name, "food");
+    assert.strictEqual(c.status, status, name + " should be recognized as " + status);
+    assert.notStrictEqual(c.group, "unknown", name + " must not be unknown");
+  });
+});
