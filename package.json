@@ -1,6 +1,6 @@
 {
   "name": "nutricheck",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "NutriCheck - scan food and check every ingredient",
   "scripts": {
     "build": "echo 'static'",
