@@ -262,13 +262,18 @@
       source: "USDA FoodData Central", kosher: false, nutriments: nu };
   }
   // Merge a USDA result into an Open*Facts result, filling only the gaps —
-  // Open Food Facts data always wins where it exists.
+  // Open Food Facts data wins where it exists, EXCEPT when its ingredient
+  // list is clearly truncated and USDA carries the substantially fuller one.
   function mergeSources(off, u) {
     if (!off) return u || null;
     if (!u) return off;
-    if (!off.ingredientsText && u.ingredientsText) {
-      off.ingredientsText = u.ingredientsText;
-      off.source = (off.source && off.source.indexOf("USDA") === -1) ? (off.source + " + USDA") : "USDA FoodData Central";
+    if (u.ingredientsText) {
+      var offN = parseIngredients(off.ingredientsText || "").length;
+      var uN = parseIngredients(u.ingredientsText).length;
+      if (!off.ingredientsText || (uN >= offN + 3 && uN > offN * 1.5)) {
+        off.ingredientsText = u.ingredientsText;
+        off.source = (off.source && off.source.indexOf("USDA") === -1) ? (off.source + " + USDA") : "USDA FoodData Central";
+      }
     }
     if ((!off.nutriments || !Object.keys(off.nutriments).length) && u.nutriments) off.nutriments = u.nutriments;
     if (off.serving_quantity == null && u.serving_quantity != null) off.serving_quantity = u.serving_quantity;

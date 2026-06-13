@@ -862,3 +862,24 @@ test("END-TO-END: USDA-only product scores, scales kcal per serving, drops aller
   // Per-serving calories: 480 kcal/100g at a 28 g serving ≈ 134 kcal.
   assert.strictEqual(engine.computeKcal(off), 134);
 });
+
+test("mergeSources upgrades a truncated OFF list to USDA's fuller one", () => {
+  const u = engine.mapUsdaFood(usdaFixture(), "049000028911");
+  // OFF knows the product but its crowd-sourced list is cut short (2 items).
+  const off = { barcode: "049000028911", name: "Acme Cheese Crackers", brand: "Acme",
+    ingredientsText: "Enriched flour, cheddar cheese", category: "crackers",
+    source: "Open Food Facts", nutriments: {} };
+  const merged = engine.mergeSources(off, u);
+  assert.ok(/SOYBEAN OIL/.test(merged.ingredientsText), "fuller USDA list should win");
+  assert.strictEqual(merged.source, "Open Food Facts + USDA");
+});
+
+test("mergeSources keeps a comparable OFF list (no needless swap)", () => {
+  const u = engine.mapUsdaFood(usdaFixture(), "049000028911");
+  const offText = "Enriched wheat flour, niacin, cheddar cheese, milk, salt, soybean oil, paprika";
+  const off = { barcode: "049000028911", name: "Acme Cheese Crackers", brand: "Acme",
+    ingredientsText: offText, category: "crackers", source: "Open Food Facts", nutriments: {} };
+  const merged = engine.mergeSources(off, u);
+  assert.strictEqual(merged.ingredientsText, offText, "comparable OFF list must be kept");
+  assert.strictEqual(merged.source, "Open Food Facts");
+});

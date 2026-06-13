@@ -325,8 +325,12 @@
   }
   function mergeSources(off, u) { return ENG.mergeSources(off, u); }
   function lookupBarcode(code) {
+    // Serve the cache only when the cached record actually has a usable
+    // ingredient list. Incomplete records (scanned before the USDA gap-fill
+    // existed, or during a network hiccup) re-fetch and self-heal instead of
+    // blocking better data for 30 days.
     var cached = cachedProduct(code);
-    if (cached) return Promise.resolve(cached);
+    if (cached && ENG.parseIngredients(cached.ingredientsText || "").length >= 4) return Promise.resolve(cached);
     function tryAt(i) {
       if (i >= OFF_SOURCES.length) return Promise.resolve(null);
       var src = OFF_SOURCES[i];
@@ -337,14 +341,16 @@
       }).catch(function () { return tryAt(i + 1); });
     }
     return tryAt(0).then(function (off) {
-      if (offHasIngredients(off)) { cacheProduct(code, off); return off; }
-      // Gap-fill from USDA when Open*Facts had nothing useful.
+      // Consult USDA not only when Open*Facts had nothing, but also when its
+      // ingredient list looks thin/truncated — USDA's is often the full one.
+      var offItems = ENG.parseIngredients((off && off.ingredientsText) || "").length;
+      if (off && offItems >= 4) { cacheProduct(code, off); return off; }
       return lookupUsda(code).then(function (u) {
-        var merged = mergeSources(off, u);
+        var merged = mergeSources(off, u) || off;
         if (merged) cacheProduct(code, merged);
         return merged;
       });
-    });
+    }).catch(function () { return cached || null; });
   }
   // ---- openFDA CAERS: count of consumer-reported reaction events mentioning a term ----
   function fetchFdaReports(term) {
