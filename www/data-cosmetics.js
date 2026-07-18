@@ -436,7 +436,7 @@ window.CB_DATA_COSMETICS = (function () {
         reason: "FDA prohibits chloroform in cosmetics because it causes cancer in animals and is likely harmful to people." }],
       summary: "A prohibited cosmetic solvent and cancer concern.", whatIs: "Chloroform is a volatile chlorinated solvent.",
       whyFlagged: "It is prohibited as an intentionally added cosmetic ingredient in the United States, apart from limited unavoidable residue exceptions.",
-      healthRisk: "Cancer concern plus liver, kidney and central-nervous-system toxicity.", studies: [{ title: "Prohibited & Restricted Ingredients in Cosmetics", source: "U.S. FDA", year: 2026 }]
+      healthRisk: "Cancer concern plus liver, kidney and central-nervous-system toxicity.", studies: [{ title: "Prohibited & Restricted Ingredients in Cosmetics", source: "U.S. FDA", year: 2022 }]
     },
     {
       id: "fda-prohibited-methylene-chloride", names: ["methylene chloride", "dichloromethane"],
@@ -446,7 +446,7 @@ window.CB_DATA_COSMETICS = (function () {
         reason: "FDA prohibits methylene chloride in cosmetics because it causes cancer in animals and is likely harmful to people." }],
       summary: "A prohibited chlorinated solvent and cancer concern.", whatIs: "Methylene chloride is a volatile industrial solvent.",
       whyFlagged: "FDA prohibits it as a cosmetic ingredient.", healthRisk: "Cancer concern and acute nervous-system or inhalation effects.",
-      studies: [{ title: "Prohibited & Restricted Ingredients in Cosmetics", source: "U.S. FDA", year: 2026 }]
+      studies: [{ title: "Prohibited & Restricted Ingredients in Cosmetics", source: "U.S. FDA", year: 2022 }]
     },
     {
       id: "fda-prohibited-vinyl-chloride", names: ["vinyl chloride"],
@@ -456,7 +456,7 @@ window.CB_DATA_COSMETICS = (function () {
         reason: "FDA prohibits vinyl chloride in aerosol cosmetics because it causes cancer and other health problems." }],
       summary: "A prohibited aerosol ingredient and known cancer hazard.", whatIs: "Vinyl chloride is a gas used mainly to manufacture PVC.",
       whyFlagged: "It has no acceptable place as an aerosol cosmetic ingredient under FDA rules.", healthRisk: "Known human carcinogen; liver and nervous-system toxicity.",
-      studies: [{ title: "Prohibited & Restricted Ingredients in Cosmetics", source: "U.S. FDA", year: 2026 }]
+      studies: [{ title: "Prohibited & Restricted Ingredients in Cosmetics", source: "U.S. FDA", year: 2022 }]
     },
     {
       id: "fda-prohibited-bithionol", names: ["bithionol"],
@@ -466,7 +466,7 @@ window.CB_DATA_COSMETICS = (function () {
         reason: "FDA prohibits bithionol in cosmetics because it can cause photocontact sensitization." }],
       summary: "A prohibited antimicrobial that can trigger serious light-related skin reactions.", whatIs: "Bithionol is an older antimicrobial ingredient.",
       whyFlagged: "FDA prohibits it in cosmetics because of photocontact sensitization.", healthRisk: "Severe sun-triggered allergic dermatitis and irritation.",
-      studies: [{ title: "Prohibited & Restricted Ingredients in Cosmetics", source: "U.S. FDA", year: 2026 }]
+      studies: [{ title: "Prohibited & Restricted Ingredients in Cosmetics", source: "U.S. FDA", year: 2022 }]
     },
     {
       id: "fda-prohibited-salicylanilides", names: ["dibromsalan", "tribromsalan", "metabromsalan", "tetrachlorosalicylanilide", "halogenated salicylanilide"],
@@ -476,7 +476,7 @@ window.CB_DATA_COSMETICS = (function () {
         reason: "FDA prohibits these halogenated salicylanilides because they can cause serious skin disorders." }],
       summary: "A prohibited antimicrobial family associated with serious skin reactions.", whatIs: "Halogenated salicylanilides are older antimicrobial chemicals.",
       whyFlagged: "Their cosmetic use is prohibited by FDA.", healthRisk: "Serious dermatitis and light-triggered sensitization.",
-      studies: [{ title: "Prohibited & Restricted Ingredients in Cosmetics", source: "U.S. FDA", year: 2026 }]
+      studies: [{ title: "Prohibited & Restricted Ingredients in Cosmetics", source: "U.S. FDA", year: 2022 }]
     },
     {
       id: "fda-prohibited-cfc", names: ["chlorofluorocarbon propellant", "trichlorofluoromethane", "dichlorodifluoromethane", "cfc-11", "cfc-12"],
@@ -486,7 +486,7 @@ window.CB_DATA_COSMETICS = (function () {
         reason: "FDA prohibits chlorofluorocarbon propellants in domestic cosmetic aerosols." }],
       summary: "A prohibited ozone-depleting aerosol propellant.", whatIs: "CFCs are older pressurized gases formerly used in aerosols.",
       whyFlagged: "They are prohibited in domestic cosmetic aerosols and cause major environmental harm.", healthRisk: "Primary concern is ozone depletion; concentrated gas also presents inhalation and cold-burn hazards.",
-      studies: [{ title: "Prohibited & Restricted Ingredients in Cosmetics", source: "U.S. FDA", year: 2026 }]
+      studies: [{ title: "Prohibited & Restricted Ingredients in Cosmetics", source: "U.S. FDA", year: 2022 }]
     },
     {
       id: "fda-restricted-zirconium-aerosol", names: ["zirconium carbonate", "zirconium lactate", "zirconium complex"],
@@ -497,7 +497,7 @@ window.CB_DATA_COSMETICS = (function () {
         reason: "FDA prohibits zirconium-containing complexes in aerosol cosmetics because of lung toxicity in animals and granulomas in people." }],
       summary: "A zirconium complex prohibited specifically in aerosol cosmetics.", whatIs: "Some zirconium salts were formerly used in deodorant systems.",
       whyFlagged: "The aerosol route is prohibited; this rule does not apply to permitted aluminum-zirconium actives in solid antiperspirant sticks.", healthRisk: "Lung toxicity with aerosol exposure and skin granulomas.",
-      studies: [{ title: "Prohibited & Restricted Ingredients in Cosmetics", source: "U.S. FDA", year: 2026 }]
+      studies: [{ title: "Prohibited & Restricted Ingredients in Cosmetics", source: "U.S. FDA", year: 2022 }]
     },
     {
       id: "water-carrier", names: ["water", "aqua", "purified water"],
