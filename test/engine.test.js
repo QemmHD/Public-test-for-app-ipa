@@ -855,14 +855,76 @@ test("Dawn dish liquid uses household exposure and recognizes the published form
   assert.ok(result.classified.some((item) => item.additive && item.additive.id === "methylisothiazolinone"));
 });
 
-test("Tom's toothpaste keeps fluoride beneficial while explaining oral SLS sensitivity", () => {
+test("Tom's toothpaste strictly flags fluoride ingestion context while retaining its cavity benefit", () => {
   const ref = reference("toms-whole-care-peppermint");
   const result = engine.analyze(ref, ref.ingredientsText, ref.productType);
   assert.equal(result.useContext.id, "oral-care");
   assert.equal(result.coverage.percent, 100);
   const fluoride = result.classified.find((item) => item.role === "oral-care-active" && /monofluorophosphate/i.test(item.raw));
   const sls = result.classified.find((item) => /sodium lauryl sulfate/i.test(item.raw));
-  assert.equal(fluoride.status, "ok");
+  assert.equal(fluoride.status, "caution");
+  assert.ok(fluoride.benefits.some((item) => /tooth decay/i.test(item)));
+  assert.ok(fluoride.outcomes.some((item) => /fluorosis/i.test(item)));
+  assert.equal(result.approval.level, "review");
   assert.equal(sls.status, "caution");
   assert.equal(sls.role, "cleanser-surfactant");
+  const detail = engine.ingredientDetail(fluoride);
+  assert.match(detail.title, /Monofluorophosphate/i);
+  assert.match(detail.effects, /higher total exposure/i);
+  assert.match(detail.effects, /not specific to normal spit-out toothpaste/i);
+  assert.doesNotMatch(detail.whyFlagged, /does not help|no benefit/i);
+});
+
+test("FDA-prohibited cosmetic ingredients hard-block approval and explain the health concern", () => {
+  const result = engine.analyze({ name: "Solvent face product", category: "cosmetic" }, "water, chloroform", "beauty");
+  const chloroform = result.classified.find((item) => /chloroform/i.test(item.raw));
+  assert.equal(chloroform.status, "avoid");
+  assert.ok(chloroform.outcomes.includes("Cancer"));
+  assert.ok(chloroform.regulatoryFlags.some((flag) => flag.blocking && /FDA/.test(flag.jurisdiction)));
+  assert.equal(result.approval.level, "not-approved");
+  assert.equal(result.badge.label, "Not approved");
+  assert.ok(result.score <= 29);
+  assert.ok(result.approval.blockers.some((item) => /chloroform/i.test(item.ingredient) && item.reason));
+});
+
+test("regulatory rules distinguish prohibited paraben variants from restricted butylparaben", () => {
+  const prohibited = engine.analyze({ name: "Face cream", category: "cosmetic" }, "water, isobutylparaben", "beauty");
+  const restricted = engine.analyze({ name: "Face cream", category: "cosmetic" }, "water, butylparaben", "beauty");
+  assert.ok(prohibited.regulatoryFlags.some((flag) => flag.status === "prohibited" && flag.blocking));
+  assert.ok(restricted.regulatoryFlags.some((flag) => flag.status === "restricted" && !flag.blocking));
+  assert.equal(restricted.approval.level, "not-approved", "the avoid grade still blocks even when the rule itself is concentration-restricted");
+});
+
+test("methylisothiazolinone regulation follows leave-on versus rinse-off use", () => {
+  const leaveOn = engine.analyze({ name: "Underarm deodorant", category: "deodorant" }, "water, methylisothiazolinone", "beauty");
+  const rinseOff = engine.analyze({ name: "Body wash", category: "rinse off cleanser" }, "water, methylisothiazolinone", "beauty");
+  assert.equal(leaveOn.useContext.id, "leave-on-underarm");
+  assert.ok(leaveOn.regulatoryFlags.some((flag) => flag.blocking && flag.status === "prohibited"));
+  assert.equal(leaveOn.approval.level, "not-approved");
+  assert.equal(rinseOff.useContext.id, "rinse-off-body");
+  assert.ok(rinseOff.regulatoryFlags.some((flag) => !flag.blocking && flag.status === "restricted"));
+  assert.equal(rinseOff.approval.level, "review");
+});
+
+test("zirconium aerosol rule does not spill onto permitted solid antiperspirant actives", () => {
+  const aerosol = engine.analyze({ name: "Aerosol body spray", category: "aerosol deodorant" }, "water, zirconium carbonate", "beauty");
+  const stick = engine.analyze({ name: "Solid antiperspirant stick", category: "antiperspirant" }, "water, aluminum zirconium tetrachlorohydrex gly", "beauty");
+  assert.ok(aerosol.regulatoryFlags.some((flag) => flag.blocking && /aerosol/i.test(flag.scope)));
+  assert.equal(aerosol.approval.level, "not-approved");
+  assert.equal(stick.regulatoryFlags.some((flag) => /zirconium/i.test(flag.scope)), false);
+});
+
+test("potential-effect labels are specific and incomplete lists cannot pass", () => {
+  const formaldehyde = engine.analyze({ name: "Hair smoothing treatment", category: "cosmetic" }, "water, formaldehyde", "beauty");
+  const finding = formaldehyde.classified.find((item) => /formaldehyde/i.test(item.raw));
+  assert.deepEqual(finding.outcomes, ["Cancer", "Skin allergy", "Eye and breathing irritation"]);
+  const incomplete = engine.analyze({ name: "Mystery lotion", category: "cosmetic" }, "water, proprietary mystery compound", "beauty");
+  assert.equal(incomplete.approval.level, "insufficient");
+});
+
+test("a fully recognized low-concern formula can pass the strict approval gate", () => {
+  const result = engine.analyze({ name: "Simple rinse-off formula", category: "rinse off cleanser" }, "water, glycerin", "beauty");
+  assert.equal(result.coverage.percent, 100);
+  assert.equal(result.approval.level, "approved");
+  assert.equal(result.approval.label, "Passes strict screen");
 });

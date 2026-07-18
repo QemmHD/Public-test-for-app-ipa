@@ -27,7 +27,7 @@
   var WIKI = "https://en.wikipedia.org/api/rest_v1/page/summary/";
   var FETCH_TIMEOUT = 8000, FETCH_RETRIES = 1;
   var PROD_TTL = 1000 * 60 * 60 * 24 * 30; // 30-day barcode cache
-  var PROD_CACHE_VERSION = 5;
+  var PROD_CACHE_VERSION = 6;
 
   var PROFILE_OPTS = [
     ["gluten", "Gluten-free"], ["dairy", "Dairy-free"], ["egg", "Egg-free"], ["soy", "Soy-free"],
@@ -705,7 +705,8 @@
       nutriments: food ? ((off && off.nutriments) || null) : null,
       kcal: food ? computeKcal(off) : null,
       macros: food ? ENG.computeMacros(off) : null,
-      score: r.score, badge: r.badge, classified: r.classified, nutrition: r.nutrition,
+      score: r.score, badge: r.badge, approval: r.approval, regulatoryFlags: r.regulatoryFlags || [],
+      classified: r.classified, nutrition: r.nutrition,
       flaggedCount: r.flaggedCount, scoreReasons: r.scoreReasons,
       coverage: r.coverage, ratingConfidence: r.ratingConfidence, scanQuality: r.scanQuality,
       rejectedFragments: r.rejectedFragments || [], allergens: r.allergens || [], methodology: r.methodology || null,
@@ -715,7 +716,7 @@
     };
   }
   function rehydrateProduct(product) {
-    if (!product || (product.ingredientHierarchy && product.categorySummaries && product.productAttributes)) return product;
+    if (!product || (product.ingredientHierarchy && product.categorySummaries && product.productAttributes && product.approval)) return product;
     var text = product.analysisIngredientsText || product.ingredientsText || "";
     if (!text) return product;
     try {
@@ -1468,6 +1469,12 @@
   var lastRenderedView = null;
   // One-line plain-language verdict so the result is clear at a glance.
   function verdictLine(p) {
+    if (p.approval && p.approval.level === "not-approved")
+      return '<div class="verdict">An avoid-grade or prohibited-use ingredient blocks approval.</div>';
+    if (p.approval && p.approval.level === "insufficient")
+      return '<div class="verdict">This product cannot pass until every ingredient is confidently assessed.</div>';
+    if (p.approval && p.approval.level === "review")
+      return '<div class="verdict">Review the caution-grade or restricted-use ingredients before choosing.</div>';
     var m = {
       exc: "Few concerns were found in the available label data.",
       good: "A stronger option under NutriCheck's strict screen.",
@@ -1484,6 +1491,30 @@
     var label = p.badge && p.badge.label === "Not rated" ? "No reliable rating" : "Strict ingredient + nutrition rating";
     var note = p.methodology && p.methodology.note ? p.methodology.note : "Ingredient flags, nutrition and database coverage are screened separately; this is not medical advice.";
     return '<div class="score-summary"><strong>' + esc(label) + '</strong><p>' + esc(note) + '</p></div>';
+  }
+  function approvalBlock(p) {
+    var a = p.approval;
+    if (!a) return "";
+    var iconName = a.level === "approved" ? "check" : a.level === "not-approved" ? "warning" : "shield";
+    var blockers = (a.blockers || []).slice(0, 3).map(function (blocker) {
+      return '<div class="approval-item"><b>' + esc(titleCase(blocker.ingredient || "Flagged ingredient")) + '</b><span>' +
+        esc(blocker.reason || "This ingredient blocks approval under the strict screen.") + '</span></div>';
+    }).join("");
+    var more = (a.blockers || []).length > 3 ? '<div class="approval-more">+' + ((a.blockers || []).length - 3) + ' more blocking ingredient' + ((a.blockers || []).length - 3 === 1 ? "" : "s") + '</div>' : "";
+    return '<section class="approval-gate ' + esc(a.level) + '" aria-label="NutriCheck approval decision">' +
+      '<div class="approval-title">' + icon(iconName) + '<strong>' + esc(a.title || a.label) + '</strong></div>' +
+      '<p>' + esc(a.note || "") + '</p>' + blockers + more + '</section>';
+  }
+  function regulatoryBlock(p) {
+    var flags = p.regulatoryFlags || [];
+    if (!flags.length) return "";
+    return '<section class="panel glass regulatory-panel"><div class="panel-h neg">' + icon("globe") + ' Prohibited & restricted uses</div>' +
+      '<p class="regulatory-intro">Rules depend on jurisdiction, product type and route. A blocking rule prevents NutriCheck approval.</p>' +
+      flags.map(function (flag) {
+        return '<div class="regulatory-row"><div class="regulatory-row-head"><b>' + esc(titleCase(flag.ingredient)) + '</b>' +
+          '<span class="regulatory-status ' + (flag.blocking ? "blocking" : "restricted") + '">' + esc(flag.status === "prohibited" ? "Prohibited use" : "Restricted use") + '</span></div>' +
+          '<div class="regulatory-meta">' + esc(flag.jurisdiction) + ' Â· ' + esc(flag.scope) + '</div><p>' + esc(flag.reason) + '</p></div>';
+      }).join("") + '</section>';
   }
   function dataQualityBlock(p) {
     var cov = p.coverage || {};
@@ -1775,11 +1806,13 @@
           '<div class="score-ring" style="--c:' + c + ';--p:' + p.score + '">' +
           '<div class="score-num">' + p.score + '</div><div class="score-of">out of 100</div></div>' +
           '<div class="badge ' + p.badge.cls + '">' + esc(p.badge.label) + '</div>' +
+          approvalBlock(p) +
           verdictLine(p) +
           scoreSummary(p) +
           '<button class="why-btn" data-act="toggleScore">' + (state.scoreOpen ? "Hide score details" : "How is this scored?") + '</button>' +
         '</div>' +
       '</div>' +
+      regulatoryBlock(p) +
       dataQualityBlock(p) +
       useContextBlock(p) +
       productContextBlock(p) +
@@ -1964,6 +1997,32 @@
       '<div class="row-sub">' + esc(r.note || "") + '</div></div>' +
       '<div class="brk-val ' + r.sev + '">' + esc(r.value) + '</div></div>';
   }
+  function effectChips(item, includeBenefits) {
+    var outcomes = (item && item.outcomes) || [];
+    var benefits = includeBenefits ? ((item && item.benefits) || []) : [];
+    if (!outcomes.length && !benefits.length) return "";
+    return '<div class="effect-chips" aria-label="Potential effects and benefits">' +
+      outcomes.map(function (label) { return '<span class="effect-chip">' + esc(label) + '</span>'; }).join("") +
+      benefits.map(function (label) { return '<span class="effect-chip benefit">' + esc(label) + '</span>'; }).join("") + '</div>';
+  }
+  function ingredientEffectsBlock(d) {
+    var outcomes = (d && d.outcomes) || [], benefits = (d && d.benefits) || [];
+    if (!outcomes.length && !benefits.length) return "";
+    return '<section class="ingredient-effects">' +
+      (outcomes.length ? '<div><div class="section-kicker">Potential effects</div>' + effectChips({ outcomes: outcomes }, false) +
+        '<p>These are evidence signals used by the strict screen, not a prediction that this product or dose will cause an outcome.</p></div>' : '') +
+      (benefits.length ? '<div class="documented-benefit"><div class="section-kicker">Documented benefit</div>' +
+        effectChips({ benefits: benefits }, true) + '</div>' : '') + '</section>';
+  }
+  function ingredientRegulatoryBlock(d) {
+    var flags = (d && d.regulatoryFlags) || [];
+    if (!flags.length) return d && d.banned ? '<div class="banned-note">' + icon("globe") + ' <b>Banned / restricted:</b> ' + esc(d.banned) + '</div>' : "";
+    return '<section class="ingredient-regulatory">' + flags.map(function (flag) {
+      return '<div class="banned-note"><div class="regulatory-row-head">' + icon("globe") + '<b>' +
+        esc(flag.status === "prohibited" ? "Prohibited use" : "Restricted use") + '</b></div><div class="regulatory-meta">' +
+        esc(flag.jurisdiction) + ' Â· ' + esc(flag.scope) + '</div><p>' + esc(flag.reason) + '</p></div>';
+    }).join("") + '</section>';
+  }
   // Bobby-Approved-style: each flagged ingredient is its own tappable red-flag
   // row in Negatives, so the user sees exactly WHAT is concerning, not a count.
   function concernRows(p) {
@@ -1980,7 +2039,7 @@
       var note = [f.c.reason || STATUS_LABEL[f.c.status], location, pointsLabel(f.c)].join(" · ");
       return '<button class="lrow brk tappable concern-row" data-ingidx="' + f.i + '">' + dot(statusColor(f.c.status)) +
         '<div class="row-main"><div class="row-title">' + esc(titleCase(f.c.raw)) + '</div>' +
-        '<div class="row-sub">' + esc(note) + '</div></div>' +
+        '<div class="row-sub">' + esc(note) + '</div>' + effectChips(f.c, false) + '</div>' +
         '<div class="brk-val ' + sev + '">' + STATUS_LABEL[f.c.status] + ' ›</div></button>';
     }).join("");
   }
@@ -2041,7 +2100,8 @@
         '<div class="ing-summary">' + esc(d.summary) + '</div></div>' +
         '<div class="status-tag ' + d.status + '">' + STATUS_LABEL[d.status] + '</div></div>' +
       ingredientProductContext(d) +
-      (d.banned ? '<div class="banned-note">' + icon("globe") + ' <b>Banned / restricted:</b> ' + esc(d.banned) + '</div>' : "") +
+      ingredientEffectsBlock(d) +
+      ingredientRegulatoryBlock(d) +
       '<div class="tabs" aria-label="Ingredient detail sections">' + tabs.map(function (t) {
         return '<button class="tab' + (state.ingTab === t[0] ? " on" : "") + '" data-tab="' + t[0] + '" aria-pressed="' + (state.ingTab === t[0] ? "true" : "false") + '">' + t[1] + '</button>';
       }).join("") + '</div>' +
@@ -2292,7 +2352,7 @@
         ["id", "parentId", "raw", "parent", "path", "canonicalPath", "depth", "position", "siblingPosition",
           "topLevelPosition", "scoreImpact", "scoreApplied", "role", "category", "attributes", "sugarProfile",
           "matchType", "matchedTerm", "matchConfidence", "recognitionConfidence", "evidence", "useContext",
-          "exposureNote", "contextWhy", "contextEffects"].forEach(function (key) {
+          "exposureNote", "contextWhy", "contextEffects", "outcomes", "benefits", "regulatoryFlags"].forEach(function (key) {
           if (item[key] != null) state.ingDetail[key] = item[key];
         });
         state.ingTab = "what"; state.ingFrom = "result";

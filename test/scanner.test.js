@@ -256,3 +256,13 @@ test("normalizes ingredient research queries and rejects wrong entity types", ()
 test("rejects barcode-like OCR text as an ingredient list", () => {
   assert.equal(scanner.plausibleReviewedIngredients("5449000000996"), null);
 });
+
+test("built products carry the strict approval decision and regulatory breakdown", () => {
+  const product = scanner.buildProduct({
+    barcode: "qa-prohibited", name: "Regulatory test cosmetic", category: "cosmetic", productType: "beauty",
+    ingredientsText: "water, chloroform", analysisIngredientsText: "water, chloroform"
+  });
+  assert.equal(product.approval.level, "not-approved");
+  assert.equal(product.badge.label, "Not approved");
+  assert.ok(product.regulatoryFlags.some((flag) => flag.blocking && /chloroform/i.test(flag.ingredient)));
+});

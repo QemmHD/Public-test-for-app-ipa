@@ -447,6 +447,66 @@
       return group && group.whyFlagged ? group.whyFlagged : result.reason;
     }
 
+    function healthOutcomesFor(result) {
+      var explicit = result.additive && result.additive.outcomes;
+      if (explicit && explicit.length) return explicit.slice();
+      var text = norm([
+        result.contextEffects || "", result.additive && result.additive.healthRisk || "",
+        result.contextWhy || "", result.additive && result.additive.whyFlagged || ""
+      ].join(" "));
+      if (!text) return [];
+      var outcomes = [];
+      function add(label, pattern) { if (pattern.test(text) && outcomes.indexOf(label) === -1) outcomes.push(label); }
+      // These labels describe evidence signals, not a diagnosis or a claim that
+      // the amount in a finished product will cause the named outcome.
+      add("Cancer concern", /known (?:human )?carcinogen|carcinogenic|cancer (?:risk|concern|warning)|linked to cancer|causes? cancer|iarc group/);
+      add("Hormone disruption", /endocrine|hormone (?:disruption|activity|effects?)|estrogenic|estrogen mimicking|thyroid/);
+      add("Reproductive or developmental concern", /reproductive|developmental|fertility|birth defect/);
+      add("Allergy or sensitization", /allerg|sensitiz|sensitis|contact dermatitis/);
+      add("Skin or eye irritation", /skin irritation|eye irritation|irritat(?:e|ion|ing) (?:the )?(?:skin|eyes)|dermatitis/);
+      add("Breathing or asthma concern", /respiratory|breathing|inhalation|asthma|lung tox/);
+      add("Neurodevelopment concern", /neurodevelopment|lower iq|neurolog/);
+      add("Dental fluorosis", /dental fluorosis|fluorosis/);
+      add("Liver or kidney injury", /liver|kidney|renal|hepatic/);
+      add("Canker sores or oral irritation", /canker|oral (?:tissue )?irritation|mouth irritation/);
+      add("Burn or corrosive injury", /corrosive|chemical burn|burns/);
+      add("Antimicrobial resistance", /antimicrobial resistance|antibiotic resistance/);
+      add("Environmental persistence or aquatic harm", /environmental persistence|bioaccumul|reef|aquatic|microplastic|ozone depletion/);
+      add("Flammability or concentrated-vapor hazard", /flammab|explosion|concentrated (?:gas|vapor)/);
+      return outcomes;
+    }
+
+    function regulatoryFlagsFor(result, raw, canonical, contextId) {
+      var additive = result.additive;
+      if (!additive) return [];
+      var rules = additive.regulatory || [];
+      var ingredientTokens = tokenize(norm((raw || "") + " " + (canonical || "")));
+      function ruleNameMatches(rule) {
+        if (!rule.names || !rule.names.length) return true;
+        return rule.names.some(function (name) {
+          var nameTokens = tokenize(norm(name));
+          return nameTokens.length && phraseInTokens(ingredientTokens, nameTokens);
+        });
+      }
+      function contextMatches(rule) {
+        return !rule.contexts || !rule.contexts.length || rule.contexts.indexOf(contextId) !== -1;
+      }
+      var flags = rules.filter(function (rule) { return ruleNameMatches(rule) && contextMatches(rule); }).map(function (rule) {
+        return { status: rule.status || "restricted", jurisdiction: rule.jurisdiction || "Regulatory rule",
+          scope: rule.scope || "Specified product use", reason: rule.reason || "Use is prohibited or restricted in the stated jurisdiction.",
+          blocking: rule.blocking === true };
+      });
+      // Older records carry a plain-language regulation note. Preserve it as a
+      // structured flag until that record receives a more precise use rule.
+      if (!rules.length && bannedMap[additive.id]) {
+        var note = bannedMap[additive.id];
+        var prohibited = /\bbanned\b|\bnot approved\b|\brevoked\b|\bprohibited\b/i.test(note);
+        flags.push({ status: prohibited ? "prohibited" : "restricted", jurisdiction: "Regional regulation",
+          scope: "See jurisdiction and product-use details", reason: note, blocking: prohibited });
+      }
+      return flags;
+    }
+
     // Classify a single ingredient. productType: "food" (default) | "beauty" | "household" | "petfood".
     function classify(n, raw, productType, parsedAttributes, useContext) {
       n = norm(n || raw);
@@ -471,6 +531,9 @@
           result.exposureNote = result.additive.exposureNotes && result.additive.exposureNotes[contextId] || "";
         }
         result.useContext = contextId;
+        result.outcomes = healthOutcomesFor(result);
+        result.benefits = result.additive && result.additive.benefits ? result.additive.benefits.slice() : [];
+        result.regulatoryFlags = regulatoryFlagsFor(result, raw, canonical, contextId);
         result.role = roleFor(result);
         result.category = (result.additive && result.additive.category) ||
           ((groups[result.group] || {}).category) || result.reason;
@@ -554,6 +617,7 @@
           role: item.role || roleFor(item), attributes: item.attributes || {}, sugarProfile: item.sugarProfile || null,
           useContext: item.useContext || "", exposureNote: item.exposureNote || "",
           contextWhy: item.contextWhy || "", contextEffects: item.contextEffects || "",
+          outcomes: item.outcomes || [], benefits: item.benefits || [], regulatoryFlags: item.regulatoryFlags || [],
           category: category, why: why };
       }
       function merge(base, extra) {
@@ -562,9 +626,11 @@
       }
       if (item.additive) {
         var a = item.additive;
-        return merge({ title: titleCase(a.names[0]), category: a.category, enumber: a.enumber || "", status: item.status || a.risk,
+        return merge({ title: titleCase(item.raw || a.names[0]), category: a.category, enumber: a.enumber || "", status: item.status || a.risk,
           summary: a.summary, whatIs: a.whatIs, whyFlagged: item.contextWhy || a.whyFlagged,
           effects: item.contextEffects || a.healthRisk,
+          outcomes: item.outcomes || healthOutcomesFor(item), benefits: item.benefits || a.benefits || [],
+          regulatoryFlags: item.regulatoryFlags || regulatoryFlagsFor(item, item.raw || a.names[0], item.canonicalName || a.names[0], item.useContext || ""),
           banned: (bannedMap && bannedMap[a.id]) || "", studies: a.studies || [], evidence: item.evidence || null,
           assessmentNote: "Hazard and regulatory context do not measure the dose in this product or predict an individual health outcome." },
           context(a.category, item.contextWhy || item.why || a.whyFlagged));
@@ -574,6 +640,7 @@
         summary: item.sugarProfile ? item.sugarProfile.explanation : g.summary,
         whatIs: item.sugarProfile ? g.whatIs + " " + item.sugarProfile.relativeNote : g.whatIs,
         whyFlagged: item.why || g.whyFlagged, effects: g.effects, banned: "", studies: g.studies || [],
+        outcomes: item.outcomes || healthOutcomesFor(item), benefits: item.benefits || [], regulatoryFlags: item.regulatoryFlags || [],
         evidence: item.evidence || null, assessmentNote: "This is an ingredient-screening category, not a diagnosis or a measurement of dose." },
         context(item.category || g.category, item.why || g.whyFlagged));
     }
@@ -779,6 +846,7 @@
           role: c.role, category: c.category, why: c.why, attributes: c.attributes,
           useContext: c.useContext || (useContext && useContext.id) || "", exposureNote: c.exposureNote || "",
           contextWhy: c.contextWhy || "", contextEffects: c.contextEffects || "",
+          outcomes: c.outcomes || [], benefits: c.benefits || [], regulatoryFlags: c.regulatoryFlags || [],
           sugarProfile: c.sugarProfile || null, matchType: c.matchType, matchedTerm: c.matchedTerm,
           matchConfidence: c.matchConfidence, recognitionConfidence: c.recognitionConfidence,
           evidence: c.evidence, scoreImpact: 0, scoreApplied: false,
@@ -818,6 +886,9 @@
           ingredient.recognitionConfidence = "high";
           ingredient.evidence = { basis: "ingredient hierarchy", referenceCount: 0,
             scope: "Score-neutral parent; disclosed child ingredients are assessed individually." };
+          ingredient.outcomes = [];
+          ingredient.benefits = [];
+          ingredient.regulatoryFlags = [];
         }
       });
 
@@ -847,6 +918,21 @@
           }
         });
       });
+
+      var productRegulatoryFlags = [], regulatorySeen = {};
+      classified.forEach(function (ingredient) {
+        if (ingredient.displayDuplicate === false) return;
+        (ingredient.regulatoryFlags || []).forEach(function (flag) {
+          var key = [ingredient.additive && ingredient.additive.id || ingredient.canonicalName,
+            flag.status, flag.jurisdiction, flag.scope].join("|");
+          if (regulatorySeen[key]) return;
+          regulatorySeen[key] = true;
+          productRegulatoryFlags.push({ ingredientId: ingredient.id, additiveId: ingredient.additive && ingredient.additive.id || "",
+            ingredient: ingredient.raw, status: flag.status, jurisdiction: flag.jurisdiction, scope: flag.scope,
+            reason: flag.reason, blocking: !!flag.blocking });
+        });
+      });
+      var blockingRegulatoryFlags = productRegulatoryFlags.filter(function (flag) { return flag.blocking; });
 
       var counts = { avoid: 0, caution: 0, limit: 0, unknown: 0, recognized: 0 };
       var scoredKeys = {};
@@ -917,6 +1003,7 @@
       function isAddedSugar(c) { return c.group === "addedSugar" || (c.additive && c.additive.category === "Added sugar"); }
       var hasAddedSugar = classified.some(isAddedSugar);
       var prominentAddedSugar = classified.some(function (c) { return isAddedSugar(c) && c.depth === 0 && c.topLevelPosition <= 3; });
+      if (blockingRegulatoryFlags.length) applyCap(29, "regulatory-block", "prohibited ingredient or use present");
       if (counts.avoid) applyCap(29, "avoid-cap", "avoid-grade ingredient present");
       else if (counts.caution >= 2) applyCap(49, "multiple-caution-cap", "multiple caution-grade ingredients");
       else if (counts.caution === 1) applyCap(69, "caution-cap", "caution-grade ingredient present");
@@ -937,7 +1024,36 @@
 
       var confidence = !classified.length ? "none" : coverage.percent >= 90 && scan.quality.confidence === "high" ? "high" : coverage.percent >= 60 && scan.quality.confidence !== "low" ? "medium" : "low";
       var allergens = detectAllergens(classified, scan);
+      function approvalDecision() {
+        var blockers = blockingRegulatoryFlags.map(function (flag) {
+          return { ingredient: flag.ingredient, reason: flag.reason, jurisdiction: flag.jurisdiction,
+            scope: flag.scope, type: "regulatory" };
+        });
+        var blockerKeys = {};
+        blockers.forEach(function (blocker) { blockerKeys[norm(blocker.ingredient)] = true; });
+        classified.forEach(function (ingredient) {
+          if (ingredient.status !== "avoid" || ingredient.displayDuplicate === false) return;
+          var key = norm(ingredient.raw);
+          if (blockerKeys[key]) return;
+          blockerKeys[key] = true;
+          blockers.push({ ingredient: ingredient.raw, reason: ingredient.why || ingredient.reason || "Avoid-grade ingredient under the strict screen.",
+            jurisdiction: "NutriCheck strict screen", scope: "Ingredient decision", type: "avoid" });
+        });
+        if (blockers.length) return { level: "not-approved", label: "Not approved", title: "Not approved by NutriCheck",
+          note: "A prohibited-use or avoid-grade ingredient blocks approval regardless of the numeric score.", blockers: blockers };
+        if (!classified.length || !coverage.total) return { level: "insufficient", label: "Not enough data", title: "Not enough data to approve",
+          note: "A complete ingredient list is required before this product can pass the strict screen.", blockers: [] };
+        if (counts.unknown || scan.rejected.length) return { level: "insufficient", label: "Not enough data", title: "Not enough data to approve",
+          note: "At least one ingredient or label fragment could not be confidently assessed.", blockers: [] };
+        var reviewFlags = productRegulatoryFlags.filter(function (flag) { return !flag.blocking; });
+        if (counts.caution || reviewFlags.length) return { level: "review", label: "Strict review", title: "Strict review required",
+          note: "No automatic approval: review caution-grade and use-restricted ingredients below.", blockers: [] };
+        return { level: "approved", label: "Passes strict screen", title: "Passes the NutriCheck strict screen",
+          note: "No avoid-grade, prohibited-use, caution-grade or unknown ingredients were found in the available list.", blockers: [] };
+      }
+      var approval = approvalDecision();
       var badge = classified.length ? bandFor(score, hasAvoid) : { label: "Not rated", cls: "mid" };
+      if (approval.level === "not-approved") badge = { label: "Not approved", cls: "bad" };
       var hierarchy = buildIngredientHierarchy(classified);
       var categorySummaries = summarizeIngredientCategories(classified);
       var attributes = productAttributes(off, scan, classified);
@@ -947,14 +1063,16 @@
 
       return { classified: classified, score: score, badge: badge, nutrition: nutrition,
         flaggedCount: flaggedCount, scoreReasons: reasons, productType: productType || "food", coverage: coverage,
+        approval: approval, regulatoryFlags: productRegulatoryFlags,
         ratingConfidence: confidence, scanQuality: scan.quality, rejectedFragments: scan.rejected,
         allergens: allergens, ingredientHierarchy: hierarchy, categorySummaries: categorySummaries,
         ingredientStats: { topLevel: hierarchy.length, nested: classified.filter(function (ingredient) { return ingredient.depth > 0 && ingredient.displayDuplicate !== false; }).length,
           maxDepth: maxDepth, containers: containerCount, leavesAssessed: coverage.total, duplicatesSuppressed: duplicateCount },
         productAttributes: attributes, useContext: useContext,
-        methodology: { version: "2.1", weights: { avoid: -30, caution: -12, limit: -4, unknown: -3 },
+        methodology: { version: "2.2", weights: { avoid: -30, caution: -12, limit: -4, unknown: -3 },
           claimPolicy: "Organic and kosher metadata is displayed separately and has no automatic score bonus.",
-          note: "Ingredient hierarchy, order, roles, category flags, nutrition and database coverage are screened separately; this is not medical advice." } };
+          approvalPolicy: "Avoid-grade or context-prohibited ingredients block NutriCheck approval; caution or restricted-use ingredients require review; incomplete lists cannot pass.",
+          note: "Ingredient hierarchy, order, roles, potential effects, regulatory context, nutrition and database coverage are screened separately; this is not medical advice." } };
     }
 
     function detectAllergens(classified, scan, requestedKeys) {

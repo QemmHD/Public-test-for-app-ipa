@@ -46,6 +46,13 @@ window.CB_DATA_COSMETICS = (function () {
     {
       id: "butylparaben", names: ["butylparaben", "butyl paraben", "isobutylparaben", "isopropylparaben"],
       category: "Paraben preservative", risk: "avoid",
+      outcomes: ["Hormone-disruption concern", "Reproductive concern", "Skin allergy"],
+      regulatory: [
+        { status: "prohibited", jurisdiction: "European Union", scope: "Isobutylparaben and isopropylparaben in cosmetics", names: ["isobutylparaben", "isopropylparaben"], blocking: true,
+          reason: "These branched parabens are prohibited in EU cosmetics because safety data were insufficient." },
+        { status: "restricted", jurisdiction: "European Union", scope: "Butylparaben concentration and product use", names: ["butylparaben", "butyl paraben"], blocking: false,
+          reason: "Butylparaben is concentration- and use-restricted rather than universally banned." }
+      ],
       summary: "Long-chain paraben restricted in the EU over endocrine concern.",
       whatIs: "Butylparaben and its branched relatives are stronger, longer-chain preservatives.",
       whyFlagged: "These have the most potent estrogenic activity of the parabens. Iso-forms were banned in the EU for lack of safety data.",
@@ -57,6 +64,9 @@ window.CB_DATA_COSMETICS = (function () {
     {
       id: "formaldehyde", names: ["formaldehyde", "formalin", "methanal", "methylene glycol"],
       category: "Preservative / contaminant", risk: "avoid",
+      outcomes: ["Cancer", "Skin allergy", "Eye and breathing irritation"],
+      regulatory: [{ status: "restricted", jurisdiction: "Regional cosmetic rules", scope: "Intentionally added formaldehyde; limits and exceptions vary by product use", blocking: false,
+        reason: "Cosmetic rules vary by jurisdiction and use. NutriCheck separately assigns an avoid grade because formaldehyde is a known human carcinogen and strong sensitizer." }],
       summary: "Known human carcinogen sometimes present in or released by cosmetics.",
       whatIs: "Formaldehyde is a gas used as a preservative and disinfectant; in cosmetics it appears in some hair-straightening treatments and nail products.",
       whyFlagged: "Classified as a human carcinogen by IARC. Banned or capped as a cosmetic ingredient in many regions.",
@@ -90,6 +100,13 @@ window.CB_DATA_COSMETICS = (function () {
     {
       id: "methylisothiazolinone", names: ["methylisothiazolinone", "methylchloroisothiazolinone", "mci/mi", "kathon cg"],
       category: "Isothiazolinone preservative", risk: "caution",
+      outcomes: ["Allergic contact dermatitis", "Skin irritation"],
+      regulatory: [
+        { status: "prohibited", jurisdiction: "European Union", scope: "Leave-on cosmetics", contexts: ["leave-on-underarm"], blocking: true,
+          reason: "Methylisothiazolinone is prohibited in EU leave-on cosmetics because of sensitization risk." },
+        { status: "restricted", jurisdiction: "European Union", scope: "Rinse-off cosmetics", contexts: ["rinse-off-body", "household-rinse-off"], blocking: false,
+          reason: "Permitted only within the applicable rinse-off concentration limit." }
+      ],
       summary: "Potent preservative behind a wave of cosmetic allergy cases.",
       whatIs: "Methylisothiazolinone (MIT) and its chloro- partner preserve rinse-off and leave-on cosmetics.",
       whyFlagged: "A major contact allergen; the EU banned MIT from leave-on products and limited it in rinse-off.",
@@ -101,6 +118,9 @@ window.CB_DATA_COSMETICS = (function () {
     {
       id: "triclosan", names: ["triclosan", "triclocarban"],
       category: "Antibacterial agent", risk: "avoid",
+      outcomes: ["Hormone-disruption concern", "Antimicrobial resistance", "Environmental persistence"],
+      regulatory: [{ status: "prohibited", jurisdiction: "United States FDA", scope: "Consumer antiseptic wash products", blocking: false,
+        reason: "FDA prohibited triclosan in consumer antiseptic washes; other product uses follow different rules." }],
       summary: "Antibacterial banned from US soaps over safety and resistance concerns.",
       whatIs: "Triclosan was added to antibacterial soaps, toothpaste and deodorants to kill bacteria.",
       whyFlagged: "Endocrine effects in animal studies and a role in antibiotic resistance led the FDA to ban it from consumer antiseptic wash products in 2016.",
@@ -173,6 +193,9 @@ window.CB_DATA_COSMETICS = (function () {
     {
       id: "oxybenzone", names: ["oxybenzone", "benzophenone-3", "bp-3"],
       category: "Chemical UV filter", risk: "caution",
+      outcomes: ["Hormone-activity concern", "Skin allergy", "Reef toxicity"],
+      regulatory: [{ status: "prohibited", jurisdiction: "Hawaii", scope: "Sale/distribution of covered sunscreens", blocking: true,
+        reason: "Oxybenzone is prohibited in covered sunscreen products in Hawaii because of reef impact." }],
       summary: "Sunscreen filter absorbed into the body with hormone-activity concern.",
       whatIs: "Oxybenzone is a chemical UV filter in many sunscreens and SPF products.",
       whyFlagged: "It is readily absorbed through skin, detected in blood and urine, shows hormone activity in studies, and harms coral reefs (banned in Hawaii).",
@@ -184,6 +207,9 @@ window.CB_DATA_COSMETICS = (function () {
     {
       id: "octinoxate", names: ["octinoxate", "octyl methoxycinnamate", "ethylhexyl methoxycinnamate"],
       category: "Chemical UV filter", risk: "caution",
+      outcomes: ["Hormone-activity concern", "Reef toxicity"],
+      regulatory: [{ status: "prohibited", jurisdiction: "Hawaii", scope: "Sale/distribution of covered sunscreens", blocking: true,
+        reason: "Octinoxate is prohibited in covered sunscreen products in Hawaii because of reef impact." }],
       summary: "Common UV filter with endocrine and reef-toxicity concerns.",
       whatIs: "Octinoxate is a widely used UVB chemical filter in sunscreens and daily SPF cosmetics.",
       whyFlagged: "Shows hormone-like activity in lab studies and contributes to coral-reef damage; banned alongside oxybenzone in some regions.",
@@ -197,6 +223,7 @@ window.CB_DATA_COSMETICS = (function () {
     {
       id: "phthalates", names: ["phthalate", "diethyl phthalate", "dbp", "dehp", "dibutyl phthalate", "dep"],
       category: "Plasticizer", risk: "avoid",
+      outcomes: ["Hormone disruption", "Reproductive harm", "Developmental concern"],
       summary: "Plasticizers used in fragrance and nail products; endocrine disruptors.",
       whatIs: "Phthalates make plastics flexible and help fragrance linger; diethyl phthalate (DEP) is common in scented cosmetics.",
       whyFlagged: "Several phthalates are established endocrine disruptors linked to reproductive harm; multiple are restricted in the EU and in children's products.",
@@ -290,13 +317,17 @@ window.CB_DATA_COSMETICS = (function () {
     /* ------------------------------------------------------ toothpaste */
     {
       id: "fluoride", names: ["sodium fluoride", "stannous fluoride", "sodium monofluorophosphate", "fluoride"],
-      category: "Cavity-prevention active", role: "oral-care-active", risk: "ok",
-      summary: "Proven cavity fighter in toothpaste; safe at toothpaste levels (don't swallow).",
-      whatIs: "Fluoride strengthens enamel and prevents tooth decay; it's the key active in most toothpaste.",
-      whyFlagged: "Not flagged for topical dental use — it's effective and recommended. The only caution is swallowing large amounts (fluorosis in young children).",
-      healthRisk: "Safe as directed; supervise young children to avoid swallowing toothpaste. Effective and dentist-recommended.",
+      category: "Cavity-prevention active", role: "oral-care-active", risk: "caution",
+      outcomes: ["Dental fluorosis from excess childhood ingestion", "Acute toxicity if a large amount is swallowed", "Neurodevelopment concern at higher total systemic exposure"],
+      benefits: ["Reduces tooth decay when used topically as directed"],
+      summary: "A cavity-prevention active with meaningful ingestion and cumulative-exposure limits.",
+      whatIs: "Fluoride is an anticavity drug active that promotes enamel remineralization. Toothpaste is intended for topical use and should be spit out, not swallowed.",
+      whyFlagged: "A strict screen flags fluoride because young children can swallow toothpaste, excess ingestion while teeth develop can cause dental fluorosis, and higher total systemic exposure has neurodevelopment evidence. This does not erase the documented topical cavity-prevention benefit.",
+      healthRisk: "Excess swallowed fluoride during tooth development can cause dental fluorosis, and a large acute ingestion can be toxic. The 2024 NTP review found an association between higher total exposure (for example, water above 1.5 mg/L) and lower IQ in children, while finding insufficient data for the U.S. 0.7 mg/L water level; that review was not specific to normal spit-out toothpaste use.",
       studies: [
-        { title: "Fluoride toothpaste for preventing dental caries", source: "Cochrane Review", year: 2019 }
+        { title: "Toothpastes: anticaries benefit and fluorosis limits", source: "American Dental Association", year: 2026 },
+        { title: "State of the Science Concerning Fluoride Exposure and Neurodevelopment", source: "U.S. National Toxicology Program", year: 2024 },
+        { title: "About Dental Fluorosis", source: "U.S. CDC", year: 2024 }
       ]
     },
     {
@@ -397,6 +428,77 @@ window.CB_DATA_COSMETICS = (function () {
    * ingredient's job from its exposure caveat: natural origin is not a safety
    * bonus, and a chemical-sounding INCI name is not a penalty by itself. */
   additives.push(
+    {
+      id: "fda-prohibited-chloroform", names: ["chloroform", "trichloromethane"],
+      category: "Prohibited cosmetic solvent", role: "carrier-solvent", risk: "avoid",
+      outcomes: ["Cancer", "Liver and kidney injury", "Nervous-system effects"],
+      regulatory: [{ status: "prohibited", jurisdiction: "United States FDA", scope: "Cosmetic products, except unavoidable manufacturing residue", blocking: true,
+        reason: "FDA prohibits chloroform in cosmetics because it causes cancer in animals and is likely harmful to people." }],
+      summary: "A prohibited cosmetic solvent and cancer concern.", whatIs: "Chloroform is a volatile chlorinated solvent.",
+      whyFlagged: "It is prohibited as an intentionally added cosmetic ingredient in the United States, apart from limited unavoidable residue exceptions.",
+      healthRisk: "Cancer concern plus liver, kidney and central-nervous-system toxicity.", studies: [{ title: "Prohibited & Restricted Ingredients in Cosmetics", source: "U.S. FDA", year: 2026 }]
+    },
+    {
+      id: "fda-prohibited-methylene-chloride", names: ["methylene chloride", "dichloromethane"],
+      category: "Prohibited cosmetic solvent", role: "carrier-solvent", risk: "avoid",
+      outcomes: ["Cancer", "Nervous-system effects", "Breathing irritation"],
+      regulatory: [{ status: "prohibited", jurisdiction: "United States FDA", scope: "Cosmetic products", blocking: true,
+        reason: "FDA prohibits methylene chloride in cosmetics because it causes cancer in animals and is likely harmful to people." }],
+      summary: "A prohibited chlorinated solvent and cancer concern.", whatIs: "Methylene chloride is a volatile industrial solvent.",
+      whyFlagged: "FDA prohibits it as a cosmetic ingredient.", healthRisk: "Cancer concern and acute nervous-system or inhalation effects.",
+      studies: [{ title: "Prohibited & Restricted Ingredients in Cosmetics", source: "U.S. FDA", year: 2026 }]
+    },
+    {
+      id: "fda-prohibited-vinyl-chloride", names: ["vinyl chloride"],
+      category: "Prohibited aerosol ingredient", role: "propellant", risk: "avoid",
+      outcomes: ["Cancer", "Liver injury", "Nervous-system effects"],
+      regulatory: [{ status: "prohibited", jurisdiction: "United States FDA", scope: "Aerosol cosmetic products", blocking: true,
+        reason: "FDA prohibits vinyl chloride in aerosol cosmetics because it causes cancer and other health problems." }],
+      summary: "A prohibited aerosol ingredient and known cancer hazard.", whatIs: "Vinyl chloride is a gas used mainly to manufacture PVC.",
+      whyFlagged: "It has no acceptable place as an aerosol cosmetic ingredient under FDA rules.", healthRisk: "Known human carcinogen; liver and nervous-system toxicity.",
+      studies: [{ title: "Prohibited & Restricted Ingredients in Cosmetics", source: "U.S. FDA", year: 2026 }]
+    },
+    {
+      id: "fda-prohibited-bithionol", names: ["bithionol"],
+      category: "Prohibited cosmetic antimicrobial", role: "preservative", risk: "avoid",
+      outcomes: ["Severe light-triggered skin allergy", "Skin irritation"],
+      regulatory: [{ status: "prohibited", jurisdiction: "United States FDA", scope: "Cosmetic products", blocking: true,
+        reason: "FDA prohibits bithionol in cosmetics because it can cause photocontact sensitization." }],
+      summary: "A prohibited antimicrobial that can trigger serious light-related skin reactions.", whatIs: "Bithionol is an older antimicrobial ingredient.",
+      whyFlagged: "FDA prohibits it in cosmetics because of photocontact sensitization.", healthRisk: "Severe sun-triggered allergic dermatitis and irritation.",
+      studies: [{ title: "Prohibited & Restricted Ingredients in Cosmetics", source: "U.S. FDA", year: 2026 }]
+    },
+    {
+      id: "fda-prohibited-salicylanilides", names: ["dibromsalan", "tribromsalan", "metabromsalan", "tetrachlorosalicylanilide", "halogenated salicylanilide"],
+      category: "Prohibited cosmetic antimicrobial", role: "preservative", risk: "avoid",
+      outcomes: ["Serious skin disorders", "Light-triggered skin allergy"],
+      regulatory: [{ status: "prohibited", jurisdiction: "United States FDA", scope: "Cosmetic products", blocking: true,
+        reason: "FDA prohibits these halogenated salicylanilides because they can cause serious skin disorders." }],
+      summary: "A prohibited antimicrobial family associated with serious skin reactions.", whatIs: "Halogenated salicylanilides are older antimicrobial chemicals.",
+      whyFlagged: "Their cosmetic use is prohibited by FDA.", healthRisk: "Serious dermatitis and light-triggered sensitization.",
+      studies: [{ title: "Prohibited & Restricted Ingredients in Cosmetics", source: "U.S. FDA", year: 2026 }]
+    },
+    {
+      id: "fda-prohibited-cfc", names: ["chlorofluorocarbon propellant", "trichlorofluoromethane", "dichlorodifluoromethane", "cfc-11", "cfc-12"],
+      category: "Prohibited aerosol propellant", role: "propellant", risk: "avoid",
+      outcomes: ["Ozone-layer damage", "Climate impact", "Cold-burn or inhalation hazard from concentrated gas"],
+      regulatory: [{ status: "prohibited", jurisdiction: "United States FDA", scope: "Domestic cosmetic aerosol products", blocking: true,
+        reason: "FDA prohibits chlorofluorocarbon propellants in domestic cosmetic aerosols." }],
+      summary: "A prohibited ozone-depleting aerosol propellant.", whatIs: "CFCs are older pressurized gases formerly used in aerosols.",
+      whyFlagged: "They are prohibited in domestic cosmetic aerosols and cause major environmental harm.", healthRisk: "Primary concern is ozone depletion; concentrated gas also presents inhalation and cold-burn hazards.",
+      studies: [{ title: "Prohibited & Restricted Ingredients in Cosmetics", source: "U.S. FDA", year: 2026 }]
+    },
+    {
+      id: "fda-restricted-zirconium-aerosol", names: ["zirconium carbonate", "zirconium lactate", "zirconium complex"],
+      category: "Aerosol-restricted zirconium complex", role: "deodorant-active", risk: "caution",
+      riskByContext: { "aerosol-body-spray": "avoid" },
+      outcomes: ["Lung toxicity", "Skin granulomas"],
+      regulatory: [{ status: "prohibited", jurisdiction: "United States FDA", scope: "Aerosol cosmetic products", contexts: ["aerosol-body-spray"], blocking: true,
+        reason: "FDA prohibits zirconium-containing complexes in aerosol cosmetics because of lung toxicity in animals and granulomas in people." }],
+      summary: "A zirconium complex prohibited specifically in aerosol cosmetics.", whatIs: "Some zirconium salts were formerly used in deodorant systems.",
+      whyFlagged: "The aerosol route is prohibited; this rule does not apply to permitted aluminum-zirconium actives in solid antiperspirant sticks.", healthRisk: "Lung toxicity with aerosol exposure and skin granulomas.",
+      studies: [{ title: "Prohibited & Restricted Ingredients in Cosmetics", source: "U.S. FDA", year: 2026 }]
+    },
     {
       id: "water-carrier", names: ["water", "aqua", "purified water"],
       category: "Solvent / carrier", role: "carrier-solvent", risk: "ok",
