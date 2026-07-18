@@ -888,8 +888,76 @@ var CB_DATA = (function () {
     "sugar", "cane sugar", "brown sugar", "corn syrup", "high fructose corn syrup",
     "glucose syrup", "glucose-fructose syrup", "dextrose", "maltose", "fructose",
     "invert sugar", "molasses", "agave", "rice syrup", "barley malt", "evaporated cane juice",
-    "fruit juice concentrate", "honey solids", "caramel syrup", "sucrose"
+    "fruit juice concentrate", "honey solids", "caramel syrup", "sucrose", "maple syrup",
+    "coconut sugar", "coconut palm sugar", "coconut blossom sugar", "coconut blossom nectar"
   ];
+
+  // Added sugars share the same `limit` status, but they are not all presented
+  // as one anonymous mass. These profiles explain source and processing without
+  // implying that a natural, organic or less-refined sugar is health-neutral.
+  const addedSugarProfiles = [
+    {
+      id: "coconut-derived", label: "Coconut-derived added sugar", status: "limit",
+      names: ["coconut sugar", "coconut palm sugar", "coconut blossom sugar", "coconut nectar", "coconut blossom nectar"],
+      processing: "evaporated plant sap", relativeNote: "May retain trace minerals, but typical amounts are too small to cancel its added-sugar contribution.",
+      explanation: "Coconut sugar is not treated as a hazard. It is still an added sugar, so amount and ingredient-list position matter."
+    },
+    {
+      id: "palm-derived", label: "Palm-derived added sugar", status: "limit",
+      names: ["palm sugar", "palm syrup"], processing: "evaporated palm sap",
+      relativeNote: "The source and refinement can differ from coconut sugar, but it remains a concentrated added sweetener.",
+      explanation: "Palm sugar is shown as its own source category and is limited as added sugar, not classified as a hazard."
+    },
+    {
+      id: "whole-source", label: "Whole-source sweetener", status: "limit",
+      names: ["honey", "honey solids", "maple syrup", "maple sugar", "molasses", "blackstrap molasses", "date syrup", "date sugar", "yacon syrup"],
+      processing: "concentrated natural sweetener", relativeNote: "Flavor and small amounts of micronutrients vary, while the product still contributes free or added sugar.",
+      explanation: "Source is shown for context; it does not make unlimited intake low-sugar."
+    },
+    {
+      id: "cane-and-crystal", label: "Cane or crystalline sugar", status: "limit",
+      names: ["sugar", "cane sugar", "organic cane sugar", "raw sugar", "brown sugar", "turbinado", "demerara", "muscovado", "beet sugar", "sucrose", "powdered sugar", "confectioners sugar", "panela", "jaggery"],
+      processing: "crystallized sugar", relativeNote: "Organic certification concerns production standards, not the metabolic role of the sugar.",
+      explanation: "Classified as added sugar, not as an ingredient hazard."
+    },
+    {
+      id: "starch-syrup", label: "Starch-derived syrup or sugar", status: "limit",
+      names: ["corn syrup", "high fructose corn syrup", "glucose syrup", "glucose-fructose syrup", "fructose-glucose syrup", "dextrose", "maltose", "maltose syrup", "corn syrup solids", "rice syrup", "brown rice syrup", "tapioca syrup", "oat syrup"],
+      processing: "refined syrup or sugar", relativeNote: "Different glucose/fructose ratios do not remove the need to limit overall added sugar.",
+      explanation: "The exact form is retained so users can distinguish it from other sweeteners."
+    },
+    {
+      id: "fruit-concentrate", label: "Fruit-derived concentrated sweetener", status: "limit",
+      names: ["fruit juice concentrate", "grape juice concentrate", "apple juice concentrate", "pear juice concentrate", "white grape juice concentrate", "raisin juice concentrate"],
+      processing: "concentrated juice", relativeNote: "Whole fruit is different because its intact structure and fiber are not represented by a sweetening concentrate.",
+      explanation: "Only concentrate used as an ingredient is classified here; whole fruit remains a whole-food ingredient."
+    },
+    {
+      id: "syrup-and-nectar", label: "Syrup or nectar sweetener", status: "limit",
+      names: ["agave", "agave nectar", "golden syrup", "invert sugar", "invert syrup", "caramel syrup", "sorghum syrup", "malt syrup", "barley malt syrup", "treacle"],
+      processing: "concentrated syrup", relativeNote: "A plant-derived name does not make the ingredient free of added sugar.",
+      explanation: "The source is recorded separately from the amount-based nutrition assessment."
+    }
+  ];
+
+  const ingredientRoleMeta = {
+    "added-sweetener": { label: "Added sweetener", summary: "Caloric sweetener added to the formulation; source and processing are shown separately." },
+    "non-sugar-sweetener": { label: "Non-sugar sweetener", summary: "Provides sweetness with little or no sugar." },
+    "whole-food": { label: "Whole-food or pantry ingredient", summary: "Recognizable food ingredient without a category-level processing flag." },
+    "nutrient-or-culture": { label: "Nutrient, culture or functional basic", summary: "Known vitamin, mineral, culture, acid, starch or similar common ingredient." },
+    "oil-or-fat": { label: "Oil or fat", summary: "Fat source; type and processing preference are retained." },
+    "processing-marker": { label: "Processing marker", summary: "Concentrated, isolated or highly formulated component." },
+    "formula-group": { label: "Expanded ingredient group", summary: "A parent label such as color, acid or chocolate pieces whose disclosed children are assessed individually." },
+    "additive": { label: "Food additive", summary: "Functional additive whose specific purpose and concern level are evaluated." },
+    "preservative": { label: "Preservative", summary: "Helps control spoilage or microbial growth; the specific compound determines its rating." },
+    "color": { label: "Color", summary: "Adds or restores color; concern is based on the named colorant rather than the function alone." },
+    "texture-agent": { label: "Texture agent", summary: "Emulsifier, stabilizer, thickener or related texture function." },
+    "flavoring": { label: "Flavoring", summary: "Named flavoring or flavor enhancer; vague blends remain a separate transparency category." },
+    "acidity-regulator": { label: "Acidity regulator", summary: "Adjusts acidity or buffering; the specific compound determines its rating." },
+    "antioxidant": { label: "Antioxidant", summary: "Helps slow oxidation; the specific compound determines its rating." },
+    "undisclosed-blend": { label: "Undisclosed blend", summary: "Umbrella wording that does not disclose every component." },
+    "unknown": { label: "Not yet catalogued", summary: "No safety conclusion is inferred from an unfamiliar name." }
+  };
 
   const artificialSweeteners = ["aspartame", "sucralose", "acesulfame", "saccharin", "neotame", "advantame"];
 
@@ -997,9 +1065,23 @@ var CB_DATA = (function () {
     "acacia gum": ["gum arabic", "acacia fiber", "acacia fibre"],
     "carboxymethylcellulose": ["cellulose gum", "cmc", "sodium carboxymethyl cellulose"],
     "mono and diglycerides": ["mono & diglycerides", "mono diglycerides", "mono- and diglycerides"],
-    "soy lecithin": ["soya lecithin", "lecithin from soy"],
+    "soy lecithin": ["soya lecithin", "lecithin from soy", "lecithines de soja", "lecithine de soja", "lecitina de soja", "sojalecithin"],
     "canola oil": ["low erucic acid rapeseed oil"],
     "high fructose corn syrup": ["hfcs", "high-fructose corn syrup"],
+    "sugar": ["sucre", "azucar", "azucar de cana", "zucker", "zucchero", "acucar"],
+    "palm oil": ["huile de palme", "aceite de palma", "olio di palma", "palmol", "palmfett"],
+    "sunflower oil": ["huile de tournesol", "aceite de girasol", "sonnenblumenol", "olio di girasole"],
+    "hazelnuts": ["noisettes", "avellanas", "haselnusse", "nocciole"],
+    "milk": ["lait", "leche", "milch", "latte"],
+    "soy": ["soja", "soya"],
+    "skim milk powder": ["lait ecreme en poudre", "poudre de lait ecreme", "leche desnatada en polvo", "magermilchpulver"],
+    "whey powder": ["lactoserum en poudre", "poudre de lactoserum", "suero de leche en polvo", "molkenpulver"],
+    "cocoa": ["cacao", "kakao"],
+    "cocoa butter": ["beurre de cacao", "manteca de cacao", "kakaobutter", "burro di cacao"],
+    "salt": ["sel", "sal", "salz", "sale"],
+    "coconut sugar": ["coconut palm sugar", "coconut blossom sugar", "coconut blossom crystals"],
+    "coconut nectar": ["coconut blossom nectar", "coconut palm nectar"],
+    "maple syrup": ["pure maple syrup"],
     "acesulfame potassium": ["acesulfame k", "ace k", "ace-k"],
     "allura red": ["fd&c red no 40", "red dye 40"],
     "tartrazine": ["fd&c yellow no 5", "yellow dye 5"],
@@ -1400,10 +1482,11 @@ var CB_DATA = (function () {
   // More added-sugar synonyms seen on U.S. labels.
   const extraSugars = [
     "turbinado", "demerara", "muscovado", "powdered sugar", "confectioners sugar",
-    "brown rice syrup", "tapioca syrup", "date syrup", "maple sugar", "palm sugar",
+    "brown rice syrup", "tapioca syrup", "date syrup", "maple sugar", "palm sugar", "palm syrup",
     "golden syrup", "treacle", "sorghum syrup", "malt syrup", "caramel syrup",
-    "beet sugar", "raw sugar", "coconut nectar", "corn sweetener", "crystalline fructose",
-    "fruit juice", "honey", "agave nectar", "maltose syrup",
+    "beet sugar", "raw sugar", "coconut sugar", "coconut palm sugar", "coconut blossom sugar",
+    "coconut nectar", "coconut blossom nectar", "corn sweetener", "crystalline fructose",
+    "fruit juice", "honey", "maple syrup", "agave nectar", "maltose syrup",
     "evaporated cane juice", "cane sugar", "cane juice", "rice syrup", "barley malt",
     "barley malt syrup", "fruit juice concentrate", "grape juice concentrate", "carob syrup",
     "rice malt syrup", "yacon syrup", "panela", "jaggery",
@@ -1470,6 +1553,14 @@ var CB_DATA = (function () {
       effects: "No ingredient-name-only health conclusion; assess the complete food, nutrition panel and dietary pattern.",
       studies: []
     },
+    formulaGroup: {
+      category: "Expanded ingredient group", status: "ok",
+      summary: "A parent or functional heading whose disclosed sub-ingredients are shown beneath it.",
+      whatIs: "Labels often group components under headings such as color, acid, filling or chocolate pieces.",
+      whyFlagged: "The parent heading is score-neutral because its disclosed children are classified individually.",
+      effects: "No safety conclusion is inferred from the heading alone.",
+      studies: []
+    },
     recognized: {
       category: "Recognized ingredient", status: "good",
       summary: "A known vitamin, mineral, culture, acid, starch or other common label ingredient.",
@@ -1531,6 +1622,7 @@ var CB_DATA = (function () {
   return {
     groups: groups, bannedMap: bannedMap,
     additives: additives, seedOils: seedOils, addedSugars: addedSugars,
+    addedSugarProfiles: addedSugarProfiles, ingredientRoleMeta: ingredientRoleMeta,
     artificialSweeteners: artificialSweeteners, vagueTerms: vagueTerms,
     cleanIngredients: cleanIngredients, recognizedIngredients: recognizedIngredients,
     processingMarkers: processingMarkers, ingredientAliases: ingredientAliases,

@@ -69,13 +69,62 @@
   // sections are truncated before tokenization; this fragment filter is a
   // second line of defence for OCR that lost punctuation or line breaks.
   var NON_INGREDIENT_RE = /\b(daily value|percent daily|per serving|per container|serving size|servings per|amount per|nutrition facts|supplement facts|calories from|total fat|saturated fat|trans fat|polyunsaturated fat|monounsaturated fat|total carbohydrate|dietary fiber|total sugars|added sugars|cholesterol|protein per|distributed by|manufactured (by|for)|net wt|net weight|fluid ounces|fl oz|best before|best by|use by|sell by|exp date|lot number|questions|comments|satisfaction guaranteed|refrigerate after|produced in|made in|product of|packaged (by|for)|certified organic by|scan for|learn more|visit us|follow us|www|https?)\b/;
-  var CLAIM_RE = /\b(non[- ]?gmo project verified|usda organic|gluten free|keto friendly|plant based|no artificial|excellent source|good source|low sodium|fat free|sugar free|recyclable|please recycle)\b/;
+  var CLAIM_RE = /\b(non[- ]?gmo project verified|usda organic|gluten free|sans gluten|sin gluten|glutenfrei|keto friendly|plant based|vegan|vegetarien|vegetarian|sans huile de palme|no artificial|excellent source|good source|low sodium|fat free|sugar free|recyclable|please recycle)\b/;
   var SECTION_BOUNDARY_RE = /(?:^|[.\n;]\s*)(nutrition facts|supplement facts|drug facts|allergen information|allergy advice|contains\s*:(?!\s*(?:2\s*%|less than))|may contain|distributed by|manufactured (?:by|for)|marketed by|packed (?:by|for)|net (?:wt|weight|contents)|directions|storage|warning|best (?:before|by)|use by|questions(?: or comments)?|www\.)/i;
   // A standalone number followed by a measurement unit (e.g. "200mg", "2 g",
   // "120 kcal") is a nutrition value, not an ingredient.
   var NUTRITION_VALUE_RE = /\b\d+(\.\d+)?\s?(mg|mcg|g|kg|kcal|iu|ml|oz)\b/;
   function isNonIngredient(n) {
     return NON_INGREDIENT_RE.test(n) || CLAIM_RE.test(n) || NUTRITION_VALUE_RE.test(n);
+  }
+
+  // Claims are retained as provenance, never folded into the safety score.
+  // In particular, "kosher salt" is an ingredient name, not evidence that a
+  // product is kosher-certified.
+  function detectLabelClaims(text) {
+    var source = foldAscii(text || "").toLowerCase();
+    var out = [];
+    function add(id, label, evidence) {
+      if (out.some(function (claim) { return claim.id === id; })) return;
+      out.push({ id: id, label: label, source: "ingredient-label", evidence: evidence,
+        scope: "captured-label", verified: false, affectsScore: false });
+    }
+    if (/\busda\s+organic\b|\bcertified\s+organic\b/.test(source))
+      add("organic", "Organic claim", "Certification wording appears in the captured label text.");
+    if (/\bcertified\s+kosher\b|\bkosher\s+certified\b|\bkosher\s+certification\b/.test(source))
+      add("kosher", "Kosher claim", "Kosher certification wording appears in the captured label text.");
+    return out;
+  }
+
+  function ingredientAttributes(raw, qualifiers) {
+    var n = norm(raw);
+    var normalizedQualifiers = (qualifiers || []).map(function (q) { return norm(q); }).filter(Boolean);
+    var qualifierText = norm(normalizedQualifiers.join(" "));
+    return {
+      organic: /^(?:certified\s+)?organic\b/.test(n) || /\b(?:certified\s+)?organic\b/.test(qualifierText),
+      kosherSalt: /^kosher\s+salt$/.test(n),
+      certificationClaim: false,
+      qualifiers: normalizedQualifiers,
+      purposes: normalizedQualifiers.filter(function (q) { return /^(?:for|to|as\b|used to\b)/.test(q); }),
+      aliases: normalizedQualifiers.filter(function (q) { return /^e\s?\d{3,4}[a-z]?$/.test(q); }),
+      sourceQualifiers: normalizedQualifiers.filter(function (q) { return /^(?:soy|milk|wheat|egg|peanut|tree nut|almond|hazelnut|sesame)$/.test(q); })
+    };
+  }
+
+  function isStructuralContainerName(value) {
+    return /^(?:colou?rs?|colou?ring|colorants?|acids?|acidulants?|acidifiants?|preservatives?|conservateurs?|antioxidants?|emulsifiers?|emulsifiants?|stabilizers?|stabilisants?|thickeners?|epaississants?|sweeteners?|edulcorants?|flavou?rings?|aromes?|seasonings?|spice blend|oil blend|vegetable oils?|huiles vegetales?|vitamins?(?: and minerals?)?|vitamines?(?: et mineraux)?|minerals?|mineraux|filling|coating|base|cookie base|chocolate pieces?|compound coating)$/.test(norm(value));
+  }
+
+  function isQualifierGroup(group, base) {
+    var n = norm(group), parent = norm(base);
+    if (/^(?:certified )?(?:organic|kosher)$|^non gmo$/.test(n)) return true;
+    if (/^for (?:freshness|colou?r|flavou?r|taste|texture|consistency|stability)$/.test(n)) return true;
+    if (/^(?:used )?to (?:preserve|protect|maintain|improve|prevent|keep|retain)\b.{0,60}$/.test(n)) return true;
+    if (/^as an? (?:preservative|antioxidant|emulsifier|stabilizer|thickener|colour|color|flavou?r|sweetener)$/.test(n)) return true;
+    if (/^e\s?\d{3,4}[a-z]?$/.test(n) && !isStructuralContainerName(parent)) return true;
+    if (/^(?:soy|milk|wheat|egg|peanut|tree nut|almond|hazelnut|sesame)$/.test(n) &&
+        /(?:lecithin|whey|casein|starch|oil|flavou?r|protein|tocopherol)/.test(parent)) return true;
+    return false;
   }
 
   function extractAllergenStatement(text, marker) {
@@ -144,6 +193,7 @@
     var result = {
       items: [], rejected: [], declaredAllergens: extractAllergenStatement(source, "contains"),
       precautionaryAllergens: extractAllergenStatement(source, "may"),
+      labelClaims: detectLabelClaims(source),
       quality: { confidence: "none", ingredientMarker: false, boundaryFound: false, unbalancedParentheses: false, truncated: false }
     };
     if (!source.trim()) return result;
@@ -176,12 +226,12 @@
       .replace(/[\[\]{}]/g, function (m) { return m === "[" || m === "{" ? "(" : ")"; })
       .replace(/\s+/g, " ").trim();
 
-    var seen = {};
+    var seen = {}, sequence = 0;
     function reject(raw, reason) {
       var r = String(raw || "").replace(/\s+/g, " ").trim();
       if (r && result.rejected.length < 30) result.rejected.push({ raw: r, reason: reason });
     }
-    function add(raw, depth, parent) {
+    function add(raw, depth, parent, parentId, parentPath, canonicalParentPath, siblingPosition, topLevelPosition, qualifiers) {
       raw = String(raw || "")
         .replace(/^\s*(?:and|or)\s+/i, "")
         .replace(/^\s*(?:made with|including|with|of)\s+/i, "")
@@ -189,26 +239,60 @@
       if (!raw) return;
       var n = norm(raw);
       if (!plausibleIngredient(raw)) { reject(raw, "label-noise-or-low-confidence"); return; }
-      if (seen[n]) return;
-      seen[n] = true;
-      result.items.push({ raw: raw, norm: n, depth: depth || 0, parent: parent || "" });
+      var path = (parentPath || []).concat([raw]);
+      var canonicalPath = (canonicalParentPath || []).concat([n]);
+      var pathKey = canonicalPath.join(" > ");
+      if (seen[pathKey]) return seen[pathKey];
+      var item = { id: "ingredient-" + (++sequence), raw: raw, norm: n, depth: depth || 0,
+        parent: parent || "", parentId: parentId || "", path: path, canonicalPath: canonicalPath,
+        position: sequence, order: sequence, siblingPosition: siblingPosition || 1,
+        topLevelPosition: topLevelPosition || siblingPosition || 1,
+        attributes: ingredientAttributes(raw, qualifiers) };
+      seen[pathKey] = item;
+      result.items.push(item);
       if (result.items.length >= 120) result.quality.truncated = true;
+      return item;
     }
-    function expand(raw, depth, parent) {
+    function expand(raw, depth, parent, parentId, parentPath, canonicalParentPath, siblingPosition, topLevelPosition) {
       if (!raw || result.items.length >= 120) return;
+      var colonGroup = /^([^:]{2,48}):\s*(.+)$/.exec(String(raw).trim());
+      if (colonGroup && isStructuralContainerName(colonGroup[1])) {
+        var groupItem = add(colonGroup[1], depth, parent, parentId, parentPath, canonicalParentPath,
+          siblingPosition, topLevelPosition, []);
+        var groupParentId = groupItem ? groupItem.id : parentId;
+        var groupPath = groupItem ? groupItem.path : parentPath;
+        var groupCanonicalPath = groupItem ? groupItem.canonicalPath : canonicalParentPath;
+        splitTopLevel(colonGroup[2]).forEach(function (child, childIndex) {
+          expand(child, (depth || 0) + 1, norm(colonGroup[1]), groupParentId, groupPath, groupCanonicalPath,
+            childIndex + 1, topLevelPosition);
+        });
+        return;
+      }
       var parsed = parentheticalParts(raw);
       var base = parsed.base.replace(/\s*:\s*$/, "").trim();
-      if (base) add(base, depth, parent);
+      var qualifierGroups = parsed.groups.filter(function (group) { return isQualifierGroup(group, base); });
+      var item = base ? add(base, depth, parent, parentId, parentPath, canonicalParentPath,
+        siblingPosition, topLevelPosition, qualifierGroups) : null;
       var parentName = base ? norm(base) : parent;
+      var nextParentId = item ? item.id : parentId;
+      var nextPath = item ? item.path : parentPath;
+      var nextCanonicalPath = item ? item.canonicalPath : canonicalParentPath;
+      var childPosition = 0;
       parsed.groups.forEach(function (group) {
         var gn = norm(group);
         // These are label qualifiers, not hidden ingredients. Other single-item
         // groups (e.g. "vitamin C (ascorbic acid)" or "whey (milk)") are kept.
-        if (/^(certified )?organic$|^non gmo$|^for (freshness|color)$|^to (preserve|protect) freshness$|^as a preservative$/.test(gn)) return;
-        splitTopLevel(group).forEach(function (child) { expand(child, (depth || 0) + 1, parentName); });
+        if (isQualifierGroup(group, base)) return;
+        splitTopLevel(group).forEach(function (child) {
+          childPosition++;
+          expand(child, (depth || 0) + 1, parentName, nextParentId, nextPath, nextCanonicalPath,
+            childPosition, topLevelPosition);
+        });
       });
     }
-    splitTopLevel(cleaned).forEach(function (part) { expand(part, 0, ""); });
+    splitTopLevel(cleaned).forEach(function (part, index) {
+      expand(part, 0, "", "", [], [], index + 1, index + 1);
+    });
 
     if (!result.items.length) result.quality.confidence = "low";
     else if (result.quality.unbalancedParentheses || result.rejected.length > Math.max(2, result.items.length / 3)) result.quality.confidence = "low";
@@ -257,6 +341,9 @@
     }
     var seedOilsT = tokList(DATA.seedOils);
     var addedSugarsT = tokList(DATA.addedSugars);
+    var sugarProfiles = (DATA.addedSugarProfiles || []).map(function (profile) {
+      return { profile: profile, terms: tokList(profile.names || []) };
+    });
     var sweetenersT = tokList(DATA.artificialSweeteners);
     var vagueT = tokList(DATA.vagueTerms);
     var cleanT = tokList(DATA.cleanIngredients);
@@ -282,6 +369,14 @@
     function listHitTok(listT, toks) {
       for (var i = 0; i < listT.length; i++) if (phraseInTokens(toks, listT[i].toks)) return listT[i];
       return null;
+    }
+    function findSugarProfile(toks) {
+      var best = null;
+      sugarProfiles.forEach(function (entry) {
+        var hit = listHitTok(entry.terms, toks);
+        if (hit && (!best || hit.toks.length > best.hit.toks.length)) best = { profile: entry.profile, hit: hit };
+      });
+      return best;
     }
 
     function findENumberByName(toks) {
@@ -314,6 +409,7 @@
       result.matchType = matchType;
       result.matchedTerm = matchedTerm || "";
       result.matchConfidence = matchType === "none" ? "low" : exact ? "high" : "medium";
+      result.recognitionConfidence = result.matchConfidence;
       result.evidence = {
         basis: referenceCount ? "ingredient-specific references" : (matchType === "none" ? "no database match" : "category rule"),
         referenceCount: referenceCount || 0,
@@ -322,19 +418,72 @@
       return result;
     }
 
+    function roleFor(result) {
+      var category = norm(result.additive && result.additive.category || result.reason || "");
+      var ingredientName = norm(result.canonicalName || result.name || "");
+      if (result.group === "addedSugar" || category === "added sugar") return "added-sweetener";
+      if (result.group === "sweetener" || /artificial sweetener|sugar alcohol|non sugar sweetener/.test(category)) return "non-sugar-sweetener";
+      if (result.group === "seedOil" || /\b(oil|fat)\b/.test(category) ||
+        /(?:^|\s)(?:oil|oils|fat|fats|shortening|ghee)$|^butter$|^cocoa butter$/.test(ingredientName)) return "oil-or-fat";
+      if (result.group === "processed") return "processing-marker";
+      if (result.group === "vague" || /undisclosed|flavor transparency|flavour transparency/.test(category)) return "undisclosed-blend";
+      if (/preservative|antimicrobial/.test(category)) return "preservative";
+      if (/\bcolor|\bcolour|dye|pigment/.test(category)) return "color";
+      if (/emulsifier|stabilizer|thickener|gelling|texture|humectant|anti caking/.test(category)) return "texture-agent";
+      if (/flavor enhancer|flavour enhancer|flavoring|flavouring/.test(category)) return "flavoring";
+      if (/acidifier|acidity regulator|buffering/.test(category)) return "acidity-regulator";
+      if (/antioxidant/.test(category)) return "antioxidant";
+      if (result.group === "clean") return "whole-food";
+      if (result.group === "recognized") return "nutrient-or-culture";
+      if (result.group === "unknown") return "unknown";
+      if (result.additive || /^e(?:ok|limit|caution|avoid)$/i.test(result.group || "")) return "additive";
+      return result.status === "unknown" ? "unknown" : "ingredient";
+    }
+
+    function assessmentWhy(result) {
+      if (result.additive && result.additive.whyFlagged) return result.additive.whyFlagged;
+      var group = groups[result.group] || null;
+      return group && group.whyFlagged ? group.whyFlagged : result.reason;
+    }
+
     // Classify a single ingredient. productType: "food" (default) | "beauty" | "household" | "petfood".
-    function classify(n, raw, productType) {
+    function classify(n, raw, productType, parsedAttributes) {
       n = norm(n || raw);
-      var canonical = aliasLookup[n] || n;
+      var inferredAttributes = ingredientAttributes(raw || n, []);
+      var attributes = {}, attrKey;
+      for (attrKey in inferredAttributes) attributes[attrKey] = inferredAttributes[attrKey];
+      for (attrKey in (parsedAttributes || {})) attributes[attrKey] = parsedAttributes[attrKey];
+      // Organic is a production/certification attribute, not a separate
+      // ingredient. Remove only the leading qualifier for matching.
+      var lookupName = n.replace(/^(?:certified\s+)?organic\s+/, "");
+      var canonical = aliasLookup[lookupName] || lookupName;
       var toks = tokenize(canonical);
       var isFood = isFoodType(productType);
+      var sugarProfileHit = findSugarProfile(toks);
+      function assess(result, matchType, matchedTerm, exact, referenceCount) {
+        result.role = roleFor(result);
+        result.category = (result.additive && result.additive.category) ||
+          ((groups[result.group] || {}).category) || result.reason;
+        result.why = assessmentWhy(result);
+        result.attributes = {};
+        for (var key in attributes) result.attributes[key] = attributes[key];
+        result.attributes.addedSugar = result.role === "added-sweetener";
+        result.attributes.scoreNeutralClaims = result.attributes.organic ? ["organic"] : [];
+        if (result.attributes.kosherSalt) result.attributes.scoreNeutralClaims.push("kosher-salt-name");
+        if (result.role === "added-sweetener" && sugarProfileHit) {
+          result.sugarProfile = sugarProfileHit.profile;
+          result.attributes.sugarFamily = sugarProfileHit.profile.id;
+          result.attributes.processing = sugarProfileHit.profile.processing;
+        }
+        return withAssessment(result, matchType, matchedTerm, exact, referenceCount);
+      }
 
       if (!isFood) {
         // Non-food (cosmetic / household): cosmetic DB first.
         var caHit = findInIndex(cosmeticIndex, toks);
         if (caHit) {
           var ca = caHit.additive;
-          return withAssessment({ status: ca.risk, additive: ca, name: ca.names[0], canonicalName: canonical, reason: ca.category },
+          return assess({ status: ca.risk, additive: ca, name: ca.names[0], canonicalName: canonical, reason: ca.category },
             aliasLookup[n] && aliasLookup[n] !== n ? "alias" : "database-name", caHit.toks.join(" "), sameTokens(toks, caHit.toks), (ca.studies || []).length);
         }
         // Cosmetic concern keyword buckets.
@@ -343,15 +492,15 @@
           var hit = listHitTok(cosmeticListsT[ck[ci]], toks);
           if (hit) {
             var meta = (COSMETICS.concernMeta && COSMETICS.concernMeta[ck[ci]]) || { status: "caution", reason: cap(ck[ci]) };
-            return withAssessment({ status: meta.status, group: ck[ci], canonicalName: canonical, reason: meta.reason },
+            return assess({ status: meta.status, group: ck[ci], canonicalName: canonical, reason: meta.reason },
               "category-keyword", hit.raw, sameTokens(toks, hit.toks), 0);
           }
         }
         var cv = listHitTok(vagueT, toks);
-        if (cv) return withAssessment({ status: "limit", group: "vague", canonicalName: canonical, reason: "Undisclosed ingredient" }, "category-keyword", cv.raw, sameTokens(toks, cv.toks), 0);
+        if (cv) return assess({ status: "limit", group: "vague", canonicalName: canonical, reason: "Undisclosed ingredient" }, "category-keyword", cv.raw, sameTokens(toks, cv.toks), 0);
         var cc = listHitTok(cleanT, toks);
-        if (cc) return withAssessment({ status: "good", group: "clean", canonicalName: canonical, reason: "Recognized ingredient" }, "food-name", cc.raw, sameTokens(toks, cc.toks), 0);
-        return withAssessment({ status: "unknown", group: "unknown", canonicalName: canonical, reason: "Not catalogued; no risk conclusion" }, "none", "", false, 0);
+        if (cc) return assess({ status: "good", group: "clean", canonicalName: canonical, reason: "Recognized ingredient" }, "food-name", cc.raw, sameTokens(toks, cc.toks), 0);
+        return assess({ status: "unknown", group: "unknown", canonicalName: canonical, reason: "Not catalogued; no risk conclusion" }, "none", "", false, 0);
       }
 
       // Ingredient-specific records take precedence over broader category
@@ -359,43 +508,61 @@
       var aHit = findInIndex(foodIndex, toks);
       if (aHit) {
         var a = aHit.additive;
-        return withAssessment({ status: a.risk, additive: a, name: a.names[0], canonicalName: canonical, reason: a.category },
-          aliasLookup[n] && aliasLookup[n] !== n ? "alias" : "database-name", aHit.toks.join(" "), sameTokens(toks, aHit.toks), (a.studies || []).length);
+        return assess({ status: a.risk, additive: a, name: a.names[0], canonicalName: canonical, reason: a.category },
+          aliasLookup[lookupName] && aliasLookup[lookupName] !== lookupName ? "alias" : "database-name", aHit.toks.join(" "), sameTokens(toks, aHit.toks), (a.studies || []).length);
       }
       var sw = listHitTok(sweetenersT, toks);
-      if (sw) return withAssessment({ status: "caution", group: "sweetener", canonicalName: canonical, reason: "Non-sugar sweetener" }, "category-keyword", sw.raw, sameTokens(toks, sw.toks), 0);
+      if (sw) return assess({ status: "caution", group: "sweetener", canonicalName: canonical, reason: "Non-sugar sweetener" }, "category-keyword", sw.raw, sameTokens(toks, sw.toks), 0);
       var so = listHitTok(seedOilsT, toks);
-      if (so) return withAssessment({ status: "limit", group: "seedOil", canonicalName: canonical, reason: "Refined seed/vegetable oil" }, "category-keyword", so.raw, sameTokens(toks, so.toks), 0);
+      if (so) return assess({ status: "limit", group: "seedOil", canonicalName: canonical, reason: "Refined seed/vegetable oil" }, "category-keyword", so.raw, sameTokens(toks, so.toks), 0);
       var vg = listHitTok(vagueT, toks);
-      if (vg) return withAssessment({ status: "limit", group: "vague", canonicalName: canonical, reason: "Undisclosed ingredient blend" }, "category-keyword", vg.raw, sameTokens(toks, vg.toks), 0);
+      if (vg) return assess({ status: "limit", group: "vague", canonicalName: canonical, reason: "Undisclosed ingredient blend" }, "category-keyword", vg.raw, sameTokens(toks, vg.toks), 0);
       var en = findENumberByName(toks) || findENumberByCode(raw);
-      if (en) return withAssessment({ status: en.risk, group: egroup(en.risk), name: en.name, canonicalName: canonical, enumber: en.code,
+      if (en) return assess({ status: en.risk, group: egroup(en.risk), name: en.name, canonicalName: canonical, enumber: en.code,
         reason: (en.unverified ? "Uncatalogued E-number" : "Food additive") + (en.code ? " / " + en.code : "") },
         en.unverified ? "e-number-pattern" : "e-number", en.matchedTerm, true, 0);
       var sugar = listHitTok(addedSugarsT, toks);
-      if (sugar) return withAssessment({ status: "limit", group: "addedSugar", canonicalName: canonical, reason: "Added sugar" }, "category-keyword", sugar.raw, sameTokens(toks, sugar.toks), 0);
+      if (sugar) return assess({ status: "limit", group: "addedSugar", canonicalName: canonical, reason: "Added sugar" }, "category-keyword", sugar.raw, sameTokens(toks, sugar.toks), 0);
       var processed = listHitTok(processingT, toks);
-      if (processed) return withAssessment({ status: "limit", group: "processed", canonicalName: canonical, reason: "Highly processed formulation component" }, "category-keyword", processed.raw, sameTokens(toks, processed.toks), 0);
+      if (processed) return assess({ status: "limit", group: "processed", canonicalName: canonical, reason: "Highly processed formulation component" }, "category-keyword", processed.raw, sameTokens(toks, processed.toks), 0);
       var clean = listHitTok(cleanT, toks);
-      if (clean) return withAssessment({ status: "good", group: "clean", canonicalName: canonical, reason: "Recognized whole-food or pantry ingredient" }, "food-name", clean.raw, sameTokens(toks, clean.toks), 0);
+      if (clean) return assess({ status: "good", group: "clean", canonicalName: canonical, reason: "Recognized whole-food or pantry ingredient" }, "food-name", clean.raw, sameTokens(toks, clean.toks), 0);
       var recognized = listHitTok(recognizedT, toks);
-      if (recognized) return withAssessment({ status: "good", group: "recognized", canonicalName: canonical, reason: "Recognized low-concern ingredient" }, "ingredient-name", recognized.raw, sameTokens(toks, recognized.toks), 0);
-      if (/\be[\s-]?\d{3,4}[a-z]?\b/i.test(String(raw || ""))) return withAssessment({ status: "caution", group: "eCaution", canonicalName: canonical, reason: "Uncatalogued E-number" }, "e-number-pattern", raw, true, 0);
-      return withAssessment({ status: "unknown", group: "unknown", canonicalName: canonical, reason: "Not catalogued; no risk conclusion" }, "none", "", false, 0);
+      if (recognized) return assess({ status: "good", group: "recognized", canonicalName: canonical, reason: "Recognized low-concern ingredient" }, "ingredient-name", recognized.raw, sameTokens(toks, recognized.toks), 0);
+      if (/\be[\s-]?\d{3,4}[a-z]?\b/i.test(String(raw || ""))) return assess({ status: "caution", group: "eCaution", canonicalName: canonical, reason: "Uncatalogued E-number" }, "e-number-pattern", raw, true, 0);
+      return assess({ status: "unknown", group: "unknown", canonicalName: canonical, reason: "Not catalogued; no risk conclusion" }, "none", "", false, 0);
     }
 
     function ingredientDetail(item) {
+      function context(category, why) {
+        return { id: item.id || "", parentId: item.parentId || "", path: item.path || [item.raw || item.name || ""],
+          canonicalPath: item.canonicalPath || [], depth: item.depth || 0, position: item.position || 0,
+          order: item.order || item.position || 0, siblingPosition: item.siblingPosition || 0,
+          topLevelPosition: item.topLevelPosition || 0, scoreImpact: item.scoreImpact || 0,
+          scoreApplied: !!item.scoreApplied, recognitionConfidence: item.recognitionConfidence || item.matchConfidence || "low",
+          matchType: item.matchType || "none", matchedTerm: item.matchedTerm || "", evidence: item.evidence || null,
+          role: item.role || roleFor(item), attributes: item.attributes || {}, sugarProfile: item.sugarProfile || null,
+          category: category, why: why };
+      }
+      function merge(base, extra) {
+        Object.keys(extra).forEach(function (key) { base[key] = extra[key]; });
+        return base;
+      }
       if (item.additive) {
         var a = item.additive;
-        return { title: titleCase(a.names[0]), category: a.category, enumber: a.enumber || "", status: a.risk,
+        return merge({ title: titleCase(a.names[0]), category: a.category, enumber: a.enumber || "", status: a.risk,
           summary: a.summary, whatIs: a.whatIs, whyFlagged: a.whyFlagged, effects: a.healthRisk,
           banned: (bannedMap && bannedMap[a.id]) || "", studies: a.studies || [], evidence: item.evidence || null,
-          assessmentNote: "Hazard and regulatory context do not measure the dose in this product or predict an individual health outcome." };
+          assessmentNote: "Hazard and regulatory context do not measure the dose in this product or predict an individual health outcome." },
+          context(a.category, item.why || a.whyFlagged));
       }
       var g = groups[item.group] || groups.unknown || { category: "Not catalogued", status: "unknown", summary: "No assessment available.", whatIs: "No database match.", whyFlagged: "Not scored as harmful.", effects: "Unknown." };
-      return { title: titleCase(item.name || item.raw), category: g.category, enumber: item.enumber || "", status: item.status || g.status,
-        summary: g.summary, whatIs: g.whatIs, whyFlagged: g.whyFlagged, effects: g.effects, banned: "", studies: g.studies || [],
-        evidence: item.evidence || null, assessmentNote: "This is an ingredient-screening category, not a diagnosis or a measurement of dose." };
+      return merge({ title: titleCase(item.name || item.raw), category: g.category, enumber: item.enumber || "", status: item.status || g.status,
+        summary: item.sugarProfile ? item.sugarProfile.explanation : g.summary,
+        whatIs: item.sugarProfile ? g.whatIs + " " + item.sugarProfile.relativeNote : g.whatIs,
+        whyFlagged: item.why || g.whyFlagged, effects: g.effects, banned: "", studies: g.studies || [],
+        evidence: item.evidence || null, assessmentNote: "This is an ingredient-screening category, not a diagnosis or a measurement of dose." },
+        context(item.category || g.category, item.why || g.whyFlagged));
     }
 
     /* ----------------------------------------------------- nutrition (food) */
@@ -431,37 +598,239 @@
       return { label: "Bad", cls: "bad" };
     }
 
+    function buildIngredientHierarchy(classified) {
+      var byId = {}, roots = [];
+      (classified || []).forEach(function (ingredient) {
+        if (ingredient.displayDuplicate === false) return;
+        var node = {
+          id: ingredient.id, parentId: ingredient.parentId, name: ingredient.raw,
+          canonicalName: ingredient.canonicalName, path: ingredient.path, depth: ingredient.depth,
+          position: ingredient.position, siblingPosition: ingredient.siblingPosition,
+          topLevelPosition: ingredient.topLevelPosition, role: ingredient.role, category: ingredient.category,
+          status: ingredient.status, why: ingredient.why, scoreImpact: ingredient.scoreImpact,
+          scoreApplied: ingredient.scoreApplied, isContainer: ingredient.isContainer,
+          isLeaf: ingredient.isLeaf, coverageEligible: ingredient.coverageEligible,
+          duplicateOf: ingredient.duplicateOf || "", displayDuplicate: ingredient.displayDuplicate,
+          recognitionConfidence: ingredient.recognitionConfidence, attributes: ingredient.attributes,
+          sugarProfile: ingredient.sugarProfile || null, children: []
+        };
+        byId[node.id] = node;
+      });
+      (classified || []).forEach(function (ingredient) {
+        if (ingredient.displayDuplicate === false) return;
+        var node = byId[ingredient.id];
+        if (ingredient.parentId && byId[ingredient.parentId]) byId[ingredient.parentId].children.push(node);
+        else roots.push(node);
+      });
+      return roots;
+    }
+
+    function summarizeIngredientCategories(classified) {
+      var roleMeta = DATA.ingredientRoleMeta || {}, summaries = {}, order = [];
+      (classified || []).forEach(function (ingredient) {
+        if (ingredient.displayDuplicate === false) return;
+        var key = ingredient.role || "ingredient";
+        if (!summaries[key]) {
+          var meta = roleMeta[key] || { label: titleCase(key.replace(/-/g, " ")), summary: ingredient.category || ingredient.reason };
+          summaries[key] = { key: key, label: meta.label, summary: meta.summary, count: 0,
+            topLevelCount: 0, nestedCount: 0, scoreImpact: 0, firstPosition: ingredient.position,
+          statuses: {}, ingredientIds: [], subcategories: {}, containerCount: 0 };
+          order.push(key);
+        }
+        var summary = summaries[key];
+        summary.count++;
+        if (ingredient.depth) summary.nestedCount++; else summary.topLevelCount++;
+        if (ingredient.isContainer) summary.containerCount++;
+        summary.scoreImpact += ingredient.scoreImpact || 0;
+        summary.statuses[ingredient.status] = (summary.statuses[ingredient.status] || 0) + 1;
+        summary.ingredientIds.push(ingredient.id);
+        if (ingredient.sugarProfile) {
+          var sub = ingredient.sugarProfile.label;
+          summary.subcategories[sub] = (summary.subcategories[sub] || 0) + 1;
+        }
+      });
+      return order.map(function (key) { return summaries[key]; });
+    }
+
+    function productAttributes(off, scan, classified) {
+      var certifications = [], found = {};
+      function add(id, label, source, evidence, verifiedBySource, scope) {
+        scope = scope || "product";
+        if (found[id]) {
+          var existing = found[id];
+          if (existing.sources.indexOf(source) === -1) existing.sources.push(source);
+          if (existing.evidenceItems.indexOf(evidence) === -1) existing.evidenceItems.push(evidence);
+          existing.verifiedBySource = existing.verifiedBySource || !!verifiedBySource;
+          existing.verified = existing.verified || !!verifiedBySource;
+          existing.databaseReported = existing.databaseReported || source === "product-database";
+          if (scope === "product") existing.scope = "product";
+          return;
+        }
+        var claim = { id: id, label: label, scope: scope, source: source, sources: [source],
+          evidence: evidence, evidenceItems: [evidence], verifiedBySource: !!verifiedBySource,
+          verified: !!verifiedBySource,
+          databaseReported: source === "product-database", independentlyVerified: false,
+          affectsScore: false, scoreImpact: 0 };
+        found[id] = claim;
+        certifications.push(claim);
+      }
+      ((scan && scan.labelClaims) || []).forEach(function (claim) {
+        add(claim.id, claim.label, claim.source, claim.evidence, claim.verified, claim.scope);
+      });
+      var tags = [], ingredientAnalysisTags = [], freeformLabels = "";
+      if (off) {
+        if (Array.isArray(off.labels_tags)) tags = tags.concat(off.labels_tags);
+        if (off.labels) freeformLabels = Array.isArray(off.labels) ? off.labels.join(" ") : String(off.labels);
+        if (Array.isArray(off.ingredients_analysis_tags)) ingredientAnalysisTags = ingredientAnalysisTags.concat(off.ingredients_analysis_tags);
+      }
+      var normalizedTags = tags.map(function (tag) {
+        return norm(String(tag).replace(/^\w+:/, "")).replace(/\s+/g, "-");
+      });
+      var labelsNorm = norm(freeformLabels);
+      var organicNegative = normalizedTags.some(function (tag) {
+        return /(?:^|-)(?:not|non)-organic$/.test(tag);
+      }) || /\b(?:not|non)[ -]organic\b/.test(labelsNorm);
+      var kosherNegative = normalizedTags.some(function (tag) {
+        return /(?:^|-)(?:not|non)-kosher$/.test(tag);
+      }) || /\b(?:not|non)[ -]kosher\b/.test(labelsNorm);
+      // A contradictory database merge is not evidence of certification. An
+      // explicit negative also suppresses captured-label claims so the UI does
+      // not present certainty when sources disagree.
+      if (organicNegative && found.organic) {
+        certifications = certifications.filter(function (claim) { return claim.id !== "organic"; });
+        delete found.organic;
+      }
+      if (kosherNegative && found.kosher) {
+        certifications = certifications.filter(function (claim) { return claim.id !== "kosher"; });
+        delete found.kosher;
+      }
+      var organicTag = !organicNegative && normalizedTags.some(function (tag) {
+        return tag === "organic" || /-organic$/.test(tag);
+      });
+      var kosherTag = !kosherNegative && normalizedTags.some(function (tag) {
+        return tag === "kosher" || /-kosher$/.test(tag);
+      });
+      var organicLabel = !organicNegative && /\borganic\b/.test(labelsNorm);
+      var kosherLabel = !kosherNegative && /\bkosher\b/.test(labelsNorm);
+      if (organicTag || organicLabel) add("organic", "Organic claim", "product-database",
+        "The product database reports a product-level organic label tag.", true);
+      if (kosherTag || kosherLabel) add("kosher", "Kosher claim", "product-database",
+        "The product database reports a product-level kosher label tag.", true);
+      var organicIngredients = (classified || []).filter(function (ingredient) { return ingredient.attributes && ingredient.attributes.organic; }).length;
+      var kosherSaltIngredients = (classified || []).filter(function (ingredient) { return ingredient.attributes && ingredient.attributes.kosherSalt; }).length;
+      var normalizedAnalysisTags = ingredientAnalysisTags.map(function (tag) { return norm(String(tag).replace(/^\w+:/, "")); });
+      return { certifications: certifications, organicIngredientCount: organicIngredients,
+        kosherSaltIngredientCount: kosherSaltIngredients,
+        productLevel: { organic: !!(found.organic && found.organic.scope === "product"),
+          kosher: !!(found.kosher && found.kosher.scope === "product") },
+        ingredientLevel: { organicCount: organicIngredients, kosherSaltNameCount: kosherSaltIngredients,
+          databaseAnalysisTags: normalizedAnalysisTags },
+        scoreImpact: 0,
+        note: "Organic and kosher information describes production or dietary certification. It does not automatically change the ingredient safety score." };
+    }
+
     function analyze(off, ingredientsText, productType) {
       var isFood = isFoodType(productType);
       var scan = parseIngredientScan(ingredientsText);
       var items = scan.items;
       var classified = items.map(function (it) {
-        var c = classify(it.norm, (it.raw || "").toLowerCase(), productType);
-        return { raw: it.raw, norm: it.norm, status: c.status, reason: c.reason,
+        var c = classify(it.norm, (it.raw || "").toLowerCase(), productType, it.attributes);
+        return { id: it.id, parentId: it.parentId, raw: it.raw, norm: it.norm, status: c.status, reason: c.reason,
           additive: c.additive || null, group: c.group || null, name: c.name || it.raw, canonicalName: c.canonicalName || it.norm,
-          enumber: c.enumber || "", depth: it.depth || 0, parent: it.parent || "", matchType: c.matchType,
-          matchedTerm: c.matchedTerm, matchConfidence: c.matchConfidence, evidence: c.evidence, scoreImpact: 0 };
+          enumber: c.enumber || "", depth: it.depth || 0, parent: it.parent || "", path: it.path || [it.raw],
+          canonicalPath: it.canonicalPath || [it.norm], position: it.position, order: it.order,
+          siblingPosition: it.siblingPosition, topLevelPosition: it.topLevelPosition,
+          role: c.role, category: c.category, why: c.why, attributes: c.attributes,
+          sugarProfile: c.sugarProfile || null, matchType: c.matchType, matchedTerm: c.matchedTerm,
+          matchConfidence: c.matchConfidence, recognitionConfidence: c.recognitionConfidence,
+          evidence: c.evidence, scoreImpact: 0, scoreApplied: false,
+          isContainer: false, isLeaf: true, coverageEligible: true,
+          duplicateOf: "", displayDuplicate: true };
+      });
+
+      // A known structural heading such as "colour (E150d)" is navigation,
+      // not another ingredient. Do not infer the same thing merely because an
+      // unknown term has children: "mystery compound (water)" must retain its
+      // unknown assessment until the parent itself is recognized.
+      var childCounts = {};
+      classified.forEach(function (ingredient) {
+        if (ingredient.parentId) childCounts[ingredient.parentId] = (childCounts[ingredient.parentId] || 0) + 1;
+      });
+      classified.forEach(function (ingredient) {
+        ingredient.isContainer = !!childCounts[ingredient.id];
+        ingredient.isLeaf = !ingredient.isContainer;
+        var genericContainer = isStructuralContainerName(ingredient.norm);
+        ingredient.coverageEligible = ingredient.isLeaf ||
+          (ingredient.isContainer && ingredient.status === "unknown" && !genericContainer);
+        if (ingredient.isContainer && genericContainer) {
+          ingredient.originalAssessment = { status: ingredient.status, group: ingredient.group,
+            role: ingredient.role, category: ingredient.category, why: ingredient.why,
+            additiveId: ingredient.additive && ingredient.additive.id || "" };
+          ingredient.sourceAdditive = ingredient.additive;
+          ingredient.additive = null;
+          ingredient.status = "ok";
+          ingredient.group = "formulaGroup";
+          ingredient.role = "formula-group";
+          ingredient.enumber = "";
+          ingredient.category = (groups.formulaGroup || {}).category || "Expanded ingredient group";
+          ingredient.reason = "Sub-ingredients disclosed below";
+          ingredient.why = (groups.formulaGroup || {}).whyFlagged || "The disclosed children are assessed individually.";
+          ingredient.matchType = "structural-parent";
+          ingredient.matchConfidence = "high";
+          ingredient.recognitionConfidence = "high";
+          ingredient.evidence = { basis: "ingredient hierarchy", referenceCount: 0,
+            scope: "Score-neutral parent; disclosed child ingredients are assessed individually." };
+        }
+      });
+
+      // Database enrichment can append E-number tags already represented by a
+      // named nested additive. Retain provenance in `classified`, but mark the
+      // code-only duplicate so UI/hierarchy views can omit the extra flat row.
+      var additiveOccurrences = {};
+      classified.forEach(function (ingredient) {
+        if (!ingredient.additive || !ingredient.additive.id) return;
+        var list = additiveOccurrences[ingredient.additive.id] || (additiveOccurrences[ingredient.additive.id] = []);
+        list.push(ingredient);
+      });
+      Object.keys(additiveOccurrences).forEach(function (key) {
+        var occurrences = additiveOccurrences[key];
+        if (occurrences.length < 2) return;
+        var preferred = occurrences.find(function (ingredient) {
+          return ingredient.depth > 0 && !/^e[\s-]?\d{3,4}[a-z]?$/i.test(ingredient.raw);
+        }) || occurrences.find(function (ingredient) { return ingredient.depth > 0; }) || occurrences[0];
+        occurrences.forEach(function (ingredient) {
+          if (ingredient === preferred) return;
+          // Only hide a flat, code-only row. A nested code is useful evidence
+          // beneath its parent and remains visible in the hierarchy.
+          if (ingredient.depth === 0 && /^e[\s-]?\d{3,4}[a-z]?$/i.test(ingredient.raw)) {
+            ingredient.duplicateOf = preferred.id;
+            ingredient.displayDuplicate = false;
+            ingredient.coverageEligible = false;
+          }
+        });
       });
 
       var counts = { avoid: 0, caution: 0, limit: 0, unknown: 0, recognized: 0 };
       var scoredKeys = {};
       var score = classified.length ? 100 : 50;
       var reasons = [];
-      classified.forEach(function (c, index) {
+      classified.forEach(function (c) {
+        if (c.displayDuplicate === false ||
+            (c.isContainer && !c.coverageEligible && c.status !== "avoid" && c.status !== "caution" && c.status !== "limit")) return;
+        var key = c.additive ? "additive:" + c.additive.id : (c.group || c.status) + ":" + c.canonicalName;
+        if (scoredKeys[key]) { c.scoreDuplicateOf = scoredKeys[key]; return; }
+        scoredKeys[key] = c.id;
         if (c.status === "avoid") counts.avoid++;
         else if (c.status === "caution") counts.caution++;
         else if (c.status === "limit") counts.limit++;
         else if (c.status === "unknown") counts.unknown++;
         else counts.recognized++;
-
-        var key = c.additive ? "additive:" + c.additive.id : (c.group || c.status) + ":" + c.canonicalName;
-        if (scoredKeys[key]) return; // nested declarations often repeat the same ingredient
-        scoredKeys[key] = true;
         var penalty = c.status === "avoid" ? 30 : c.status === "caution" ? 12 : c.status === "limit" ? 4 : c.status === "unknown" ? 3 : 0;
         // An added sweetener near the front of the declaration is a stronger
         // formulation signal. This is an ingredient-order rule, not a dose claim.
-        if (c.group === "addedSugar" && index < 3) penalty = 8;
+        if (c.group === "addedSugar" && c.depth === 0 && c.topLevelPosition <= 3) penalty = 8;
         c.scoreImpact = -penalty;
+        c.scoreApplied = true;
         score -= penalty;
       });
       if (counts.avoid) reasons.push({ d: -30 * counts.avoid, code: "avoid-ingredients", t: counts.avoid + " avoid-grade ingredient" + (counts.avoid > 1 ? "s" : "") });
@@ -473,11 +842,13 @@
       if (counts.unknown) reasons.push({ d: -3 * counts.unknown, code: "unknown-ingredients", t: counts.unknown + " unclassified ingredient" + (counts.unknown > 1 ? "s" : "") + "; no safety assumption made" });
       if (!classified.length) reasons.push({ d: 0, code: "missing-ingredients", t: "No usable ingredient list; rating is provisional" });
 
-      var recognizedN = classified.length - counts.unknown;
+      var coverageItems = classified.filter(function (ingredient) { return ingredient.coverageEligible; });
+      var coverageUnknown = coverageItems.filter(function (ingredient) { return ingredient.status === "unknown"; }).length;
+      var recognizedN = coverageItems.length - coverageUnknown;
       var coverage = {
-        total: classified.length, recognized: recognizedN, unknown: counts.unknown, rejected: scan.rejected.length,
-        percent: classified.length ? Math.round(recognizedN * 100 / classified.length) : 0,
-        complete: !!classified.length && counts.unknown === 0 && scan.rejected.length === 0
+        total: coverageItems.length, recognized: recognizedN, unknown: coverageUnknown, rejected: scan.rejected.length,
+        percent: coverageItems.length ? Math.round(recognizedN * 100 / coverageItems.length) : 0,
+        complete: !!coverageItems.length && coverageUnknown === 0 && scan.rejected.length === 0
       };
 
       // Nutrition / processing adjustments apply to food only.
@@ -507,7 +878,7 @@
       }
       function isAddedSugar(c) { return c.group === "addedSugar" || (c.additive && c.additive.category === "Added sugar"); }
       var hasAddedSugar = classified.some(isAddedSugar);
-      var prominentAddedSugar = classified.some(function (c, i) { return isAddedSugar(c) && i < 3; });
+      var prominentAddedSugar = classified.some(function (c) { return isAddedSugar(c) && c.depth === 0 && c.topLevelPosition <= 3; });
       if (counts.avoid) applyCap(29, "avoid-cap", "avoid-grade ingredient present");
       else if (counts.caution >= 2) applyCap(49, "multiple-caution-cap", "multiple caution-grade ingredients");
       else if (counts.caution === 1) applyCap(69, "caution-cap", "caution-grade ingredient present");
@@ -529,12 +900,23 @@
       var confidence = !classified.length ? "none" : coverage.percent >= 90 && scan.quality.confidence === "high" ? "high" : coverage.percent >= 60 && scan.quality.confidence !== "low" ? "medium" : "low";
       var allergens = detectAllergens(classified, scan);
       var badge = classified.length ? bandFor(score, hasAvoid) : { label: "Not rated", cls: "mid" };
+      var hierarchy = buildIngredientHierarchy(classified);
+      var categorySummaries = summarizeIngredientCategories(classified);
+      var attributes = productAttributes(off, scan, classified);
+      var maxDepth = classified.reduce(function (max, ingredient) { return Math.max(max, ingredient.depth || 0); }, 0);
+      var duplicateCount = classified.filter(function (ingredient) { return ingredient.displayDuplicate === false; }).length;
+      var containerCount = classified.filter(function (ingredient) { return ingredient.isContainer; }).length;
 
       return { classified: classified, score: score, badge: badge, nutrition: nutrition,
         flaggedCount: flaggedCount, scoreReasons: reasons, productType: productType || "food", coverage: coverage,
         ratingConfidence: confidence, scanQuality: scan.quality, rejectedFragments: scan.rejected,
-        allergens: allergens, methodology: { version: "2.0", weights: { avoid: -30, caution: -12, limit: -4, unknown: -3 },
-          note: "Ingredient order, category flags, nutrition and database coverage are screened separately; this is not medical advice." } };
+        allergens: allergens, ingredientHierarchy: hierarchy, categorySummaries: categorySummaries,
+        ingredientStats: { topLevel: hierarchy.length, nested: classified.filter(function (ingredient) { return ingredient.depth > 0 && ingredient.displayDuplicate !== false; }).length,
+          maxDepth: maxDepth, containers: containerCount, leavesAssessed: coverage.total, duplicatesSuppressed: duplicateCount },
+        productAttributes: attributes,
+        methodology: { version: "2.1", weights: { avoid: -30, caution: -12, limit: -4, unknown: -3 },
+          claimPolicy: "Organic and kosher metadata is displayed separately and has no automatic score bonus.",
+          note: "Ingredient hierarchy, order, roles, category flags, nutrition and database coverage are screened separately; this is not medical advice." } };
     }
 
     function detectAllergens(classified, scan, requestedKeys) {
@@ -557,7 +939,14 @@
           return false;
         }
         (classified || []).forEach(function (c) {
-          if (matches(tokenize(c.norm), false) && hits.indexOf(c.raw) === -1) { hits.push(c.raw); sources.push("ingredient-list"); }
+          var rawTokens = tokenize(c.norm || ""), canonicalTokens = tokenize(c.canonicalName || "");
+          var ingredientMatch = matches(rawTokens, false) ||
+            ((c.canonicalName || "") !== (c.norm || "") && matches(canonicalTokens, false));
+          if (ingredientMatch && hits.indexOf(c.raw) === -1) { hits.push(c.raw); sources.push("ingredient-list"); }
+          ((c.attributes && c.attributes.sourceQualifiers) || []).forEach(function (qualifier) {
+            var label = c.raw + " (" + qualifier + ")";
+            if (matches(tokenize(qualifier), true) && hits.indexOf(label) === -1) { hits.push(label); sources.push("ingredient-source-qualifier"); }
+          });
         });
         declared.forEach(function (term) {
           if (matches(tokenize(term), true) && hits.indexOf(term) === -1) { hits.push(term); sources.push("contains-statement"); }
@@ -683,6 +1072,7 @@
         additives: foodAdditives, cosmetics: cosmeticAdditives, all: allAdditives,
         groups: groups, bannedMap: bannedMap, eNumbers: DATA.eNumbers || [],
         seedOils: DATA.seedOils || [], addedSugars: DATA.addedSugars || [],
+        addedSugarProfiles: DATA.addedSugarProfiles || [], ingredientRoleMeta: DATA.ingredientRoleMeta || {},
         artificialSweeteners: DATA.artificialSweeteners || [], vagueTerms: DATA.vagueTerms || [],
         cleanIngredients: DATA.cleanIngredients || [], recognizedIngredients: DATA.recognizedIngredients || [], processingMarkers: DATA.processingMarkers || [],
         ingredientAliases: DATA.ingredientAliases || {}, allergenMap: DATA.allergenMap || {},

@@ -589,3 +589,220 @@ test("declared allergens are captured while plant-milk names avoid dairy false p
   assert.strictEqual(peanut.confidence, "label-declared");
   assert.ok(peanut.sources.includes("contains-statement"));
 });
+
+/* ---------------------- v2.1 hierarchy, roles, claims and sugar nuance */
+test("deep ingredient hierarchy preserves parent IDs, paths and declaration order", () => {
+  const scan = engine.parseIngredientScan(
+    "INGREDIENTS: Cookie base (chocolate pieces (coconut sugar, cocoa butter), oat flour), sea salt"
+  );
+  const byName = Object.fromEntries(scan.items.map((item) => [item.norm, item]));
+  assert.deepStrictEqual(byName["coconut sugar"].path, ["Cookie base", "chocolate pieces", "coconut sugar"]);
+  assert.deepStrictEqual(byName["coconut sugar"].canonicalPath, ["cookie base", "chocolate pieces", "coconut sugar"]);
+  assert.strictEqual(byName["coconut sugar"].depth, 2);
+  assert.strictEqual(byName["coconut sugar"].parentId, byName["chocolate pieces"].id);
+  assert.strictEqual(byName["chocolate pieces"].parentId, byName["cookie base"].id);
+  assert.strictEqual(byName["coconut sugar"].topLevelPosition, 1);
+  assert.strictEqual(byName["sea salt"].topLevelPosition, 2);
+  assert.ok(scan.items.every((item, index) => item.position === index + 1 && item.order === index + 1));
+});
+
+test("the same sub-ingredient under different parents is not flattened away", () => {
+  const scan = engine.parseIngredientScan("Dark pieces (cocoa, sugar), light pieces (cocoa, milk)");
+  const cocoa = scan.items.filter((item) => item.norm === "cocoa");
+  assert.strictEqual(cocoa.length, 2);
+  assert.notStrictEqual(cocoa[0].parentId, cocoa[1].parentId);
+  assert.deepStrictEqual(cocoa.map((item) => item.path), [["Dark pieces", "cocoa"], ["light pieces", "cocoa"]]);
+});
+
+test("coconut sugar is nuanced added sugar, not a hazard or a clean whole food", () => {
+  const c = engine.classify(engine.norm("Organic Coconut Sugar"), "Organic Coconut Sugar", "food");
+  assert.strictEqual(c.status, "limit");
+  assert.strictEqual(c.group, "addedSugar");
+  assert.strictEqual(c.role, "added-sweetener");
+  assert.strictEqual(c.sugarProfile.id, "coconut-derived");
+  assert.strictEqual(c.attributes.organic, true);
+  assert.strictEqual(c.attributes.addedSugar, true);
+  assert.match(c.sugarProfile.explanation, /not treated as a hazard/i);
+});
+
+test("functional roles distinguish preservatives, colors, texture agents and fats", () => {
+  assert.strictEqual(engine.classify(engine.norm("Sodium Benzoate"), "Sodium Benzoate", "food").role, "preservative");
+  assert.strictEqual(engine.classify(engine.norm("Red 40"), "Red 40", "food").role, "color");
+  assert.strictEqual(engine.classify(engine.norm("Polysorbate 80"), "Polysorbate 80", "food").role, "texture-agent");
+  assert.strictEqual(engine.classify(engine.norm("Olive Oil"), "Olive Oil", "food").role, "oil-or-fat");
+});
+
+test("organic qualifiers attach to ingredients without becoming fake children", () => {
+  const scan = engine.parseIngredientScan("Oats (organic), cocoa, sea salt");
+  assert.deepStrictEqual(scan.items.map((item) => item.norm), ["oats", "cocoa", "sea salt"]);
+  assert.strictEqual(scan.items[0].attributes.organic, true);
+  assert.deepStrictEqual(scan.items[0].attributes.qualifiers, ["organic"]);
+});
+
+test("organic and kosher metadata is visible but score-neutral", () => {
+  const ingredients = "Organic Oats, Organic Coconut Sugar, Kosher Salt";
+  const plain = engine.analyze({}, ingredients, "food");
+  const certified = engine.analyze({ labels_tags: ["en:organic", "en:kosher"] }, ingredients, "food");
+  const withoutQualifiers = engine.analyze({}, "Oats, Coconut Sugar, Salt", "food");
+  assert.strictEqual(certified.score, plain.score);
+  assert.strictEqual(plain.score, withoutQualifiers.score, "ingredient qualifiers must not add a score bonus");
+  assert.strictEqual(certified.productAttributes.scoreImpact, 0);
+  assert.deepStrictEqual(certified.productAttributes.certifications.map((claim) => claim.id), ["organic", "kosher"]);
+  assert.ok(certified.productAttributes.certifications.every((claim) => claim.affectsScore === false));
+  assert.ok(certified.productAttributes.certifications.every((claim) => claim.scope === "product"));
+  assert.ok(certified.productAttributes.certifications.every((claim) => claim.verifiedBySource === true));
+  assert.deepStrictEqual(certified.productAttributes.productLevel, { organic: true, kosher: true });
+  assert.strictEqual(certified.productAttributes.organicIngredientCount, 2);
+  assert.strictEqual(certified.productAttributes.kosherSaltIngredientCount, 1);
+  assert.deepStrictEqual(certified.productAttributes.ingredientLevel,
+    { organicCount: 2, kosherSaltNameCount: 1, databaseAnalysisTags: [] });
+
+  const saltOnly = engine.analyze({}, "Kosher Salt", "food");
+  assert.deepStrictEqual(saltOnly.productAttributes.certifications, [], "kosher salt is not a kosher certification claim");
+
+  const negativeTags = engine.analyze({ labels_tags: ["en:non-organic", "en:not-kosher"] }, "Oats", "food");
+  assert.deepStrictEqual(negativeTags.productAttributes.certifications, []);
+
+  const conflictingTags = engine.analyze({
+    labels_tags: ["en:organic", "en:not-organic", "en:kosher", "en:not-kosher"]
+  }, "USDA Organic Oats", "food");
+  assert.deepStrictEqual(conflictingTags.productAttributes.certifications, [],
+    "explicit negative tags must suppress conflicting positive or captured-label claims");
+  assert.deepStrictEqual(conflictingTags.productAttributes.productLevel, { organic: false, kosher: false });
+
+  const analysisOnly = engine.analyze({ ingredients_analysis_tags: ["en:organic"] }, "Oats", "food");
+  assert.deepStrictEqual(analysisOnly.productAttributes.certifications, [], "ingredient analysis is not a product certification");
+  assert.deepStrictEqual(analysisOnly.productAttributes.ingredientLevel.databaseAnalysisTags, ["organic"]);
+
+  const ingredientClaimOnly = engine.analyze({}, "Certified Organic Oats, Salt", "food");
+  assert.strictEqual(ingredientClaimOnly.productAttributes.ingredientLevel.organicCount, 1);
+  assert.strictEqual(ingredientClaimOnly.productAttributes.productLevel.organic, false);
+  assert.strictEqual(ingredientClaimOnly.productAttributes.certifications[0].scope, "captured-label");
+});
+
+test("analysis exposes explainable hierarchy, roles and grouped category summaries", () => {
+  const res = engine.analyze(null,
+    "Oat bar (rolled oats, coconut sugar, cocoa butter), natural flavor, vitamin B12", "food");
+  const coconut = res.classified.find((item) => item.norm === "coconut sugar");
+  assert.ok(coconut);
+  assert.deepStrictEqual(coconut.path, ["Oat bar", "coconut sugar"]);
+  assert.strictEqual(coconut.role, "added-sweetener");
+  assert.strictEqual(coconut.recognitionConfidence, "high");
+  assert.strictEqual(typeof coconut.scoreImpact, "number");
+  assert.strictEqual(typeof coconut.why, "string");
+  assert.strictEqual(coconut.scoreApplied, true);
+  assert.strictEqual(res.ingredientStats.topLevel, 3);
+  assert.strictEqual(res.ingredientStats.maxDepth, 1);
+  assert.strictEqual(res.ingredientHierarchy[0].children.length, 3);
+  const sugarSummary = res.categorySummaries.find((summary) => summary.key === "added-sweetener");
+  assert.ok(sugarSummary);
+  assert.strictEqual(sugarSummary.count, 1);
+  assert.strictEqual(sugarSummary.subcategories["Coconut-derived added sugar"], 1);
+  assert.ok(res.categorySummaries.some((summary) => summary.key === "undisclosed-blend"));
+  assert.ok(res.categorySummaries.some((summary) => summary.key === "nutrient-or-culture"));
+
+  const detail = engine.ingredientDetail(coconut);
+  ["id", "parentId", "path", "depth", "topLevelPosition", "position", "scoreImpact", "scoreApplied",
+    "recognitionConfidence", "matchType", "evidence", "category", "why"]
+    .forEach((field) => assert.notStrictEqual(detail[field], undefined, "detail missing " + field));
+  assert.deepStrictEqual(detail.path, coconut.path);
+  assert.strictEqual(detail.scoreImpact, coconut.scoreImpact);
+});
+
+test("formula parents are score-neutral and flat database E-number duplicates are suppressed", () => {
+  const res = engine.analyze(null,
+    "Water, sugar, colour (E150d), acid (phosphoric acid), emulsifiers (soy lecithin), E338", "food");
+  const colour = res.classified.find((item) => item.norm === "colour");
+  const acid = res.classified.find((item) => item.norm === "acid");
+  const emulsifiers = res.classified.find((item) => item.norm === "emulsifiers");
+  [colour, acid, emulsifiers].forEach((item) => {
+    assert.strictEqual(item.role, "formula-group");
+    assert.strictEqual(item.status, "ok");
+    assert.strictEqual(item.isContainer, true);
+    assert.strictEqual(item.coverageEligible, false);
+    assert.strictEqual(item.scoreApplied, false);
+    assert.strictEqual(item.scoreImpact, 0);
+  });
+  assert.deepStrictEqual(res.coverage, { total: 5, recognized: 5, unknown: 0, rejected: 0, percent: 100, complete: true });
+  assert.ok(!res.scoreReasons.some((reason) => reason.code === "unknown-ingredients"));
+
+  const e338 = res.classified.filter((item) => item.enumber === "E338" || item.norm === "e338");
+  const flatCode = e338.find((item) => item.depth === 0 && item.norm === "e338");
+  assert.ok(flatCode);
+  assert.strictEqual(flatCode.displayDuplicate, false);
+  assert.ok(flatCode.duplicateOf);
+  assert.ok(!res.ingredientHierarchy.some((root) => root.name === "E338"));
+  assert.strictEqual(res.ingredientStats.duplicatesSuppressed, 1);
+  assert.ok(res.categorySummaries.some((summary) => summary.key === "formula-group"));
+});
+
+test("unknown parents with children remain unknown and affect coverage and score", () => {
+  const res = engine.analyze(null, "Mystery compound (water), salt", "food");
+  const mystery = res.classified.find((item) => item.norm === "mystery compound");
+
+  assert.ok(mystery);
+  assert.strictEqual(mystery.isContainer, true);
+  assert.strictEqual(mystery.isLeaf, false);
+  assert.strictEqual(mystery.status, "unknown");
+  assert.strictEqual(mystery.group, "unknown");
+  assert.strictEqual(mystery.role, "unknown");
+  assert.strictEqual(mystery.matchType, "none");
+  assert.strictEqual(mystery.recognitionConfidence, "low");
+  assert.strictEqual(mystery.coverageEligible, true);
+  assert.strictEqual(mystery.scoreApplied, true);
+  assert.strictEqual(mystery.scoreImpact, -3);
+  assert.deepStrictEqual(res.coverage,
+    { total: 3, recognized: 2, unknown: 1, rejected: 0, percent: 67, complete: false });
+  assert.ok(res.scoreReasons.some((reason) => reason.code === "unknown-ingredients" && reason.d === -3));
+  assert.ok(!res.categorySummaries.some((summary) =>
+    summary.key === "formula-group" && summary.ingredientIds.includes(mystery.id)));
+});
+
+test("nested coconut sugar is added sugar without an unsupported prominence penalty", () => {
+  const res = engine.analyze({ nova_group: 4, nutriments: {} }, "Cookie base (oats, coconut sugar), salt", "food");
+  const coconut = res.classified.find((item) => item.norm === "coconut sugar");
+  assert.ok(coconut);
+  assert.strictEqual(coconut.depth, 1);
+  assert.strictEqual(coconut.scoreImpact, -4);
+  assert.ok(!res.scoreReasons.some((reason) => reason.code === "sugary-upf-cap"));
+});
+
+test("parenthetical purposes and additive aliases remain attributes, not fake ingredients", () => {
+  const purpose = engine.analyze(null, "Potassium benzoate (to protect taste)", "food");
+  assert.deepStrictEqual(purpose.classified.map((item) => item.norm), ["potassium benzoate"]);
+  assert.deepStrictEqual(purpose.classified[0].attributes.purposes, ["to protect taste"]);
+  assert.strictEqual(purpose.coverage.percent, 100);
+
+  const alias = engine.analyze(null, "Potassium benzoate (E212)", "food");
+  assert.deepStrictEqual(alias.classified.map((item) => item.norm), ["potassium benzoate"]);
+  assert.deepStrictEqual(alias.classified[0].attributes.aliases, ["e212"]);
+
+  const structural = engine.parseIngredientScan("Colour (E150d)");
+  assert.deepStrictEqual(structural.items.map((item) => item.norm), ["colour", "e150d"]);
+});
+
+test("allergen source qualifiers are retained without becoming extra ingredient rows", () => {
+  const res = engine.analyze(null, "Lecithin (soy), cocoa", "food");
+  assert.deepStrictEqual(res.classified.map((item) => item.norm), ["lecithin", "cocoa"]);
+  assert.deepStrictEqual(res.classified[0].attributes.sourceQualifiers, ["soy"]);
+  assert.ok(res.allergens.some((alert) => alert.key === "soy"));
+});
+
+test("common multilingual label terms normalize without swallowing claims into ingredients", () => {
+  const res = engine.analyze(null,
+    "Sucre, huile de palme, noisettes, lait ecreme en poudre, emulsifiants: lecithines de soja, sans gluten", "food");
+  const byRaw = Object.fromEntries(res.classified.map((item) => [item.norm, item]));
+  assert.strictEqual(byRaw.sucre.canonicalName, "sugar");
+  assert.strictEqual(byRaw.sucre.role, "added-sweetener");
+  assert.strictEqual(byRaw["huile de palme"].canonicalName, "palm oil");
+  assert.strictEqual(byRaw.noisettes.canonicalName, "hazelnuts");
+  assert.ok(!res.classified.some((item) => item.norm === "sans gluten"));
+  const emulsifier = res.classified.find((item) => item.norm === "emulsifiants");
+  const lecithin = res.classified.find((item) => item.norm === "lecithines de soja");
+  assert.ok(emulsifier && lecithin);
+  assert.strictEqual(emulsifier.role, "formula-group");
+  assert.strictEqual(lecithin.parentId, emulsifier.id);
+  assert.ok(res.allergens.some((alert) => alert.key === "treenut"));
+  assert.ok(res.allergens.some((alert) => alert.key === "dairy"));
+  assert.ok(res.allergens.some((alert) => alert.key === "soy"));
+});

@@ -1069,12 +1069,11 @@ noscript {
 }
 
 .tabs {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 7px;
-  margin: 2px -18px 0;
-  padding: 0 18px 6px;
-  overflow-x: auto;
-  scrollbar-width: none;
+  margin: 2px 0 0;
+  padding: 0 0 6px;
 }
 
 .tabs::-webkit-scrollbar { display: none; }
@@ -1092,7 +1091,9 @@ noscript {
 }
 
 .tab {
+  width: 100%;
   padding: 9px 14px;
+  text-align: center;
 }
 
 .tab.on,
@@ -2130,6 +2131,429 @@ noscript {
   margin-top: 10px;
 }
 
+.ingredient-raw p {
+  margin: 9px 0 0;
+  color: var(--faint);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.concern-row {
+  width: 100%;
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.concern-row:active {
+  background: var(--surface-soft);
+}
+
+.trust-facets {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.trust-facets > div,
+.ingredient-facts > div {
+  display: grid;
+  gap: 3px;
+  padding: 9px 10px;
+  border: 1px solid var(--brd);
+  border-radius: 12px;
+  background: var(--surface-elev);
+}
+
+.trust-facets span,
+.ingredient-facts span,
+.evidence-box span {
+  color: var(--faint);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.trust-facets b,
+.ingredient-facts b,
+.evidence-box b {
+  color: var(--txt);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.product-context {
+  padding-bottom: 10px;
+}
+
+.context-list {
+  display: grid;
+  gap: 8px;
+  padding: 0 10px;
+}
+
+.context-card {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+  padding: 11px;
+  border: 1px solid var(--brd);
+  border-radius: 14px;
+  background: var(--surface-elev);
+}
+
+.context-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 11px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.context-title {
+  color: var(--txt);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.context-meta {
+  margin-top: 3px;
+  color: var(--mut);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.context-card p,
+.context-note {
+  margin: 6px 0 0;
+  color: var(--mut);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.neutral-chip {
+  padding: 4px 7px;
+  border: 1px solid var(--brd);
+  border-radius: 999px;
+  color: var(--mut);
+  font-size: 9px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.context-note {
+  padding: 0 12px 4px;
+}
+
+.ingredient-explorer {
+  padding-bottom: 12px;
+}
+
+.section-kicker {
+  color: var(--txt);
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: -0.01em;
+}
+
+.section-explain {
+  margin-top: 3px;
+  color: var(--mut);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.ingredient-roles {
+  padding: 4px 12px 12px;
+}
+
+.role-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 9px;
+}
+
+.role-card {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--brd);
+  border-radius: 13px;
+  background: var(--surface-elev);
+}
+
+.role-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 5px;
+  color: var(--txt);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.role-card-top b {
+  color: var(--mut);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.role-card-count {
+  margin-top: 4px;
+  color: var(--accent);
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.role-card p {
+  margin: 6px 0 0;
+  color: var(--mut);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.formula-map {
+  margin: 2px 10px 0;
+  overflow: hidden;
+  border: 1px solid var(--brd);
+  border-radius: 15px;
+  background: var(--surface-elev);
+}
+
+.formula-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px;
+  border-bottom: 1px solid var(--brd);
+}
+
+.formula-stats {
+  flex: 0 0 auto;
+  padding: 5px 7px;
+  border-radius: 9px;
+  background: var(--surface-soft);
+  color: var(--mut);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.formula-stats b {
+  color: var(--txt);
+}
+
+.formula-node + .formula-node > .formula-row,
+.formula-children > .formula-node > .formula-row {
+  border-top: 1px solid var(--brd);
+}
+
+.formula-row {
+  position: relative;
+  display: grid;
+  width: 100%;
+  min-height: 70px;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 10px 10px calc(12px + (var(--depth, 0) * 20px));
+  border: 0;
+  background: transparent;
+  color: var(--txt);
+  font: inherit;
+  text-align: left;
+}
+
+.formula-row:active {
+  background: var(--surface-soft);
+}
+
+.formula-rail {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  left: calc(16px + ((var(--depth, 0) - 1) * 20px));
+  width: 1px;
+  background: var(--brd-strong);
+}
+
+.depth-0 > .formula-row > .formula-rail {
+  display: none;
+}
+
+.formula-dot {
+  position: relative;
+  z-index: 1;
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--surface-elev);
+  border-radius: 999px;
+  background: var(--node-color, var(--mut));
+  box-shadow: 0 0 0 1px var(--node-color, var(--mut));
+}
+
+.formula-main,
+.formula-side {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.formula-title {
+  overflow-wrap: anywhere;
+  color: var(--txt);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.formula-location {
+  margin-top: 2px;
+  color: var(--mut);
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.formula-chips,
+.detail-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.formula-chip,
+.detail-chip {
+  display: inline-flex;
+  min-height: 20px;
+  align-items: center;
+  padding: 3px 6px;
+  border: 1px solid var(--brd);
+  border-radius: 999px;
+  color: var(--mut);
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.formula-chip.nutrition,
+.detail-chip.nutrition { border-color: rgba(227, 173, 70, 0.36); color: var(--mid); }
+.formula-chip.certification,
+.detail-chip.certification { border-color: rgba(99, 187, 130, 0.36); color: var(--good); }
+.formula-chip.processing,
+.detail-chip.processing { border-color: rgba(133, 151, 207, 0.36); color: #aebaf1; }
+
+.formula-side {
+  align-items: flex-end;
+  gap: 5px;
+}
+
+.formula-impact {
+  color: var(--mut);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.status-tag.group {
+  background: rgba(133, 151, 207, 0.14);
+  color: #aebaf1;
+}
+
+.ingredient-context {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 14px;
+  border: 1px solid var(--brd);
+  border-radius: 17px;
+  background: var(--surface);
+}
+
+.ingredient-path {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  color: var(--mut);
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.ingredient-path span:last-of-type {
+  color: var(--txt);
+}
+
+.ingredient-path i {
+  color: var(--faint);
+  font-style: normal;
+}
+
+.ingredient-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.detail-chips {
+  margin-top: 0;
+}
+
+.ingredient-nuance,
+.assessment-note,
+.evidence-box {
+  padding: 11px;
+  border: 1px solid var(--brd);
+  border-radius: 13px;
+  background: var(--surface-elev);
+  color: var(--mut);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.ingredient-nuance b {
+  color: var(--txt);
+  font-size: 11px;
+}
+
+.ingredient-nuance p,
+.evidence-box p {
+  margin: 5px 0 0;
+}
+
+.ingredient-nuance.sugar {
+  border-color: rgba(227, 173, 70, 0.36);
+  background: rgba(227, 173, 70, 0.07);
+}
+
+.ingredient-nuance.organic {
+  border-color: rgba(99, 187, 130, 0.36);
+  background: rgba(99, 187, 130, 0.07);
+}
+
+.evidence-box {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.evidence-box > div {
+  display: grid;
+  gap: 3px;
+}
+
+.evidence-box p {
+  grid-column: 1 / -1;
+}
+
 /* Score explanation and verdict hooks keep strictness visible at a glance. */
 .score-summary {
   display: grid;
@@ -2431,10 +2855,10 @@ button:focus:not(:focus-visible) {
   }
 
   .tabs {
-    margin-right: -14px;
-    margin-left: -14px;
-    padding-right: 14px;
-    padding-left: 14px;
+    margin-right: 0;
+    margin-left: 0;
+    padding-right: 0;
+    padding-left: 0;
   }
 
   .phead-img {
@@ -2494,10 +2918,10 @@ button:focus:not(:focus-visible) {
   }
 
   .tabs {
-    margin-right: -32px;
-    margin-left: -32px;
-    padding-right: 32px;
-    padding-left: 32px;
+    margin-right: 0;
+    margin-left: 0;
+    padding-right: 0;
+    padding-left: 0;
   }
 
   .hero {
