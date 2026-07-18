@@ -20,6 +20,11 @@ require(path.join(WWW, "data-cosmetics.js"));
 
 const ENGINE_FACTORY = require(path.join(WWW, "engine.js"));
 const engine = ENGINE_FACTORY.buildEngine(global.window.CB_DATA, global.window.CB_DATA_COSMETICS);
+const cosmeticData = global.window.CB_DATA_COSMETICS;
+
+function reference(id) {
+  return cosmeticData.referenceProducts.find((item) => item.id === id);
+}
 
 /* ----------------------------------------- singleton facade (app.js path) */
 test("makeSingleton + init exposes the full engine surface", () => {
@@ -111,11 +116,12 @@ test("cosmetic ingredient classifies via the cosmetic DB", () => {
   assert.ok(c.additive, "should attach the cosmetic additive record");
 });
 
-test("cosmetic concern bucket keyword fallback works", () => {
-  // "limonene" is in the fragranceAllergen bucket, not the rich additive list.
-  const c = engine.classify(engine.norm("Limonene"), "limonene", "beauty");
-  assert.strictEqual(c.status, "caution");
-  assert.strictEqual(c.group, "fragranceAllergen");
+test("declared fragrance allergens change with exposure context", () => {
+  const rinseOff = engine.classify(engine.norm("Limonene"), "limonene", "beauty", {}, "rinse-off-body");
+  const leaveOn = engine.classify(engine.norm("Limonene"), "limonene", "beauty", {}, "leave-on-underarm");
+  assert.strictEqual(rinseOff.status, "limit");
+  assert.strictEqual(leaveOn.status, "caution");
+  assert.strictEqual(leaveOn.additive.id, "declared-fragrance-allergens");
 });
 
 test("analyze suppresses food nutrition scoring for beauty products", () => {
@@ -484,4 +490,441 @@ test("evidence-backed avoid ratings remain unchanged after calibration", () => {
       const c = engine.classify(engine.norm(n), n, "food");
       assert.strictEqual(c.status, exp, n + " should stay " + exp);
     });
+});
+
+/* ---------------------- v2 parser: nested labels and conservative OCR QA */
+test("v2 parser flattens nested sub-ingredients without losing parent context", () => {
+  const scan = engine.parseIngredientScan(
+    "INGREDIENTS: Enriched flour (wheat flour, niacin, reduced iron, folic acid), " +
+    "chocolate chips (sugar, cocoa butter, soy lecithin), salt. CONTAINS: WHEAT, MILK, SOY. Nutrition Facts"
+  );
+  const byNorm = Object.fromEntries(scan.items.map((x) => [x.norm, x]));
+  ["enriched flour", "wheat flour", "niacin", "reduced iron", "folic acid", "chocolate chips", "sugar", "cocoa butter", "soy lecithin", "salt"]
+    .forEach((name) => assert.ok(byNorm[name], "missing nested ingredient " + name));
+  assert.strictEqual(byNorm["soy lecithin"].depth, 1);
+  assert.strictEqual(byNorm["soy lecithin"].parent, "chocolate chips");
+  assert.ok(!scan.items.some((x) => /contains|nutrition facts/i.test(x.raw)), "label sections must not leak into ingredients");
+  assert.deepStrictEqual(scan.declaredAllergens, ["wheat", "milk", "soy"]);
+});
+
+test("v2 parser does not split legitimate 'and' inside an ingredient name", () => {
+  const got = engine.parseIngredients("Water, mono- and diglycerides, salt").map((x) => x.norm);
+  assert.ok(got.includes("mono- and diglycerides"));
+  assert.ok(!got.includes("mono-"));
+});
+
+test("v2 parser rejects barcode and nutrition OCR slop", () => {
+  const scan = engine.parseIngredientScan("INGREDIENTS: Water, Sugar, 012345678901, Serving Size 1 cup, Sodium 200mg");
+  assert.deepStrictEqual(scan.items.map((x) => x.norm), ["water", "sugar"]);
+  assert.ok(scan.rejected.length >= 2);
+  assert.ok(["low", "medium"].includes(scan.quality.confidence));
+});
+
+test("normalization folds accents and standardizes hyphenated E-numbers", () => {
+  assert.strictEqual(ENGINE_FACTORY.norm("Caf\u00e9 E-471"), "cafe e471");
+  const c = engine.classify(ENGINE_FACTORY.norm("E-466"), "E-466", "food");
+  assert.strictEqual(c.status, "caution");
+});
+
+/* ---------------------------- v2 matching, coverage and evidence metadata */
+test("ingredient aliases resolve to a canonical database name", () => {
+  const c = engine.classify(engine.norm("Vitamin B12"), "vitamin b12", "food");
+  assert.strictEqual(c.status, "good");
+  assert.strictEqual(c.group, "recognized");
+  assert.strictEqual(c.canonicalName, "cyanocobalamin");
+  assert.ok(c.evidence && /Screening signal/.test(c.evidence.scope));
+});
+
+test("processing markers are strict preferences, not fabricated hazard claims", () => {
+  const c = engine.classify(engine.norm("Pea Protein Isolate"), "pea protein isolate", "food");
+  assert.strictEqual(c.status, "limit");
+  assert.strictEqual(c.group, "processed");
+  assert.match(engine.ingredientDetail({ raw: "Pea Protein Isolate", name: "Pea Protein Isolate", status: c.status, group: c.group }).whyFlagged, /does not claim/i);
+});
+
+test("analysis reports recognition coverage and per-ingredient score provenance", () => {
+  const res = engine.analyze(null, "Water, Oats, Qzxyl Compound", "food");
+  assert.deepStrictEqual(res.coverage, { total: 3, recognized: 2, unknown: 1, rejected: 0, percent: 67, complete: false });
+  assert.strictEqual(res.ratingConfidence, "medium");
+  assert.ok(res.classified.every((x) => typeof x.scoreImpact === "number"));
+  assert.ok(res.classified.every((x) => x.evidence && x.matchConfidence));
+  assert.ok(res.scoreReasons.some((x) => x.code === "partial-coverage-cap"));
+});
+
+test("missing ingredient text is explicitly not rated instead of receiving 100", () => {
+  const res = engine.analyze(null, "", "food");
+  assert.strictEqual(res.badge.label, "Not rated");
+  assert.strictEqual(res.ratingConfidence, "none");
+  assert.strictEqual(res.coverage.percent, 0);
+  assert.ok(res.scoreReasons.some((x) => x.code === "missing-ingredients"));
+});
+
+/* ----------------------- v2 strict, deterministic score caps (soda case) */
+test("Nutri-Score E hard cap keeps a sugary ultra-processed soda Bad", () => {
+  const off = { nova_group: 4, nutriscore_grade: "e", nutriments: { "sugars_100g": 10.6, "energy-kcal_100g": 42 } };
+  const ingredients = "Carbonated Water, High Fructose Corn Syrup, Caramel Color, Phosphoric Acid, Natural Flavors, Caffeine";
+  const res = engine.analyze(off, ingredients, "food");
+  assert.ok(res.score <= 29, "Nutri-Score E must cap at 29, got " + res.score);
+  assert.strictEqual(res.badge.cls, "bad");
+  assert.ok(res.scoreReasons.some((x) => x.code === "nutriscore-e-cap" && x.cap === 29));
+  assert.ok(res.scoreReasons.some((x) => x.code === "sugary-upf-cap"));
+});
+
+test("Nutri-Score D and incomplete coverage cannot rate Good", () => {
+  const d = engine.analyze({ nutriscore_grade: "d", nutriments: {} }, "Water, Oats", "food");
+  assert.ok(d.score <= 49);
+  assert.notStrictEqual(d.badge.cls, "good");
+  const incomplete = engine.analyze(null, "Water, Qzxyl, Plorvane", "food");
+  assert.ok(incomplete.score <= 49);
+  assert.ok(incomplete.scoreReasons.some((x) => x.code === "low-coverage-cap"));
+});
+
+test("score output is deterministic for identical inputs", () => {
+  const off = { nova_group: 4, nutriments: { "sugars_100g": 12 } };
+  const one = engine.analyze(off, "Water, Cane Sugar, Natural Flavor", "food");
+  const two = engine.analyze(off, "Water, Cane Sugar, Natural Flavor", "food");
+  assert.deepStrictEqual(one, two);
+});
+
+/* ------------------------------------- v2 allergen declaration confidence */
+test("declared allergens are captured while plant-milk names avoid dairy false positives", () => {
+  const res = engine.analyze(null, "INGREDIENTS: Oat Milk, Peanut Butter. CONTAINS: PEANUTS.", "food");
+  assert.ok(!res.allergens.some((a) => a.key === "dairy"), "oat milk / peanut butter must not imply dairy");
+  const peanut = res.allergens.find((a) => a.key === "peanut");
+  assert.ok(peanut);
+  assert.strictEqual(peanut.confidence, "label-declared");
+  assert.ok(peanut.sources.includes("contains-statement"));
+});
+
+/* ---------------------- v2.1 hierarchy, roles, claims and sugar nuance */
+test("deep ingredient hierarchy preserves parent IDs, paths and declaration order", () => {
+  const scan = engine.parseIngredientScan(
+    "INGREDIENTS: Cookie base (chocolate pieces (coconut sugar, cocoa butter), oat flour), sea salt"
+  );
+  const byName = Object.fromEntries(scan.items.map((item) => [item.norm, item]));
+  assert.deepStrictEqual(byName["coconut sugar"].path, ["Cookie base", "chocolate pieces", "coconut sugar"]);
+  assert.deepStrictEqual(byName["coconut sugar"].canonicalPath, ["cookie base", "chocolate pieces", "coconut sugar"]);
+  assert.strictEqual(byName["coconut sugar"].depth, 2);
+  assert.strictEqual(byName["coconut sugar"].parentId, byName["chocolate pieces"].id);
+  assert.strictEqual(byName["chocolate pieces"].parentId, byName["cookie base"].id);
+  assert.strictEqual(byName["coconut sugar"].topLevelPosition, 1);
+  assert.strictEqual(byName["sea salt"].topLevelPosition, 2);
+  assert.ok(scan.items.every((item, index) => item.position === index + 1 && item.order === index + 1));
+});
+
+test("the same sub-ingredient under different parents is not flattened away", () => {
+  const scan = engine.parseIngredientScan("Dark pieces (cocoa, sugar), light pieces (cocoa, milk)");
+  const cocoa = scan.items.filter((item) => item.norm === "cocoa");
+  assert.strictEqual(cocoa.length, 2);
+  assert.notStrictEqual(cocoa[0].parentId, cocoa[1].parentId);
+  assert.deepStrictEqual(cocoa.map((item) => item.path), [["Dark pieces", "cocoa"], ["light pieces", "cocoa"]]);
+});
+
+test("coconut sugar is nuanced added sugar, not a hazard or a clean whole food", () => {
+  const c = engine.classify(engine.norm("Organic Coconut Sugar"), "Organic Coconut Sugar", "food");
+  assert.strictEqual(c.status, "limit");
+  assert.strictEqual(c.group, "addedSugar");
+  assert.strictEqual(c.role, "added-sweetener");
+  assert.strictEqual(c.sugarProfile.id, "coconut-derived");
+  assert.strictEqual(c.attributes.organic, true);
+  assert.strictEqual(c.attributes.addedSugar, true);
+  assert.match(c.sugarProfile.explanation, /not treated as a hazard/i);
+});
+
+test("functional roles distinguish preservatives, colors, texture agents and fats", () => {
+  assert.strictEqual(engine.classify(engine.norm("Sodium Benzoate"), "Sodium Benzoate", "food").role, "preservative");
+  assert.strictEqual(engine.classify(engine.norm("Red 40"), "Red 40", "food").role, "color");
+  assert.strictEqual(engine.classify(engine.norm("Polysorbate 80"), "Polysorbate 80", "food").role, "texture-agent");
+  assert.strictEqual(engine.classify(engine.norm("Olive Oil"), "Olive Oil", "food").role, "oil-or-fat");
+});
+
+test("organic qualifiers attach to ingredients without becoming fake children", () => {
+  const scan = engine.parseIngredientScan("Oats (organic), cocoa, sea salt");
+  assert.deepStrictEqual(scan.items.map((item) => item.norm), ["oats", "cocoa", "sea salt"]);
+  assert.strictEqual(scan.items[0].attributes.organic, true);
+  assert.deepStrictEqual(scan.items[0].attributes.qualifiers, ["organic"]);
+});
+
+test("organic and kosher metadata is visible but score-neutral", () => {
+  const ingredients = "Organic Oats, Organic Coconut Sugar, Kosher Salt";
+  const plain = engine.analyze({}, ingredients, "food");
+  const certified = engine.analyze({ labels_tags: ["en:organic", "en:kosher"] }, ingredients, "food");
+  const withoutQualifiers = engine.analyze({}, "Oats, Coconut Sugar, Salt", "food");
+  assert.strictEqual(certified.score, plain.score);
+  assert.strictEqual(plain.score, withoutQualifiers.score, "ingredient qualifiers must not add a score bonus");
+  assert.strictEqual(certified.productAttributes.scoreImpact, 0);
+  assert.deepStrictEqual(certified.productAttributes.certifications.map((claim) => claim.id), ["organic", "kosher"]);
+  assert.ok(certified.productAttributes.certifications.every((claim) => claim.affectsScore === false));
+  assert.ok(certified.productAttributes.certifications.every((claim) => claim.scope === "product"));
+  assert.ok(certified.productAttributes.certifications.every((claim) => claim.verifiedBySource === true));
+  assert.deepStrictEqual(certified.productAttributes.productLevel, { organic: true, kosher: true });
+  assert.strictEqual(certified.productAttributes.organicIngredientCount, 2);
+  assert.strictEqual(certified.productAttributes.kosherSaltIngredientCount, 1);
+  assert.deepStrictEqual(certified.productAttributes.ingredientLevel,
+    { organicCount: 2, kosherSaltNameCount: 1, databaseAnalysisTags: [] });
+
+  const saltOnly = engine.analyze({}, "Kosher Salt", "food");
+  assert.deepStrictEqual(saltOnly.productAttributes.certifications, [], "kosher salt is not a kosher certification claim");
+
+  const negativeTags = engine.analyze({ labels_tags: ["en:non-organic", "en:not-kosher"] }, "Oats", "food");
+  assert.deepStrictEqual(negativeTags.productAttributes.certifications, []);
+
+  const conflictingTags = engine.analyze({
+    labels_tags: ["en:organic", "en:not-organic", "en:kosher", "en:not-kosher"]
+  }, "USDA Organic Oats", "food");
+  assert.deepStrictEqual(conflictingTags.productAttributes.certifications, [],
+    "explicit negative tags must suppress conflicting positive or captured-label claims");
+  assert.deepStrictEqual(conflictingTags.productAttributes.productLevel, { organic: false, kosher: false });
+
+  const analysisOnly = engine.analyze({ ingredients_analysis_tags: ["en:organic"] }, "Oats", "food");
+  assert.deepStrictEqual(analysisOnly.productAttributes.certifications, [], "ingredient analysis is not a product certification");
+  assert.deepStrictEqual(analysisOnly.productAttributes.ingredientLevel.databaseAnalysisTags, ["organic"]);
+
+  const ingredientClaimOnly = engine.analyze({}, "Certified Organic Oats, Salt", "food");
+  assert.strictEqual(ingredientClaimOnly.productAttributes.ingredientLevel.organicCount, 1);
+  assert.strictEqual(ingredientClaimOnly.productAttributes.productLevel.organic, false);
+  assert.strictEqual(ingredientClaimOnly.productAttributes.certifications[0].scope, "captured-label");
+});
+
+test("analysis exposes explainable hierarchy, roles and grouped category summaries", () => {
+  const res = engine.analyze(null,
+    "Oat bar (rolled oats, coconut sugar, cocoa butter), natural flavor, vitamin B12", "food");
+  const coconut = res.classified.find((item) => item.norm === "coconut sugar");
+  assert.ok(coconut);
+  assert.deepStrictEqual(coconut.path, ["Oat bar", "coconut sugar"]);
+  assert.strictEqual(coconut.role, "added-sweetener");
+  assert.strictEqual(coconut.recognitionConfidence, "high");
+  assert.strictEqual(typeof coconut.scoreImpact, "number");
+  assert.strictEqual(typeof coconut.why, "string");
+  assert.strictEqual(coconut.scoreApplied, true);
+  assert.strictEqual(res.ingredientStats.topLevel, 3);
+  assert.strictEqual(res.ingredientStats.maxDepth, 1);
+  assert.strictEqual(res.ingredientHierarchy[0].children.length, 3);
+  const sugarSummary = res.categorySummaries.find((summary) => summary.key === "added-sweetener");
+  assert.ok(sugarSummary);
+  assert.strictEqual(sugarSummary.count, 1);
+  assert.strictEqual(sugarSummary.subcategories["Coconut-derived added sugar"], 1);
+  assert.ok(res.categorySummaries.some((summary) => summary.key === "undisclosed-blend"));
+  assert.ok(res.categorySummaries.some((summary) => summary.key === "nutrient-or-culture"));
+
+  const detail = engine.ingredientDetail(coconut);
+  ["id", "parentId", "path", "depth", "topLevelPosition", "position", "scoreImpact", "scoreApplied",
+    "recognitionConfidence", "matchType", "evidence", "category", "why"]
+    .forEach((field) => assert.notStrictEqual(detail[field], undefined, "detail missing " + field));
+  assert.deepStrictEqual(detail.path, coconut.path);
+  assert.strictEqual(detail.scoreImpact, coconut.scoreImpact);
+});
+
+test("formula parents are score-neutral and flat database E-number duplicates are suppressed", () => {
+  const res = engine.analyze(null,
+    "Water, sugar, colour (E150d), acid (phosphoric acid), emulsifiers (soy lecithin), E338", "food");
+  const colour = res.classified.find((item) => item.norm === "colour");
+  const acid = res.classified.find((item) => item.norm === "acid");
+  const emulsifiers = res.classified.find((item) => item.norm === "emulsifiers");
+  [colour, acid, emulsifiers].forEach((item) => {
+    assert.strictEqual(item.role, "formula-group");
+    assert.strictEqual(item.status, "ok");
+    assert.strictEqual(item.isContainer, true);
+    assert.strictEqual(item.coverageEligible, false);
+    assert.strictEqual(item.scoreApplied, false);
+    assert.strictEqual(item.scoreImpact, 0);
+  });
+  assert.deepStrictEqual(res.coverage, { total: 5, recognized: 5, unknown: 0, rejected: 0, percent: 100, complete: true });
+  assert.ok(!res.scoreReasons.some((reason) => reason.code === "unknown-ingredients"));
+
+  const e338 = res.classified.filter((item) => item.enumber === "E338" || item.norm === "e338");
+  const flatCode = e338.find((item) => item.depth === 0 && item.norm === "e338");
+  assert.ok(flatCode);
+  assert.strictEqual(flatCode.displayDuplicate, false);
+  assert.ok(flatCode.duplicateOf);
+  assert.ok(!res.ingredientHierarchy.some((root) => root.name === "E338"));
+  assert.strictEqual(res.ingredientStats.duplicatesSuppressed, 1);
+  assert.ok(res.categorySummaries.some((summary) => summary.key === "formula-group"));
+});
+
+test("unknown parents with children remain unknown and affect coverage and score", () => {
+  const res = engine.analyze(null, "Mystery compound (water), salt", "food");
+  const mystery = res.classified.find((item) => item.norm === "mystery compound");
+
+  assert.ok(mystery);
+  assert.strictEqual(mystery.isContainer, true);
+  assert.strictEqual(mystery.isLeaf, false);
+  assert.strictEqual(mystery.status, "unknown");
+  assert.strictEqual(mystery.group, "unknown");
+  assert.strictEqual(mystery.role, "unknown");
+  assert.strictEqual(mystery.matchType, "none");
+  assert.strictEqual(mystery.recognitionConfidence, "low");
+  assert.strictEqual(mystery.coverageEligible, true);
+  assert.strictEqual(mystery.scoreApplied, true);
+  assert.strictEqual(mystery.scoreImpact, -3);
+  assert.deepStrictEqual(res.coverage,
+    { total: 3, recognized: 2, unknown: 1, rejected: 0, percent: 67, complete: false });
+  assert.ok(res.scoreReasons.some((reason) => reason.code === "unknown-ingredients" && reason.d === -3));
+  assert.ok(!res.categorySummaries.some((summary) =>
+    summary.key === "formula-group" && summary.ingredientIds.includes(mystery.id)));
+});
+
+test("nested coconut sugar is added sugar without an unsupported prominence penalty", () => {
+  const res = engine.analyze({ nova_group: 4, nutriments: {} }, "Cookie base (oats, coconut sugar), salt", "food");
+  const coconut = res.classified.find((item) => item.norm === "coconut sugar");
+  assert.ok(coconut);
+  assert.strictEqual(coconut.depth, 1);
+  assert.strictEqual(coconut.scoreImpact, -4);
+  assert.ok(!res.scoreReasons.some((reason) => reason.code === "sugary-upf-cap"));
+});
+
+test("parenthetical purposes and additive aliases remain attributes, not fake ingredients", () => {
+  const purpose = engine.analyze(null, "Potassium benzoate (to protect taste)", "food");
+  assert.deepStrictEqual(purpose.classified.map((item) => item.norm), ["potassium benzoate"]);
+  assert.deepStrictEqual(purpose.classified[0].attributes.purposes, ["to protect taste"]);
+  assert.strictEqual(purpose.coverage.percent, 100);
+
+  const alias = engine.analyze(null, "Potassium benzoate (E212)", "food");
+  assert.deepStrictEqual(alias.classified.map((item) => item.norm), ["potassium benzoate"]);
+  assert.deepStrictEqual(alias.classified[0].attributes.aliases, ["e212"]);
+
+  const structural = engine.parseIngredientScan("Colour (E150d)");
+  assert.deepStrictEqual(structural.items.map((item) => item.norm), ["colour", "e150d"]);
+});
+
+test("allergen source qualifiers are retained without becoming extra ingredient rows", () => {
+  const res = engine.analyze(null, "Lecithin (soy), cocoa", "food");
+  assert.deepStrictEqual(res.classified.map((item) => item.norm), ["lecithin", "cocoa"]);
+  assert.deepStrictEqual(res.classified[0].attributes.sourceQualifiers, ["soy"]);
+  assert.ok(res.allergens.some((alert) => alert.key === "soy"));
+});
+
+test("common multilingual label terms normalize without swallowing claims into ingredients", () => {
+  const res = engine.analyze(null,
+    "Sucre, huile de palme, noisettes, lait ecreme en poudre, emulsifiants: lecithines de soja, sans gluten", "food");
+  const byRaw = Object.fromEntries(res.classified.map((item) => [item.norm, item]));
+  assert.strictEqual(byRaw.sucre.canonicalName, "sugar");
+  assert.strictEqual(byRaw.sucre.role, "added-sweetener");
+  assert.strictEqual(byRaw["huile de palme"].canonicalName, "palm oil");
+  assert.strictEqual(byRaw.noisettes.canonicalName, "hazelnuts");
+  assert.ok(!res.classified.some((item) => item.norm === "sans gluten"));
+  const emulsifier = res.classified.find((item) => item.norm === "emulsifiants");
+  const lecithin = res.classified.find((item) => item.norm === "lecithines de soja");
+  assert.ok(emulsifier && lecithin);
+  assert.strictEqual(emulsifier.role, "formula-group");
+  assert.strictEqual(lecithin.parentId, emulsifier.id);
+  assert.ok(res.allergens.some((alert) => alert.key === "treenut"));
+  assert.ok(res.allergens.some((alert) => alert.key === "dairy"));
+  assert.ok(res.allergens.some((alert) => alert.key === "soy"));
+});
+
+/* --------------------------- non-food category and exact-formula expansion */
+test("AXE aerosol separates propellant use hazard from fragrance sensitivity", () => {
+  const ref = reference("axe-dark-temptation-body-spray");
+  const result = engine.analyze(ref, ref.ingredientsText, ref.productType);
+  assert.equal(result.useContext.id, "aerosol-body-spray");
+  assert.equal(result.coverage.percent, 100);
+  const propellants = result.classified.filter((item) => item.role === "propellant");
+  assert.ok(propellants.length >= 4);
+  assert.equal(propellants.filter((item) => item.scoreApplied).length, 1, "one shared propellant concern should be counted once");
+  assert.ok(result.classified.some((item) => item.role === "fragrance-or-flavor" && item.status === "caution"));
+});
+
+test("Dr. Squatch deodorant recognizes the full normalized formula without a natural-origin bonus", () => {
+  const ref = reference("dr-squatch-pine-tar-deodorant");
+  const result = engine.analyze(ref, ref.analysisIngredientsText, ref.productType);
+  assert.equal(result.useContext.id, "leave-on-underarm");
+  assert.equal(result.coverage.percent, 100);
+  const fragrance = result.classified.find((item) => /naturally derived fragrance/i.test(item.raw));
+  assert.equal(fragrance.status, "caution");
+  assert.equal(fragrance.role, "fragrance-or-flavor");
+  assert.ok(result.classified.some((item) => item.role === "deodorant-active"));
+});
+
+test("Dr. Squatch soap is assessed as rinse-off cleansing, fragrance and physical scrub", () => {
+  const ref = reference("dr-squatch-pine-tar-soap");
+  const result = engine.analyze(ref, ref.ingredientsText, ref.productType);
+  assert.equal(result.useContext.id, "rinse-off-body");
+  assert.equal(result.coverage.percent, 100);
+  assert.ok(result.classified.some((item) => item.role === "cleanser-surfactant"));
+  assert.ok(result.classified.some((item) => item.role === "abrasive"));
+});
+
+test("Dawn dish liquid uses household exposure and recognizes the published formula", () => {
+  const ref = reference("dawn-ultra-original");
+  const result = engine.analyze(ref, ref.ingredientsText, ref.productType);
+  assert.equal(result.useContext.id, "household-rinse-off");
+  assert.equal(result.coverage.percent, 100);
+  assert.equal(result.nutrition.hasData, false);
+  assert.ok(result.classified.some((item) => item.canonicalName.includes("alkyldimethylamine oxide") && item.role === "cleanser-surfactant"));
+  assert.ok(result.classified.some((item) => item.additive && item.additive.id === "methylisothiazolinone"));
+});
+
+test("Tom's toothpaste strictly flags fluoride ingestion context while retaining its cavity benefit", () => {
+  const ref = reference("toms-whole-care-peppermint");
+  const result = engine.analyze(ref, ref.ingredientsText, ref.productType);
+  assert.equal(result.useContext.id, "oral-care");
+  assert.equal(result.coverage.percent, 100);
+  const fluoride = result.classified.find((item) => item.role === "oral-care-active" && /monofluorophosphate/i.test(item.raw));
+  const sls = result.classified.find((item) => /sodium lauryl sulfate/i.test(item.raw));
+  assert.equal(fluoride.status, "caution");
+  assert.ok(fluoride.benefits.some((item) => /tooth decay/i.test(item)));
+  assert.ok(fluoride.outcomes.some((item) => /fluorosis/i.test(item)));
+  assert.equal(result.approval.level, "review");
+  assert.equal(sls.status, "caution");
+  assert.equal(sls.role, "cleanser-surfactant");
+  const detail = engine.ingredientDetail(fluoride);
+  assert.match(detail.title, /Monofluorophosphate/i);
+  assert.match(detail.effects, /higher total exposure/i);
+  assert.match(detail.effects, /not specific to normal spit-out toothpaste/i);
+  assert.doesNotMatch(detail.whyFlagged, /does not help|no benefit/i);
+});
+
+test("FDA-prohibited cosmetic ingredients hard-block approval and explain the health concern", () => {
+  const result = engine.analyze({ name: "Solvent face product", category: "cosmetic" }, "water, chloroform", "beauty");
+  const chloroform = result.classified.find((item) => /chloroform/i.test(item.raw));
+  assert.equal(chloroform.status, "avoid");
+  assert.ok(chloroform.outcomes.includes("Cancer"));
+  assert.ok(chloroform.regulatoryFlags.some((flag) => flag.blocking && /FDA/.test(flag.jurisdiction)));
+  assert.equal(result.approval.level, "not-approved");
+  assert.equal(result.badge.label, "Not approved");
+  assert.ok(result.score <= 29);
+  assert.ok(result.approval.blockers.some((item) => /chloroform/i.test(item.ingredient) && item.reason));
+});
+
+test("regulatory rules distinguish prohibited paraben variants from restricted butylparaben", () => {
+  const prohibited = engine.analyze({ name: "Face cream", category: "cosmetic" }, "water, isobutylparaben", "beauty");
+  const restricted = engine.analyze({ name: "Face cream", category: "cosmetic" }, "water, butylparaben", "beauty");
+  assert.ok(prohibited.regulatoryFlags.some((flag) => flag.status === "prohibited" && flag.blocking));
+  assert.ok(restricted.regulatoryFlags.some((flag) => flag.status === "restricted" && !flag.blocking));
+  assert.equal(restricted.approval.level, "not-approved", "the avoid grade still blocks even when the rule itself is concentration-restricted");
+});
+
+test("methylisothiazolinone regulation follows leave-on versus rinse-off use", () => {
+  const leaveOn = engine.analyze({ name: "Underarm deodorant", category: "deodorant" }, "water, methylisothiazolinone", "beauty");
+  const rinseOff = engine.analyze({ name: "Body wash", category: "rinse off cleanser" }, "water, methylisothiazolinone", "beauty");
+  assert.equal(leaveOn.useContext.id, "leave-on-underarm");
+  assert.ok(leaveOn.regulatoryFlags.some((flag) => flag.blocking && flag.status === "prohibited"));
+  assert.equal(leaveOn.approval.level, "not-approved");
+  assert.equal(rinseOff.useContext.id, "rinse-off-body");
+  assert.ok(rinseOff.regulatoryFlags.some((flag) => !flag.blocking && flag.status === "restricted"));
+  assert.equal(rinseOff.approval.level, "review");
+});
+
+test("zirconium aerosol rule does not spill onto permitted solid antiperspirant actives", () => {
+  const aerosol = engine.analyze({ name: "Aerosol body spray", category: "aerosol deodorant" }, "water, zirconium carbonate", "beauty");
+  const stick = engine.analyze({ name: "Solid antiperspirant stick", category: "antiperspirant" }, "water, aluminum zirconium tetrachlorohydrex gly", "beauty");
+  assert.ok(aerosol.regulatoryFlags.some((flag) => flag.blocking && /aerosol/i.test(flag.scope)));
+  assert.equal(aerosol.approval.level, "not-approved");
+  assert.equal(stick.regulatoryFlags.some((flag) => /zirconium/i.test(flag.scope)), false);
+});
+
+test("potential-effect labels are specific and incomplete lists cannot pass", () => {
+  const formaldehyde = engine.analyze({ name: "Hair smoothing treatment", category: "cosmetic" }, "water, formaldehyde", "beauty");
+  const finding = formaldehyde.classified.find((item) => /formaldehyde/i.test(item.raw));
+  assert.deepEqual(finding.outcomes, ["Cancer", "Skin allergy", "Eye and breathing irritation"]);
+  const incomplete = engine.analyze({ name: "Mystery lotion", category: "cosmetic" }, "water, proprietary mystery compound", "beauty");
+  assert.equal(incomplete.approval.level, "insufficient");
+});
+
+test("a fully recognized low-concern formula can pass the strict approval gate", () => {
+  const result = engine.analyze({ name: "Simple rinse-off formula", category: "rinse off cleanser" }, "water, glycerin", "beauty");
+  assert.equal(result.coverage.percent, 100);
+  assert.equal(result.approval.level, "approved");
+  assert.equal(result.approval.label, "Passes strict screen");
 });

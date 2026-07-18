@@ -4,11 +4,18 @@
   "description": "NutriCheck - scan food and check every ingredient",
   "scripts": {
     "build": "echo 'static'",
-    "test": "node --test"
+    "check": "node --check www/app.js && node --check www/engine.js && node --check www/data-additives.js && node --check www/data-cosmetics.js",
+    "test": "node --test",
+    "verify": "npm run check && npm test"
   },
   "dependencies": {
+    "@capacitor/cli": "^6.0.0",
     "@capacitor/core": "^6.0.0",
     "@capacitor/ios": "^6.0.0",
-    "@capacitor/cli": "^6.0.0"
+    "@fontsource-variable/plus-jakarta-sans": "5.2.8",
+    "@fortawesome/fontawesome-free": "7.3.1"
+  },
+  "overrides": {
+    "tar": "7.5.16"
   }
 }

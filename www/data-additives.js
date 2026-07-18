@@ -888,8 +888,76 @@ var CB_DATA = (function () {
     "sugar", "cane sugar", "brown sugar", "corn syrup", "high fructose corn syrup",
     "glucose syrup", "glucose-fructose syrup", "dextrose", "maltose", "fructose",
     "invert sugar", "molasses", "agave", "rice syrup", "barley malt", "evaporated cane juice",
-    "fruit juice concentrate", "honey solids", "caramel syrup", "sucrose"
+    "fruit juice concentrate", "honey solids", "caramel syrup", "sucrose", "maple syrup",
+    "coconut sugar", "coconut palm sugar", "coconut blossom sugar", "coconut blossom nectar"
   ];
+
+  // Added sugars share the same `limit` status, but they are not all presented
+  // as one anonymous mass. These profiles explain source and processing without
+  // implying that a natural, organic or less-refined sugar is health-neutral.
+  const addedSugarProfiles = [
+    {
+      id: "coconut-derived", label: "Coconut-derived added sugar", status: "limit",
+      names: ["coconut sugar", "coconut palm sugar", "coconut blossom sugar", "coconut nectar", "coconut blossom nectar"],
+      processing: "evaporated plant sap", relativeNote: "May retain trace minerals, but typical amounts are too small to cancel its added-sugar contribution.",
+      explanation: "Coconut sugar is not treated as a hazard. It is still an added sugar, so amount and ingredient-list position matter."
+    },
+    {
+      id: "palm-derived", label: "Palm-derived added sugar", status: "limit",
+      names: ["palm sugar", "palm syrup"], processing: "evaporated palm sap",
+      relativeNote: "The source and refinement can differ from coconut sugar, but it remains a concentrated added sweetener.",
+      explanation: "Palm sugar is shown as its own source category and is limited as added sugar, not classified as a hazard."
+    },
+    {
+      id: "whole-source", label: "Whole-source sweetener", status: "limit",
+      names: ["honey", "honey solids", "maple syrup", "maple sugar", "molasses", "blackstrap molasses", "date syrup", "date sugar", "yacon syrup"],
+      processing: "concentrated natural sweetener", relativeNote: "Flavor and small amounts of micronutrients vary, while the product still contributes free or added sugar.",
+      explanation: "Source is shown for context; it does not make unlimited intake low-sugar."
+    },
+    {
+      id: "cane-and-crystal", label: "Cane or crystalline sugar", status: "limit",
+      names: ["sugar", "cane sugar", "organic cane sugar", "raw sugar", "brown sugar", "turbinado", "demerara", "muscovado", "beet sugar", "sucrose", "powdered sugar", "confectioners sugar", "panela", "jaggery"],
+      processing: "crystallized sugar", relativeNote: "Organic certification concerns production standards, not the metabolic role of the sugar.",
+      explanation: "Classified as added sugar, not as an ingredient hazard."
+    },
+    {
+      id: "starch-syrup", label: "Starch-derived syrup or sugar", status: "limit",
+      names: ["corn syrup", "high fructose corn syrup", "glucose syrup", "glucose-fructose syrup", "fructose-glucose syrup", "dextrose", "maltose", "maltose syrup", "corn syrup solids", "rice syrup", "brown rice syrup", "tapioca syrup", "oat syrup"],
+      processing: "refined syrup or sugar", relativeNote: "Different glucose/fructose ratios do not remove the need to limit overall added sugar.",
+      explanation: "The exact form is retained so users can distinguish it from other sweeteners."
+    },
+    {
+      id: "fruit-concentrate", label: "Fruit-derived concentrated sweetener", status: "limit",
+      names: ["fruit juice concentrate", "grape juice concentrate", "apple juice concentrate", "pear juice concentrate", "white grape juice concentrate", "raisin juice concentrate"],
+      processing: "concentrated juice", relativeNote: "Whole fruit is different because its intact structure and fiber are not represented by a sweetening concentrate.",
+      explanation: "Only concentrate used as an ingredient is classified here; whole fruit remains a whole-food ingredient."
+    },
+    {
+      id: "syrup-and-nectar", label: "Syrup or nectar sweetener", status: "limit",
+      names: ["agave", "agave nectar", "golden syrup", "invert sugar", "invert syrup", "caramel syrup", "sorghum syrup", "malt syrup", "barley malt syrup", "treacle"],
+      processing: "concentrated syrup", relativeNote: "A plant-derived name does not make the ingredient free of added sugar.",
+      explanation: "The source is recorded separately from the amount-based nutrition assessment."
+    }
+  ];
+
+  const ingredientRoleMeta = {
+    "added-sweetener": { label: "Added sweetener", summary: "Caloric sweetener added to the formulation; source and processing are shown separately." },
+    "non-sugar-sweetener": { label: "Non-sugar sweetener", summary: "Provides sweetness with little or no sugar." },
+    "whole-food": { label: "Whole-food or pantry ingredient", summary: "Recognizable food ingredient without a category-level processing flag." },
+    "nutrient-or-culture": { label: "Nutrient, culture or functional basic", summary: "Known vitamin, mineral, culture, acid, starch or similar common ingredient." },
+    "oil-or-fat": { label: "Oil or fat", summary: "Fat source; type and processing preference are retained." },
+    "processing-marker": { label: "Processing marker", summary: "Concentrated, isolated or highly formulated component." },
+    "formula-group": { label: "Expanded ingredient group", summary: "A parent label such as color, acid or chocolate pieces whose disclosed children are assessed individually." },
+    "additive": { label: "Food additive", summary: "Functional additive whose specific purpose and concern level are evaluated." },
+    "preservative": { label: "Preservative", summary: "Helps control spoilage or microbial growth; the specific compound determines its rating." },
+    "color": { label: "Color", summary: "Adds or restores color; concern is based on the named colorant rather than the function alone." },
+    "texture-agent": { label: "Texture agent", summary: "Emulsifier, stabilizer, thickener or related texture function." },
+    "flavoring": { label: "Flavoring", summary: "Named flavoring or flavor enhancer; vague blends remain a separate transparency category." },
+    "acidity-regulator": { label: "Acidity regulator", summary: "Adjusts acidity or buffering; the specific compound determines its rating." },
+    "antioxidant": { label: "Antioxidant", summary: "Helps slow oxidation; the specific compound determines its rating." },
+    "undisclosed-blend": { label: "Undisclosed blend", summary: "Umbrella wording that does not disclose every component." },
+    "unknown": { label: "Not yet catalogued", summary: "No safety conclusion is inferred from an unfamiliar name." }
+  };
 
   const artificialSweeteners = ["aspartame", "sucralose", "acesulfame", "saccharin", "neotame", "advantame"];
 
@@ -917,18 +985,113 @@ var CB_DATA = (function () {
 
   // Map diet/allergen profile flags to ingredient keywords.
   const allergenMap = {
-    gluten: ["wheat", "barley", "rye", "malt", "spelt", "semolina", "farro", "gluten", "wheat flour", "enriched flour", "couscous"],
-    dairy: ["milk", "cream", "butter", "cheese", "whey", "casein", "lactose", "yogurt", "ghee", "milk solids", "buttermilk"],
-    egg: ["egg", "eggs", "albumin", "egg white", "egg yolk", "ovalbumin"],
-    soy: ["soy", "soya", "soybean", "soy lecithin", "soybean oil", "edamame", "tofu", "soy protein"],
-    peanut: ["peanut", "peanuts", "peanut oil", "groundnut"],
-    treenut: ["almond", "almonds", "cashew", "cashews", "walnut", "walnuts", "pecan", "pistachio", "hazelnut", "macadamia"],
-    shellfish: ["shrimp", "prawn", "crab", "lobster", "shellfish", "crayfish"],
-    fish: ["fish", "salmon", "tuna", "cod", "anchovy", "anchovies", "tilapia"],
-    sesame: ["sesame", "tahini", "sesame oil"],
-    vegan: ["milk", "cream", "butter", "cheese", "whey", "casein", "egg", "eggs", "honey", "gelatin", "carmine", "cochineal", "chicken", "beef", "pork", "fish", "lard"],
-    vegetarian: ["chicken", "beef", "pork", "fish", "gelatin", "lard", "anchovy", "carmine", "cochineal"],
+    gluten: ["wheat", "barley", "rye", "malt", "spelt", "semolina", "farro", "gluten", "wheat flour", "enriched flour", "couscous", "triticale", "einkorn", "emmer", "kamut", "durum", "wheat berries", "vital wheat gluten", "barley malt"],
+    dairy: ["milk", "cream", "butter", "cheese", "whey", "casein", "caseinate", "lactose", "yogurt", "ghee", "milk solids", "buttermilk", "milk protein", "milk powder", "nonfat dry milk", "skim milk powder", "curds", "kefir", "lactalbumin", "lactoglobulin"],
+    egg: ["egg", "eggs", "albumin", "egg white", "egg yolk", "ovalbumin", "ovomucoid", "lysozyme"],
+    soy: ["soy", "soya", "soybean", "soy lecithin", "soybean oil", "edamame", "tofu", "soy protein", "miso", "tempeh", "textured vegetable protein"],
+    peanut: ["peanut", "peanuts", "peanut oil", "groundnut", "arachis oil"],
+    treenut: ["almond", "almonds", "cashew", "cashews", "walnut", "walnuts", "pecan", "pecans", "pistachio", "pistachios", "hazelnut", "hazelnuts", "macadamia", "brazil nut", "pine nut", "chestnut"],
+    shellfish: ["shrimp", "prawn", "crab", "lobster", "shellfish", "crayfish", "crawfish", "krill", "clam", "mussel", "oyster", "scallop"],
+    fish: ["fish", "salmon", "tuna", "cod", "anchovy", "anchovies", "tilapia", "pollock", "haddock", "halibut", "herring", "mackerel", "sardine", "trout", "bass", "snapper", "bonito"],
+    sesame: ["sesame", "tahini", "sesame oil", "sesame flour", "sesame paste", "benne"],
+    vegan: ["milk", "cream", "butter", "cheese", "whey", "casein", "egg", "eggs", "honey", "gelatin", "carmine", "cochineal", "chicken", "beef", "pork", "fish", "lard", "shellac", "isinglass"],
+    vegetarian: ["chicken", "beef", "pork", "fish", "gelatin", "lard", "anchovy", "carmine", "cochineal", "shellac", "isinglass"],
     keto: ["sugar", "high fructose corn syrup", "corn syrup", "maltodextrin", "wheat flour", "rice", "dextrose"]
+  };
+
+  // Exact-name exclusions prevent token-safe but semantically wrong alerts such
+  // as "milk" in oat milk or "butter" in peanut butter. They never suppress an
+  // explicit package "Contains:" declaration.
+  const allergenExclusions = {
+    dairy: ["almond milk", "cashew milk", "coconut milk", "oat milk", "rice milk", "soy milk", "hemp milk", "macadamia milk", "pea milk", "coconut cream", "cream of coconut", "cocoa butter", "cacao butter", "peanut butter", "almond butter", "cashew butter", "sunflower butter", "apple butter"],
+    vegan: ["almond milk", "cashew milk", "coconut milk", "oat milk", "rice milk", "soy milk", "hemp milk", "macadamia milk", "pea milk", "coconut cream", "cream of coconut", "cocoa butter", "cacao butter", "peanut butter", "almond butter", "cashew butter", "sunflower butter", "apple butter"],
+    gluten: ["gluten free oats", "gluten free oat flour", "gluten free bread"]
+  };
+
+  // Common label ingredients that are not whole foods but have no reason for a
+  // red flag at ordinary food-use levels. Keeping these separate avoids calling
+  // a vitamin or mineral a "whole food" while still improving database coverage.
+  const recognizedIngredients = [
+    "thiamin mononitrate", "thiamine mononitrate", "thiamine hydrochloride", "riboflavin",
+    "niacin", "niacinamide", "nicotinamide", "folic acid", "folate", "calcium folinate",
+    "pyridoxine hydrochloride", "cyanocobalamin", "methylcobalamin", "biotin", "pantothenic acid",
+    "calcium pantothenate", "vitamin a palmitate", "retinyl palmitate", "beta carotene",
+    "vitamin d", "vitamin d2", "vitamin d3", "cholecalciferol", "ergocalciferol", "vitamin e",
+    "mixed tocopherols", "calcium carbonate", "calcium citrate", "calcium phosphate",
+    "tricalcium phosphate", "dicalcium phosphate", "ferrous sulfate", "ferrous fumarate",
+    "ferrous lactate", "reduced iron", "electrolytic iron", "iron pyrophosphate", "zinc oxide",
+    "zinc sulfate", "zinc gluconate", "magnesium oxide", "magnesium carbonate", "magnesium citrate",
+    "potassium iodide", "potassium chloride", "sodium chloride", "copper gluconate",
+    "copper sulfate", "manganese sulfate", "sodium selenite", "selenium yeast",
+    "corn flour", "rice starch", "wheat starch", "corn starch", "cornstarch", "potato starch",
+    "tapioca starch", "pea starch", "cassava starch", "arrowroot starch", "native starch",
+    "enzymes", "microbial enzymes", "baking enzymes", "bacterial cultures", "starter culture",
+    "cheese cultures", "lactic acid cultures", "live active cultures", "rennet", "vegetable rennet",
+    "citric acid", "malic acid", "lactic acid", "acetic acid", "fumaric acid", "tartaric acid",
+    "sodium citrate", "potassium citrate", "calcium citrate", "calcium lactate", "calcium chloride",
+    "sodium bicarbonate", "ammonium bicarbonate", "potassium bicarbonate", "cream of tartar",
+    "vegetable juice for color", "beet juice for color", "paprika for color", "turmeric for color",
+    "rosemary extract", "green tea extract", "vanilla powder", "cocoa processed with alkali", "caffeine"
+  ];
+
+  // These are limited as processing/transparency markers, not because the name
+  // alone proves harm. Ingredient-specific entries (e.g. maltodextrin) still win.
+  const processingMarkers = [
+    "protein isolate", "protein concentrate", "whey protein isolate", "whey protein concentrate",
+    "milk protein isolate", "milk protein concentrate", "soy protein isolate", "soy protein concentrate",
+    "pea protein isolate", "pea protein concentrate", "rice protein isolate", "textured vegetable protein",
+    "hydrolyzed vegetable protein", "hydrolyzed soy protein", "hydrolyzed corn protein",
+    "mechanically separated chicken", "mechanically separated turkey", "mechanically separated pork",
+    "interesterified oil", "interestified oil", "fractionated oil", "modified milk ingredients"
+  ];
+
+  // Canonical label synonyms and spelling variants. Aliases affect matching and
+  // display provenance only; they do not invent an ingredient absent from text.
+  const ingredientAliases = {
+    "ascorbic acid": ["vitamin c", "l-ascorbic acid"],
+    "sodium bicarbonate": ["bicarbonate of soda", "baking soda"],
+    "potassium bitartrate": ["cream of tartar"],
+    "tocopherols": ["mixed tocopherols", "tocopherol", "vitamin e"],
+    "riboflavin": ["vitamin b2"],
+    "niacin": ["vitamin b3", "nicotinic acid"],
+    "thiamin mononitrate": ["thiamine mononitrate", "vitamin b1"],
+    "pyridoxine hydrochloride": ["vitamin b6"],
+    "cyanocobalamin": ["vitamin b12"],
+    "folate": ["vitamin b9"],
+    "cholecalciferol": ["vitamin d3"],
+    "ergocalciferol": ["vitamin d2"],
+    "calcium carbonate": ["carbonate of lime"],
+    "sodium chloride": ["table salt"],
+    "acacia gum": ["gum arabic", "acacia fiber", "acacia fibre"],
+    "carboxymethylcellulose": ["cellulose gum", "cmc", "sodium carboxymethyl cellulose"],
+    "mono and diglycerides": ["mono & diglycerides", "mono diglycerides", "mono- and diglycerides"],
+    "soy lecithin": ["soya lecithin", "lecithin from soy", "lecithines de soja", "lecithine de soja", "lecitina de soja", "sojalecithin"],
+    "canola oil": ["low erucic acid rapeseed oil"],
+    "high fructose corn syrup": ["hfcs", "high-fructose corn syrup"],
+    "sugar": ["sucre", "azucar", "azucar de cana", "zucker", "zucchero", "acucar"],
+    "palm oil": ["huile de palme", "aceite de palma", "olio di palma", "palmol", "palmfett"],
+    "sunflower oil": ["huile de tournesol", "aceite de girasol", "sonnenblumenol", "olio di girasole"],
+    "hazelnuts": ["noisettes", "avellanas", "haselnusse", "nocciole"],
+    "milk": ["lait", "leche", "milch", "latte"],
+    "soy": ["soja", "soya"],
+    "skim milk powder": ["lait ecreme en poudre", "poudre de lait ecreme", "leche desnatada en polvo", "magermilchpulver"],
+    "whey powder": ["lactoserum en poudre", "poudre de lactoserum", "suero de leche en polvo", "molkenpulver"],
+    "cocoa": ["cacao", "kakao"],
+    "cocoa butter": ["beurre de cacao", "manteca de cacao", "kakaobutter", "burro di cacao"],
+    "salt": ["sel", "sal", "salz", "sale"],
+    "coconut sugar": ["coconut palm sugar", "coconut blossom sugar", "coconut blossom crystals"],
+    "coconut nectar": ["coconut blossom nectar", "coconut palm nectar"],
+    "maple syrup": ["pure maple syrup"],
+    "acesulfame potassium": ["acesulfame k", "ace k", "ace-k"],
+    "allura red": ["fd&c red no 40", "red dye 40"],
+    "tartrazine": ["fd&c yellow no 5", "yellow dye 5"],
+    "sunset yellow": ["fd&c yellow no 6", "yellow dye 6"],
+    "brilliant blue": ["fd&c blue no 1", "blue dye 1"],
+    "erythrosine": ["fd&c red no 3", "red dye 3"],
+    "saccharin": ["sodium saccharin"],
+    "msg": ["monosodium glutamate"],
+    "carmine": ["cochineal extract", "natural red 4"],
+    "annatto": ["achiote extract", "bixin", "norbixin"]
   };
 
   /* Broad additive / E-number reference so EVERY additive on a U.S. (or global)
@@ -1319,14 +1482,20 @@ var CB_DATA = (function () {
   // More added-sugar synonyms seen on U.S. labels.
   const extraSugars = [
     "turbinado", "demerara", "muscovado", "powdered sugar", "confectioners sugar",
-    "brown rice syrup", "tapioca syrup", "date syrup", "maple sugar", "palm sugar",
+    "brown rice syrup", "tapioca syrup", "date syrup", "maple sugar", "palm sugar", "palm syrup",
     "golden syrup", "treacle", "sorghum syrup", "malt syrup", "caramel syrup",
-    "beet sugar", "raw sugar", "coconut nectar", "corn sweetener", "crystalline fructose",
-    "fruit juice", "honey", "agave nectar", "maltose syrup",
+    "beet sugar", "raw sugar", "coconut sugar", "coconut palm sugar", "coconut blossom sugar",
+    "coconut nectar", "coconut blossom nectar", "corn sweetener", "crystalline fructose",
+    "fruit juice", "honey", "maple syrup", "agave nectar", "maltose syrup",
     "evaporated cane juice", "cane sugar", "cane juice", "rice syrup", "barley malt",
     "barley malt syrup", "fruit juice concentrate", "grape juice concentrate", "carob syrup",
     "rice malt syrup", "yacon syrup", "panela", "jaggery",
-    "anhydrous dextrose", "glucose-fructose syrup", "glucose syrup", "isoglucose"
+    "anhydrous dextrose", "glucose-fructose syrup", "glucose syrup", "isoglucose",
+    "corn syrup solids", "dried corn syrup", "invert cane syrup", "liquid sugar",
+    "organic cane sugar", "evaporated cane syrup", "brown rice malt syrup", "oat syrup",
+    "tapioca syrup solids", "potato syrup", "date sugar", "raisin juice concentrate",
+    "apple juice concentrate", "pear juice concentrate", "white grape juice concentrate",
+    "malt extract", "brown rice syrup solids", "glucose solids", "fructose-glucose syrup"
   ];
   for (var s2 = 0; s2 < extraSugars.length; s2++) {
     if (addedSugars.indexOf(extraSugars[s2]) === -1) addedSugars.push(extraSugars[s2]);
@@ -1342,16 +1511,16 @@ var CB_DATA = (function () {
      page even when it isn't one of the individually-written additives. */
   const groups = {
     seedOil: {
-      category: "Industrial seed/vegetable oil", status: "limit",
-      summary: "Highly refined oil rich in omega-6 fat and a marker of processed food.",
-      whatIs: "Seed and vegetable oils (canola, soybean, corn, sunflower, cottonseed, etc.) are extracted from seeds using high heat and chemical solvents, then bleached and deodorized.",
-      whyFlagged: "They are very high in omega-6 linoleic acid and oxidize easily during processing and cooking. A diet heavily skewed toward omega-6 is a hallmark of ultra-processed eating.",
-      effects: "May contribute to inflammation and an unbalanced omega-6:omega-3 ratio; heart-health evidence is debated. Mostly a sign the product is highly processed.",
+      category: "Refined seed/vegetable oil", status: "limit",
+      summary: "A strict formulation preference and processing marker, not proof that the oil is harmful.",
+      whatIs: "This category covers oils such as canola, soybean, corn, sunflower and cottonseed oil. Refining methods and fatty-acid profiles vary by oil and product.",
+      whyFlagged: "NutriCheck's strict mode limits these oils because they are common in ultra-processed foods. Controlled human evidence does not justify claiming that normal seed-oil intake inherently causes inflammation.",
+      effects: "No ingredient-name-only health conclusion. Overall dietary pattern, amount, replacement food and cooking conditions matter more than this flag alone.",
       studies: [{ title: "Dietary linoleic acid and the omega-6/omega-3 balance (review)", source: "Nutrients", year: 2018 }]
     },
     addedSugar: {
       category: "Added sugar", status: "limit",
-      summary: "Sugar added during processing; excess intake drives metabolic disease.",
+      summary: "A caloric sweetener added during processing; frequent high intake is worth limiting.",
       whatIs: "Added sugars (cane sugar, corn syrup, dextrose, fructose, syrups, juice concentrates) are sweeteners added to a product — unlike sugar naturally present in whole fruit or milk.",
       whyFlagged: "They add calories with no nutrients and are easy to over-consume. Health authorities advise keeping added sugar under ~10% of daily calories.",
       effects: "High intake is linked to weight gain, type-2 diabetes, fatty liver, tooth decay and heart disease.",
@@ -1361,8 +1530,8 @@ var CB_DATA = (function () {
       ]
     },
     sweetener: {
-      category: "Artificial sweetener", status: "caution",
-      summary: "Synthetic non-nutritive sweetener with mixed long-term evidence.",
+      category: "Non-sugar sweetener", status: "caution",
+      summary: "A non-sugar sweetener screened conservatively because long-term outcome evidence is mixed.",
       whatIs: "Non-nutritive sweeteners deliver sweetness with little or no calories and are many times sweeter than sugar.",
       whyFlagged: "Regulator-approved, but emerging research raises questions about effects on the gut microbiome, appetite and metabolism; the WHO advises against using them for weight control.",
       effects: "Possible gut-microbiome and metabolic effects; some people report digestive upset. Evidence is still evolving.",
@@ -1373,15 +1542,39 @@ var CB_DATA = (function () {
       summary: "A vague catch-all term that can hide many undisclosed compounds.",
       whatIs: "Terms like 'natural flavors', 'artificial flavors' and 'spices' are umbrella labels that can each represent dozens of individual compounds a manufacturer isn't required to disclose.",
       whyFlagged: "Lack of transparency — you can't tell exactly what's in it, and these blends may contain solvents, preservatives or allergens.",
-      effects: "Usually harmless, but a real problem for people with sensitivities or allergies who can't verify the contents.",
+      effects: "No health effect can be inferred from a vague term alone. Major allergens still have separate labeling requirements in the United States.",
+      studies: []
+    },
+    processed: {
+      category: "Processing marker", status: "limit",
+      summary: "A concentrated or substantially processed formulation component.",
+      whatIs: "Examples include isolated proteins, hydrolyzed proteins and mechanically separated meats.",
+      whyFlagged: "This strict-mode flag helps identify highly formulated products. It does not claim the named ingredient is toxic.",
+      effects: "No ingredient-name-only health conclusion; assess the complete food, nutrition panel and dietary pattern.",
+      studies: []
+    },
+    formulaGroup: {
+      category: "Expanded ingredient group", status: "ok",
+      summary: "A parent or functional heading whose disclosed sub-ingredients are shown beneath it.",
+      whatIs: "Labels often group components under headings such as color, acid, filling or chocolate pieces.",
+      whyFlagged: "The parent heading is score-neutral because its disclosed children are classified individually.",
+      effects: "No safety conclusion is inferred from the heading alone.",
+      studies: []
+    },
+    recognized: {
+      category: "Recognized ingredient", status: "good",
+      summary: "A known vitamin, mineral, culture, acid, starch or other common label ingredient.",
+      whatIs: "This ingredient is catalogued separately from whole foods so NutriCheck does not misdescribe it.",
+      whyFlagged: "Not flagged by the ingredient screen at ordinary food-use levels.",
+      effects: "Suitability can still depend on dose, allergies, medical conditions and the full product formulation.",
       studies: []
     },
     clean: {
       category: "Whole-food ingredient", status: "good",
-      summary: "A recognized whole-food ingredient with no known concerns.",
+      summary: "A recognized whole-food or pantry ingredient with no category-level processing flag.",
       whatIs: "This is a real, recognizable food ingredient rather than an industrial additive.",
       whyFlagged: "Not flagged — this is exactly the kind of ingredient you want to see on a label.",
-      effects: "No known concerns at normal dietary amounts.",
+      effects: "Not scored as a general processing concern; allergies and individual dietary needs still apply.",
       studies: []
     },
     unknown: {
@@ -1389,7 +1582,7 @@ var CB_DATA = (function () {
       summary: "We don't have detailed information on this ingredient yet.",
       whatIs: "This ingredient isn't in NutriCheck's database yet, so we can't fully classify it.",
       whyFlagged: "Not necessarily bad — just unrecognized. The database is expanding continuously.",
-      effects: "Unknown. If it reads like a chemical additive, treat it with mild caution.",
+      effects: "Unknown means unclassified, not unsafe. NutriCheck lowers confidence rather than guessing from a chemical-sounding name.",
       studies: []
     },
     eOk: {
@@ -1429,8 +1622,11 @@ var CB_DATA = (function () {
   return {
     groups: groups, bannedMap: bannedMap,
     additives: additives, seedOils: seedOils, addedSugars: addedSugars,
+    addedSugarProfiles: addedSugarProfiles, ingredientRoleMeta: ingredientRoleMeta,
     artificialSweeteners: artificialSweeteners, vagueTerms: vagueTerms,
-    cleanIngredients: cleanIngredients, allergenMap: allergenMap, eNumbers: eNumbers
+    cleanIngredients: cleanIngredients, recognizedIngredients: recognizedIngredients,
+    processingMarkers: processingMarkers, ingredientAliases: ingredientAliases,
+    allergenMap: allergenMap, allergenExclusions: allergenExclusions, eNumbers: eNumbers
   };
 })();
 // UMD-style export: browser global + Node require (for engine unit tests).
