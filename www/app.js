@@ -27,7 +27,7 @@
   var WIKI = "https://en.wikipedia.org/api/rest_v1/page/summary/";
   var FETCH_TIMEOUT = 8000, FETCH_RETRIES = 1;
   var PROD_TTL = 1000 * 60 * 60 * 24 * 30; // 30-day barcode cache
-  var PROD_CACHE_VERSION = 4;
+  var PROD_CACHE_VERSION = 5;
 
   var PROFILE_OPTS = [
     ["gluten", "Gluten-free"], ["dairy", "Dairy-free"], ["egg", "Egg-free"], ["soy", "Soy-free"],
@@ -520,9 +520,9 @@
         Math.min(flattenStructuredIngredients(o.ingredients).length, 80) * 8 + (o.schema_version ? 30 : 0);
     }
     var ingredient = records.slice().sort(function (a, b) { return ingredientRecordScore(b) - ingredientRecordScore(a); })[0];
-    var out = {}, fields = ["barcode", "name", "brand", "image", "category", "serving_quantity", "productType", "source", "kosher",
+    var out = {}, fields = ["barcode", "name", "brand", "image", "category", "serving_quantity", "productType", "useContext", "source", "kosher",
       "nova_group", "nutriscore_grade", "nutriments", "schema_version", "additives_tags", "allergens_tags", "traces_tags",
-      "labels", "labels_tags", "ingredients_analysis_tags", "tags_sources"];
+      "labels", "labels_tags", "ingredients_analysis_tags", "tags_sources", "formulaReferenceId", "formulaSourceUrl", "formulaSourceDate", "formulaNote"];
     fields.forEach(function (field) { out[field] = primary[field]; });
     records.forEach(function (o) {
       fields.forEach(function (field) {
@@ -547,7 +547,8 @@
     out.barcode = code || primary.barcode;
     if (ingredient && ingredient.ingredientsText) {
       ["ingredientsText", "rawIngredientsText", "analysisIngredientsText", "ingredientField", "ingredientTextGenerated", "ingredients", "ingredients_n", "known_ingredients_n",
-        "unknown_ingredients_n", "ingredientSource", "ingredientConfidence", "ingredientCoverage", "ingredientCoveragePct"].forEach(function (field) { out[field] = ingredient[field]; });
+        "unknown_ingredients_n", "ingredientSource", "ingredientConfidence", "ingredientCoverage", "ingredientCoveragePct", "useContext",
+        "formulaReferenceId", "formulaSourceUrl", "formulaSourceDate", "formulaNote"].forEach(function (field) { out[field] = ingredient[field]; });
       out.productType = ingredient.productType || out.productType;
       var mergedStructured = Array.isArray(out.ingredients) ? out.ingredients : [];
       var mergedStructuredCount = flattenStructuredIngredients(mergedStructured).length;
@@ -556,8 +557,9 @@
         (!!out.ingredients_n && mergedStructuredCount >= +out.ingredients_n));
       // Rebuild after the tag union. Otherwise additive tags contributed by a
       // secondary OFF endpoint exist in metadata but never reach classification.
-      out.analysisIngredientsText = buildAnalysisIngredients(mergedRawIngredients, mergedStructured,
-        out.additives_tags, { preferStructured: preferMergedStructure });
+      out.analysisIngredientsText = ingredient.formulaReferenceId && ingredient.analysisIngredientsText ? ingredient.analysisIngredientsText :
+        buildAnalysisIngredients(mergedRawIngredients, mergedStructured,
+          out.additives_tags, { preferStructured: preferMergedStructure });
     } else {
       out.ingredientsText = out.rawIngredientsText = out.analysisIngredientsText = "";
       out.ingredientConfidence = 0; out.ingredientCoverage = "No database ingredient list"; out.ingredientCoveragePct = 0;
@@ -573,12 +575,43 @@
     if (j.status === 1 || j.status === "success" || (j.result && j.result.id === "product_found")) return j.product;
     return null;
   }
+  function referenceProductOff(ref, scannedCode) {
+    if (!ref) return null;
+    var code = scannedCode || (ref.barcodes && ref.barcodes[0]) || "";
+    return {
+      barcode: code, name: ref.name, brand: ref.brand || "", category: ref.category || "",
+      productType: ref.productType || "beauty", useContext: ref.useContext || "",
+      ingredientsText: ref.ingredientsText || "", rawIngredientsText: ref.ingredientsText || "",
+      analysisIngredientsText: ref.analysisIngredientsText || ref.ingredientsText || "", ingredients: [], additives_tags: [], allergens_tags: [], traces_tags: [],
+      labels: "", labels_tags: [], ingredients_analysis_tags: [], nutriments: {},
+      source: ref.source || "Official formula reference", sourceList: [ref.source || "Official formula reference"],
+      ingredientSource: ref.source || "Official formula reference", ingredientConfidence: 100,
+      ingredientCoverage: "Published complete formula · verify package after reformulation", ingredientCoveragePct: 100,
+      formulaReferenceId: ref.id || "", formulaSourceUrl: ref.sourceUrl || "", formulaSourceDate: ref.sourceDate || "",
+      formulaNote: "Exact-product reference only. The package label wins if the manufacturer reformulates."
+    };
+  }
+  function referenceForBarcode(code) {
+    var variants = barcodeLookupVariants(code || "");
+    return ((COS && COS.referenceProducts) || []).filter(function (ref) {
+      return (ref.barcodes || []).some(function (barcode) { return variants.indexOf(barcode) !== -1; });
+    })[0] || null;
+  }
+  function referenceSearchResults(query) {
+    var q = norm(query), toks = q.split(/\s+/).filter(Boolean);
+    if (!q || !toks.length) return [];
+    return ((COS && COS.referenceProducts) || []).filter(function (ref) {
+      var hay = norm([ref.name, ref.brand, ref.category].concat(ref.aliases || []).join(" "));
+      return toks.every(function (tok) { return hay.indexOf(tok) !== -1; });
+    }).map(function (ref) { return referenceProductOff(ref); });
+  }
   // Read the current v3 all-product endpoint for its rich nested ingredient tree,
   // plus the family v2 endpoints as compatibility/fallback records. We select one
   // complete ingredient payload; lists from different products are never spliced.
   function lookupBarcode(code, opts) {
     opts = opts || {};
     var variants = barcodeLookupVariants(code), cached = null;
+    var localReference = referenceForBarcode(code);
     for (var c = 0; c < variants.length && !cached; c++) cached = cachedProduct(variants[c]);
     if (cached) return Promise.resolve(cached);
     function querySource(src, v3) {
@@ -603,10 +636,11 @@
     var jobs = [querySource(OFF_SOURCES[0], true)].concat(OFF_SOURCES.map(function (src) { return querySource(src, false); }));
     return Promise.all(jobs).then(function (results) {
       var records = results.map(function (r) { return r.record; }).filter(Boolean);
+      if (localReference) records.push(referenceProductOff(localReference, code));
       var anyResponse = results.some(function (r) { return r.responded; });
       var merged = mergeOffRecords(records, code);
       if (merged) { cacheProduct(variants, merged); return merged; }
-      if (!anyResponse) { var err = new Error("Product databases unavailable"); err.name = "NetworkError"; throw err; }
+      if (!anyResponse && !localReference) { var err = new Error("Product databases unavailable"); err.name = "NetworkError"; throw err; }
       return null;
     });
   }
@@ -625,6 +659,7 @@
       }).catch(function () { return []; });
     });
     return Promise.all(jobs).then(function (lists) {
+      lists.unshift(referenceSearchResults(query));
       var seen = {}, out = [];
       lists.forEach(function (arr) {
         arr.forEach(function (o) {
@@ -658,6 +693,9 @@
       ingredientCoverage: opts.ingredientCoverage || (off && off.ingredientCoverage) || (text ? "Ingredient list available" : "No ingredient list"),
       ingredientCoveragePct: opts.ingredientCoveragePct != null ? opts.ingredientCoveragePct : ((off && off.ingredientCoveragePct) || 0),
       productType: ptype, isFood: food, kosher: !!(off && off.kosher),
+      useContext: r.useContext || null,
+      formulaReferenceId: (off && off.formulaReferenceId) || "", formulaSourceUrl: (off && off.formulaSourceUrl) || "",
+      formulaSourceDate: (off && off.formulaSourceDate) || "", formulaNote: (off && off.formulaNote) || "",
       structuredIngredients: (off && off.ingredients) || [],
       labels: (off && off.labels) || "", labels_tags: (off && off.labels_tags) || [],
       ingredients_analysis_tags: (off && off.ingredients_analysis_tags) || [], tags_sources: (off && off.tags_sources) || null,
@@ -1491,12 +1529,23 @@
     if (!raw) return "";
     var title = p.ingredientTextGenerated ? "Database ingredient structure" : "Exact ingredient label";
     var note = p.ingredientTextGenerated ? '<p>Generated from the database tree because exact label wording was unavailable.</p>' : "";
+    if (p.formulaSourceUrl) {
+      note += '<p class="formula-source"><b>Published formula:</b> <a href="' + esc(p.formulaSourceUrl) + '" target="_blank" rel="noopener">' +
+        esc(p.ingredientSource || "Official product source") + '</a>' + (p.formulaSourceDate ? ' · checked ' + esc(p.formulaSourceDate) : '') +
+        '. Package label wins if the formula changed.</p>';
+    }
     return '<details class="ingredient-raw"><summary>' + title + '</summary>' + note + '<div>' + esc(raw) + '</div></details>';
   }
   var ROLE_LABELS = {
     "formula-group": "Formula group", "added-sweetener": "Added sugar", "non-sugar-sweetener": "Sweetener",
     "oil-or-fat": "Oil or fat", "processing-marker": "Processing marker", "undisclosed-blend": "Undisclosed blend",
     additive: "Additive", "whole-food": "Whole food", "nutrient-or-culture": "Nutrient or culture",
+    "carrier-solvent": "Carrier / solvent", "cleanser-surfactant": "Cleansing system", "texture-structurant": "Texture / structure",
+    "formula-stabilizer": "Formula support", emollient: "Emollient", "fragrance-or-flavor": "Fragrance / flavor",
+    propellant: "Aerosol propellant", absorbent: "Absorbent", abrasive: "Abrasive / exfoliant",
+    "deodorant-active": "Odor control", "antiperspirant-active": "Antiperspirant active", "conditioning-agent": "Conditioning agent",
+    "oral-care-active": "Oral-care active", "oral-abrasive": "Tooth-cleaning system", "oral-humectant": "Oral humectant",
+    "ph-adjuster": "pH control", colorant: "Colorant", preservative: "Preservative", antioxidant: "Antioxidant",
     unknown: "Needs more data", ingredient: "Ingredient"
   };
   function roleLabel(role) {
@@ -1543,6 +1592,16 @@
     }
     return '<section class="product-context panel glass"><div class="panel-h">Product context <span class="cnt">score neutral</span></div>' +
       '<div class="context-list">' + rows + '</div><p class="context-note">' + esc(attrs.note || "Certifications and preferences do not erase nutrition or ingredient concerns.") + '</p></section>';
+  }
+  function useContextBlock(p) {
+    var ctx = p.useContext;
+    if (!ctx || p.isFood) return "";
+    return '<section class="panel glass use-context-panel" aria-label="How this product is used">' +
+      '<div class="panel-h">Use context <span class="cnt">changes interpretation</span></div>' +
+      '<div class="context-card"><div class="context-icon">' + icon(ctx.id.indexOf("household") === 0 ? "home" : "bottle") + '</div>' +
+      '<div><div class="context-title">' + esc(ctx.label) + '</div><div class="context-meta">' + esc(ctx.exposure) + '</div>' +
+      '<p>' + esc(ctx.note) + '</p></div></div>' +
+      '<p class="context-note">The score considers this exposure pattern. It does not assume every natural ingredient is safer or every synthetic ingredient is worse.</p></section>';
   }
   function ingredientAttributeChips(item, hasChildren) {
     var chips = [];
@@ -1698,7 +1757,8 @@
     var provenance = [];
     if (p.ingredientSource) provenance.push(p.ingredientSource);
     if (p.ingredientConfidence && /ocr|photo/i.test(p.ingredientSource || "")) provenance.push(Math.round(p.ingredientConfidence) + "% OCR text confidence");
-    if (p.ingredientCoverage) provenance.push(p.ingredientCoverage);
+    if (p.formulaSourceDate) provenance.push("formula checked " + p.formulaSourceDate);
+    else if (p.ingredientCoverage) provenance.push(p.ingredientCoverage);
     return '<div class="screen result">' + backBar("") +
       '<div class="hero glass" style="--c:' + c + '">' +
         '<button class="fav-btn' + (fav ? " on" : "") + '" data-fav="1" aria-label="' + (fav ? "Remove from favorites" : "Add to favorites") + '">' + icon("favorite", "", fav ? "solid" : "regular") + '</button>' +
@@ -1721,6 +1781,7 @@
         '</div>' +
       '</div>' +
       dataQualityBlock(p) +
+      useContextBlock(p) +
       productContextBlock(p) +
       whyBlock(p) +
       // Yuka-style: the verdict detail (what's bad / what's good) comes FIRST,
@@ -1939,6 +2000,7 @@
       return '<span>' + esc(titleCase(part)) + '</span>' + (index < path.length - 1 ? '<i aria-hidden="true">›</i>' : '');
     }).join("") + '</div>' : "";
     var attrs = d.attributes || {}, attrChips = [];
+    var contextMeta = d.useContext && COS && COS.useContexts && COS.useContexts[d.useContext];
     if (attrs.addedSugar) attrChips.push('<span class="detail-chip nutrition">Added sugar</span>');
     if (attrs.organic) attrChips.push('<span class="detail-chip certification">Organic ingredient</span>');
     if (attrs.processing) attrChips.push('<span class="detail-chip processing">' + esc(attrs.processing) + '</span>');
@@ -1952,7 +2014,9 @@
       '<div class="ingredient-facts"><div><span>Position</span><b>' + esc(location) + '</b></div>' +
       '<div><span>Function</span><b>' + esc(roleLabel(d.role)) + '</b></div>' +
       '<div><span>Score effect</span><b>' + esc(pointsLabel(d)) + '</b></div>' +
-      '<div><span>Recognition</span><b>' + esc(confidence) + '</b></div></div>' +
+      '<div><span>Recognition</span><b>' + esc(confidence) + '</b></div>' +
+      (contextMeta ? '<div><span>Exposure</span><b>' + esc(contextMeta.label) + '</b></div>' : '') + '</div>' +
+      (contextMeta ? '<div class="ingredient-nuance"><b>Why context matters</b><p>' + esc(d.exposureNote || contextMeta.exposure) + '</p></div>' : '') +
       (attrChips.length ? '<div class="detail-chips">' + attrChips.join("") + '</div>' : '') + sugar + organic + '</section>';
   }
 
@@ -2227,7 +2291,8 @@
         state.ingDetail = ingredientDetail(item);
         ["id", "parentId", "raw", "parent", "path", "canonicalPath", "depth", "position", "siblingPosition",
           "topLevelPosition", "scoreImpact", "scoreApplied", "role", "category", "attributes", "sugarProfile",
-          "matchType", "matchedTerm", "matchConfidence", "recognitionConfidence", "evidence"].forEach(function (key) {
+          "matchType", "matchedTerm", "matchConfidence", "recognitionConfidence", "evidence", "useContext",
+          "exposureNote", "contextWhy", "contextEffects"].forEach(function (key) {
           if (item[key] != null) state.ingDetail[key] = item[key];
         });
         state.ingTab = "what"; state.ingFrom = "result";
@@ -2376,6 +2441,9 @@
     ingredientResearchQuery: ingredientResearchQuery,
     validIngredientResearchResult: validIngredientResearchResult,
     mergeOffRecords: mergeOffRecords,
+    referenceProductOff: referenceProductOff,
+    referenceForBarcode: referenceForBarcode,
+    referenceSearchResults: referenceSearchResults,
     sanitizeOcrRaw: sanitizeOcrRaw,
     extractIngredientText: extractIngredientText,
     plausibleReviewedIngredients: plausibleReviewedIngredients

@@ -2191,6 +2191,15 @@ noscript {
   padding-bottom: 10px;
 }
 
+.use-context-panel {
+  padding-bottom: 10px;
+}
+
+.use-context-panel .context-card {
+  grid-template-columns: 34px minmax(0, 1fr);
+  margin: 0 10px;
+}
+
 .context-list {
   display: grid;
   gap: 8px;
@@ -2251,6 +2260,13 @@ noscript {
 
 .context-note {
   padding: 0 12px 4px;
+}
+
+.formula-source a {
+  color: var(--accent);
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .ingredient-explorer {

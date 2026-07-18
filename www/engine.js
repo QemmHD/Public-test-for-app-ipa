@@ -421,6 +421,7 @@
     function roleFor(result) {
       var category = norm(result.additive && result.additive.category || result.reason || "");
       var ingredientName = norm(result.canonicalName || result.name || "");
+      if (result.additive && result.additive.role) return result.additive.role;
       if (result.group === "addedSugar" || category === "added sugar") return "added-sweetener";
       if (result.group === "sweetener" || /artificial sweetener|sugar alcohol|non sugar sweetener/.test(category)) return "non-sugar-sweetener";
       if (result.group === "seedOil" || /\b(oil|fat)\b/.test(category) ||
@@ -447,7 +448,7 @@
     }
 
     // Classify a single ingredient. productType: "food" (default) | "beauty" | "household" | "petfood".
-    function classify(n, raw, productType, parsedAttributes) {
+    function classify(n, raw, productType, parsedAttributes, useContext) {
       n = norm(n || raw);
       var inferredAttributes = ingredientAttributes(raw || n, []);
       var attributes = {}, attrKey;
@@ -461,10 +462,19 @@
       var isFood = isFoodType(productType);
       var sugarProfileHit = findSugarProfile(toks);
       function assess(result, matchType, matchedTerm, exact, referenceCount) {
+        var contextId = typeof useContext === "string" ? useContext : (useContext && useContext.id) || "";
+        if (result.additive && contextId) {
+          var contextualRisk = result.additive.riskByContext && result.additive.riskByContext[contextId];
+          if (contextualRisk) result.status = contextualRisk;
+          result.contextWhy = result.additive.whyByContext && result.additive.whyByContext[contextId] || "";
+          result.contextEffects = result.additive.effectsByContext && result.additive.effectsByContext[contextId] || "";
+          result.exposureNote = result.additive.exposureNotes && result.additive.exposureNotes[contextId] || "";
+        }
+        result.useContext = contextId;
         result.role = roleFor(result);
         result.category = (result.additive && result.additive.category) ||
           ((groups[result.group] || {}).category) || result.reason;
-        result.why = assessmentWhy(result);
+        result.why = result.contextWhy || assessmentWhy(result);
         result.attributes = {};
         for (var key in attributes) result.attributes[key] = attributes[key];
         result.attributes.addedSugar = result.role === "added-sweetener";
@@ -542,6 +552,8 @@
           scoreApplied: !!item.scoreApplied, recognitionConfidence: item.recognitionConfidence || item.matchConfidence || "low",
           matchType: item.matchType || "none", matchedTerm: item.matchedTerm || "", evidence: item.evidence || null,
           role: item.role || roleFor(item), attributes: item.attributes || {}, sugarProfile: item.sugarProfile || null,
+          useContext: item.useContext || "", exposureNote: item.exposureNote || "",
+          contextWhy: item.contextWhy || "", contextEffects: item.contextEffects || "",
           category: category, why: why };
       }
       function merge(base, extra) {
@@ -550,11 +562,12 @@
       }
       if (item.additive) {
         var a = item.additive;
-        return merge({ title: titleCase(a.names[0]), category: a.category, enumber: a.enumber || "", status: a.risk,
-          summary: a.summary, whatIs: a.whatIs, whyFlagged: a.whyFlagged, effects: a.healthRisk,
+        return merge({ title: titleCase(a.names[0]), category: a.category, enumber: a.enumber || "", status: item.status || a.risk,
+          summary: a.summary, whatIs: a.whatIs, whyFlagged: item.contextWhy || a.whyFlagged,
+          effects: item.contextEffects || a.healthRisk,
           banned: (bannedMap && bannedMap[a.id]) || "", studies: a.studies || [], evidence: item.evidence || null,
           assessmentNote: "Hazard and regulatory context do not measure the dose in this product or predict an individual health outcome." },
-          context(a.category, item.why || a.whyFlagged));
+          context(a.category, item.contextWhy || item.why || a.whyFlagged));
       }
       var g = groups[item.group] || groups.unknown || { category: "Not catalogued", status: "unknown", summary: "No assessment available.", whatIs: "No database match.", whyFlagged: "Not scored as harmful.", effects: "Unknown." };
       return merge({ title: titleCase(item.name || item.raw), category: g.category, enumber: item.enumber || "", status: item.status || g.status,
@@ -626,7 +639,9 @@
     }
 
     function summarizeIngredientCategories(classified) {
-      var roleMeta = DATA.ingredientRoleMeta || {}, summaries = {}, order = [];
+      var roleMeta = {}, summaries = {}, order = [];
+      Object.keys(DATA.ingredientRoleMeta || {}).forEach(function (key) { roleMeta[key] = DATA.ingredientRoleMeta[key]; });
+      Object.keys(COSMETICS.ingredientRoleMeta || {}).forEach(function (key) { roleMeta[key] = COSMETICS.ingredientRoleMeta[key]; });
       (classified || []).forEach(function (ingredient) {
         if (ingredient.displayDuplicate === false) return;
         var key = ingredient.role || "ingredient";
@@ -650,6 +665,26 @@
         }
       });
       return order.map(function (key) { return summaries[key]; });
+    }
+
+    function inferUseContext(off, productType) {
+      var explicit = off && off.useContext;
+      var contexts = COSMETICS.useContexts || {};
+      if (explicit && contexts[explicit]) {
+        return { id: explicit, label: contexts[explicit].label, exposure: contexts[explicit].exposure, note: contexts[explicit].note, inferred: false };
+      }
+      if (isFoodType(productType)) return null;
+      var text = norm(((off && off.name) || "") + " " + ((off && off.category) || ""));
+      var id;
+      if (/toothpaste|dentifrice|oral care|mouthwash/.test(text)) id = "oral-care";
+      else if (/body spray|deodorant spray|aerosol/.test(text)) id = "aerosol-body-spray";
+      else if (/antiperspirant|deodorant|underarm/.test(text)) id = "leave-on-underarm";
+      else if (/dish spray|powerwash|trigger spray|cleaning spray/.test(text)) id = "household-spray";
+      else if (/dishwashing|dish soap|dish care|washing up liquid/.test(text)) id = "household-rinse-off";
+      else if (/bar soap|body wash|shampoo|cleanser|rinse off/.test(text)) id = "rinse-off-body";
+      else id = productType === "household" ? "general-household" : "general-beauty";
+      var meta = contexts[id] || { label: titleCase(id.replace(/-/g, " ")), exposure: "Exposure depends on the product directions.", note: "Use context affects how ingredient concerns are interpreted." };
+      return { id: id, label: meta.label, exposure: meta.exposure, note: meta.note, inferred: true };
     }
 
     function productAttributes(off, scan, classified) {
@@ -731,16 +766,19 @@
 
     function analyze(off, ingredientsText, productType) {
       var isFood = isFoodType(productType);
+      var useContext = inferUseContext(off, productType);
       var scan = parseIngredientScan(ingredientsText);
       var items = scan.items;
       var classified = items.map(function (it) {
-        var c = classify(it.norm, (it.raw || "").toLowerCase(), productType, it.attributes);
+        var c = classify(it.norm, (it.raw || "").toLowerCase(), productType, it.attributes, useContext);
         return { id: it.id, parentId: it.parentId, raw: it.raw, norm: it.norm, status: c.status, reason: c.reason,
           additive: c.additive || null, group: c.group || null, name: c.name || it.raw, canonicalName: c.canonicalName || it.norm,
           enumber: c.enumber || "", depth: it.depth || 0, parent: it.parent || "", path: it.path || [it.raw],
           canonicalPath: it.canonicalPath || [it.norm], position: it.position, order: it.order,
           siblingPosition: it.siblingPosition, topLevelPosition: it.topLevelPosition,
           role: c.role, category: c.category, why: c.why, attributes: c.attributes,
+          useContext: c.useContext || (useContext && useContext.id) || "", exposureNote: c.exposureNote || "",
+          contextWhy: c.contextWhy || "", contextEffects: c.contextEffects || "",
           sugarProfile: c.sugarProfile || null, matchType: c.matchType, matchedTerm: c.matchedTerm,
           matchConfidence: c.matchConfidence, recognitionConfidence: c.recognitionConfidence,
           evidence: c.evidence, scoreImpact: 0, scoreApplied: false,
@@ -913,7 +951,7 @@
         allergens: allergens, ingredientHierarchy: hierarchy, categorySummaries: categorySummaries,
         ingredientStats: { topLevel: hierarchy.length, nested: classified.filter(function (ingredient) { return ingredient.depth > 0 && ingredient.displayDuplicate !== false; }).length,
           maxDepth: maxDepth, containers: containerCount, leavesAssessed: coverage.total, duplicatesSuppressed: duplicateCount },
-        productAttributes: attributes,
+        productAttributes: attributes, useContext: useContext,
         methodology: { version: "2.1", weights: { avoid: -30, caution: -12, limit: -4, unknown: -3 },
           claimPolicy: "Organic and kosher metadata is displayed separately and has no automatic score bonus.",
           note: "Ingredient hierarchy, order, roles, category flags, nutrition and database coverage are screened separately; this is not medical advice." } };

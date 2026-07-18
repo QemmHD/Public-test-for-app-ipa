@@ -45,6 +45,26 @@ test("normalizes valid GTINs and rejects bad check digits", () => {
   assert.equal(scanner.normalizeBarcode("123456"), null);
 });
 
+test("exact-product reference search includes named personal-care and household formulas", () => {
+  const squatch = scanner.referenceSearchResults("dr squatch pine tar");
+  const dawn = scanner.referenceSearchResults("dawn powerwash");
+  const toms = scanner.referenceSearchResults("toms toothpaste");
+  assert.ok(squatch.some((item) => item.name === "Pine Tar Deodorant"));
+  assert.ok(dawn.some((item) => item.brand === "Dawn" && item.useContext === "household-spray"));
+  assert.ok(toms.some((item) => item.brand === "Tom's of Maine"));
+  assert.ok(squatch.every((item) => item.formulaSourceUrl && item.formulaNote));
+});
+
+test("known barcode fallback is exact and does not guess formulas brand-wide", () => {
+  const axe = scanner.referenceForBarcode("079400523365");
+  const unknown = scanner.referenceForBarcode("012345678905");
+  assert.equal(axe.id, "axe-dark-temptation-body-spray");
+  assert.equal(unknown, null);
+  const off = scanner.referenceProductOff(axe, "079400523365");
+  assert.equal(off.ingredientCoveragePct, 100);
+  assert.match(off.formulaNote, /package label wins/i);
+});
+
 test("accepts a live scan only after stable repeated detections", () => {
   const oneHit = scanner.selectConsensusCandidate([{ code: "5449000000996", at: 1000 }], 2, 2200, 1200);
   assert.equal(oneHit, null);

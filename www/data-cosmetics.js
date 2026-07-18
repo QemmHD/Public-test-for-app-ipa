@@ -124,7 +124,8 @@ window.CB_DATA_COSMETICS = (function () {
     /* ----------------------------------------------------- surfactants */
     {
       id: "sls", names: ["sodium lauryl sulfate", "sls", "sodium dodecyl sulfate"],
-      category: "Sulfate surfactant", risk: "caution",
+      category: "Sulfate surfactant", role: "cleanser-surfactant", risk: "limit",
+      riskByContext: { "oral-care": "caution", "household-rinse-off": "limit", "rinse-off-body": "limit" },
       summary: "Strong foaming cleanser that can strip and irritate skin and scalp.",
       whatIs: "Sodium lauryl sulfate is a powerful detergent that creates lather in shampoo, body wash, toothpaste and cleaners.",
       whyFlagged: "Effective but harsh — it can strip natural oils and irritate skin, eyes and the mouth (linked to canker sores in toothpaste).",
@@ -135,7 +136,7 @@ window.CB_DATA_COSMETICS = (function () {
     },
     {
       id: "sles", names: ["sodium laureth sulfate", "sles", "sodium lauryl ether sulfate"],
-      category: "Sulfate surfactant", risk: "limit",
+      category: "Sulfate surfactant", role: "cleanser-surfactant", risk: "limit",
       summary: "Milder than SLS but may carry trace 1,4-dioxane from processing.",
       whatIs: "Sodium laureth sulfate is an ethoxylated, gentler version of SLS used in most foaming washes.",
       whyFlagged: "Less stripping than SLS, but the ethoxylation step can leave traces of 1,4-dioxane, a probable carcinogen, unless purified.",
@@ -159,11 +160,12 @@ window.CB_DATA_COSMETICS = (function () {
     /* ------------------------------------------------- fragrance & UV */
     {
       id: "fragrance", names: ["fragrance", "parfum", "perfume", "aroma", "flavor", "flavour"],
-      category: "Undisclosed fragrance", risk: "caution",
-      summary: "Umbrella term that can hide dozens of undisclosed scent chemicals.",
-      whatIs: "'Fragrance'/'parfum' on a label is a trade-secret blend that can contain dozens to hundreds of individual compounds, including allergens and phthalates.",
-      whyFlagged: "Manufacturers aren't required to disclose what's inside, so allergens and hormone-active chemicals can hide here.",
-      healthRisk: "A leading cause of cosmetic allergy and skin sensitization; may conceal phthalates. A real problem for sensitive people.",
+      category: "Undisclosed fragrance", role: "fragrance-or-flavor", risk: "limit",
+      riskByContext: { "leave-on-underarm": "caution", "aerosol-body-spray": "caution", "oral-care": "limit", "rinse-off-body": "limit", "household-rinse-off": "limit" },
+      summary: "An incompletely disclosed scent or flavor blend; sensitivity is the main practical concern.",
+      whatIs: "Fragrance, parfum and flavor may represent a mixture whose individual components are not all named on the package.",
+      whyFlagged: "Incomplete disclosure makes allergen screening harder. This does not prove the blend is toxic, but it matters for people with fragrance sensitivity or contact allergy.",
+      healthRisk: "Possible irritation, headache or allergic contact dermatitis in susceptible people; risk depends on the formula, concentration and exposure.",
       studies: [
         { title: "Fragrance contact allergy (review)", source: "Contact Dermatitis", year: 2018 }
       ]
@@ -228,12 +230,12 @@ window.CB_DATA_COSMETICS = (function () {
       ]
     },
     {
-      id: "coaltardye", names: ["p-phenylenediamine", "ppd", "coal tar", "ci 75000", "fd&c", "d&c", "ci "],
-      category: "Coal-tar / synthetic dye", risk: "caution",
-      summary: "Petroleum-derived colorants; hair-dye PPD is a strong allergen.",
-      whatIs: "Coal-tar and synthetic 'CI' / 'FD&C' / 'D&C' colorants tint makeup, hair dye and personal-care products. PPD is the classic permanent-hair-dye chemical.",
-      whyFlagged: "Some are contaminated with heavy metals; p-phenylenediamine is a potent skin sensitizer that can cause severe reactions.",
-      healthRisk: "Allergic reactions (sometimes severe with hair dye); some colorants carry contamination concerns.",
+      id: "coaltardye", names: ["p-phenylenediamine", "ppd", "coal tar", "ci 75000"],
+      category: "Permanent hair-dye sensitizer", role: "colorant", risk: "caution",
+      summary: "PPD hair dye is a strong contact allergen; this entry is not a blanket judgment on every CI color.",
+      whatIs: "p-Phenylenediamine (PPD) is a permanent-hair-dye chemical. It is assessed separately from ordinary declared cosmetic colors.",
+      whyFlagged: "PPD is a potent skin sensitizer that can cause severe reactions, especially after repeated or black-henna exposure.",
+      healthRisk: "Allergic reactions that can be severe; follow hair-dye patch-test and label directions.",
       studies: [
         { title: "p-Phenylenediamine allergy in hair dye (review)", source: "Contact Dermatitis", year: 2013 }
       ]
@@ -253,7 +255,7 @@ window.CB_DATA_COSMETICS = (function () {
     },
     {
       id: "aluminum", names: ["aluminum", "aluminium chlorohydrate", "aluminum zirconium", "aluminium"],
-      category: "Antiperspirant salt", risk: "limit",
+      category: "Antiperspirant active", role: "antiperspirant-active", risk: "limit",
       summary: "Active that plugs sweat glands in antiperspirants; debated, not proven harmful.",
       whatIs: "Aluminum salts block sweat ducts and are the active ingredient in antiperspirants.",
       whyFlagged: "Long-debated links to breast cancer and Alzheimer's have NOT been established by evidence, but some prefer to limit exposure.",
@@ -288,7 +290,7 @@ window.CB_DATA_COSMETICS = (function () {
     /* ------------------------------------------------------ toothpaste */
     {
       id: "fluoride", names: ["sodium fluoride", "stannous fluoride", "sodium monofluorophosphate", "fluoride"],
-      category: "Cavity-prevention active", risk: "ok",
+      category: "Cavity-prevention active", role: "oral-care-active", risk: "ok",
       summary: "Proven cavity fighter in toothpaste; safe at toothpaste levels (don't swallow).",
       whatIs: "Fluoride strengthens enamel and prevents tooth decay; it's the key active in most toothpaste.",
       whyFlagged: "Not flagged for topical dental use — it's effective and recommended. The only caution is swallowing large amounts (fluorosis in young children).",
@@ -380,7 +382,7 @@ window.CB_DATA_COSMETICS = (function () {
       studies: []
     },
     {
-      id: "sheabutter", names: ["shea butter", "butyrospermum parkii", "aloe", "aloe barbadensis", "tocopherol", "vitamin e"],
+      id: "sheabutter", names: ["shea butter", "butyrospermum parkii", "aloe", "aloe barbadensis", "tocopherol", "tocopherols", "vitamin e"],
       category: "Natural emollient / antioxidant", risk: "ok",
       summary: "Plant-derived moisturizers and antioxidants with no notable concerns.",
       whatIs: "Shea butter, aloe and tocopherol (vitamin E) are plant-derived emollients and antioxidants.",
@@ -389,6 +391,204 @@ window.CB_DATA_COSMETICS = (function () {
       studies: []
     }
   ];
+
+  /* High-frequency functional ingredients used by deodorants, soaps,
+   * toothpaste and dish-care products. These records deliberately separate an
+   * ingredient's job from its exposure caveat: natural origin is not a safety
+   * bonus, and a chemical-sounding INCI name is not a penalty by itself. */
+  additives.push(
+    {
+      id: "water-carrier", names: ["water", "aqua", "purified water"],
+      category: "Solvent / carrier", role: "carrier-solvent", risk: "ok",
+      summary: "The main carrier in many formulas.", whatIs: "Water dissolves and distributes the other ingredients.",
+      whyFlagged: "Not flagged; it is score-neutral.", healthRisk: "No ingredient-specific concern in a preserved finished product.", studies: []
+    },
+    {
+      id: "glycol-carrier", names: ["propylene glycol", "dipropylene glycol", "ppg-14 butyl ether", "ppg-26"],
+      category: "Carrier / humectant", role: "carrier-solvent", risk: "ok",
+      riskByContext: { "leave-on-underarm": "limit" },
+      summary: "A common solvent and moisture-control ingredient.", whatIs: "Glycols keep ingredients dissolved and help control texture and moisture.",
+      whyFlagged: "Generally low concern; leave-on products can sting or irritate very sensitive or freshly shaved skin.",
+      healthRisk: "Usually well tolerated; occasional irritation or contact allergy.", studies: []
+    },
+    {
+      id: "fatty-structurant", names: ["stearyl alcohol", "cetyl alcohol", "cetearyl alcohol", "stearic acid", "sodium stearate"],
+      category: "Fatty alcohol / structurant", role: "texture-structurant", risk: "ok",
+      summary: "A waxy texture builder, not the drying kind of alcohol.", whatIs: "Fatty alcohols and stearates thicken sticks and creams and help them glide.",
+      whyFlagged: "Not flagged; these are different from volatile ethanol or denatured alcohol.", healthRisk: "Low concern; rare irritation is possible.", studies: []
+    },
+    {
+      id: "plant-emollients", names: ["caprylic capric triglyceride", "caprylic/capric triglyceride", "coconut oil", "cocos nucifera oil", "jojoba seed oil", "simmondsia chinensis seed oil", "sunflower seed oil", "helianthus annuus seed oil", "olive oil", "olea europaea fruit oil", "palm kernel oil", "hydrogenated soybean oil", "hydrogenated castor oil", "beeswax", "cera alba", "jojoba esters"],
+      category: "Emollient / wax", role: "emollient", risk: "ok",
+      summary: "Oils and waxes used for glide, softness and structure.", whatIs: "These lipids condition skin or give a solid product its shape.",
+      whyFlagged: "Not flagged solely because they are plant-derived; formula fit and individual allergy still matter.", healthRisk: "Generally low concern; some oils may feel occlusive or trigger individual sensitivity.", studies: []
+    },
+    {
+      id: "soap-base", names: ["sodium palmate", "sodium palm kernelate", "sodium cocoate", "sodium olivate", "saponified oils", "saponified oil"],
+      category: "Saponified soap base", role: "cleanser-surfactant", risk: "limit",
+      summary: "A traditional cleansing soap base that can be drying.", whatIs: "Saponified oils are fatty acids converted into soap with an alkali.",
+      whyFlagged: "Effective rinse-off cleansing, but traditional soap can have a higher pH and strip dry or sensitive skin.", healthRisk: "Possible tightness, dryness or irritation; not a systemic toxicity concern.", studies: []
+    },
+    {
+      id: "amine-oxide", names: ["c10-16 alkyldimethylamine oxide", "lauramine oxide", "cocamine oxide", "myristamine oxide"],
+      category: "Amine-oxide surfactant", role: "cleanser-surfactant", risk: "limit",
+      summary: "A grease-cutting and foam-supporting surfactant.", whatIs: "Amine oxides help dish and household cleaners lift oily soil.",
+      whyFlagged: "The practical concern is skin and eye irritation from the concentrated product, plus down-the-drain environmental burden.", healthRisk: "Can irritate eyes or chapped hands; use as directed and rinse.", studies: []
+    },
+    {
+      id: "nonionic-surfactant", names: ["c9-11 pareth-8", "deceth-8", "laureth-7", "c10-16 pareth"],
+      category: "Nonionic surfactant", role: "cleanser-surfactant", risk: "limit",
+      summary: "A grease-removing surfactant used in cleaners.", whatIs: "Pareth and deceth ingredients reduce surface tension so water can remove oils.",
+      whyFlagged: "Usually a local irritation and environmental-screening issue, not proof of systemic harm; ethoxylated ingredients also depend on good manufacturing controls.",
+      healthRisk: "Possible eye/skin irritation; environmental impact depends on biodegradation and aquatic toxicity.", studies: []
+    },
+    {
+      id: "capb", names: ["cocamidopropyl betaine"],
+      category: "Amphoteric surfactant", role: "cleanser-surfactant", risk: "limit",
+      summary: "A milder foam booster that can still bother sensitized skin.", whatIs: "Cocamidopropyl betaine softens cleanser foam and reduces harshness.",
+      whyFlagged: "Most people tolerate it, but allergy can occur, sometimes related to manufacturing impurities.", healthRisk: "Possible allergic contact dermatitis in susceptible people.", studies: []
+    },
+    {
+      id: "hydrotrope", names: ["sodium cumene sulfonate", "sodium xylene sulfonate", "sodium xylenesulfonate"],
+      category: "Hydrotrope", role: "formula-stabilizer", risk: "ok",
+      summary: "Keeps a concentrated cleaner evenly mixed.", whatIs: "Hydrotropes help water carry surfactants and fragrance without separating.",
+      whyFlagged: "Not flagged at normal formulation levels; concentrated product can still irritate eyes.", healthRisk: "Low concern in the finished rinse-off product.", studies: []
+    },
+    {
+      id: "glycol-ether", names: ["dipropylene glycol butyl ether", "dpnb"],
+      category: "Cleaning solvent", role: "carrier-solvent", risk: "limit",
+      riskByContext: { "household-spray": "caution", "household-rinse-off": "limit" },
+      summary: "A solvent that helps dissolve greasy soil.", whatIs: "Glycol ethers combine water and oil solubility, improving cleaning performance.",
+      whyFlagged: "Spray use raises inhalation and eye-exposure potential; ventilation and directions matter more than the name alone.", healthRisk: "May irritate eyes, skin or airways with concentrated or poorly ventilated exposure.", studies: []
+    },
+    {
+      id: "aerosol-propellants", names: ["butane", "isobutane", "propane", "nitrogen"],
+      category: "Aerosol propellant", role: "propellant", risk: "limit",
+      riskByContext: { "aerosol-body-spray": "caution" },
+      summary: "Pressurizes the spray; the main issue is how the aerosol is used.", whatIs: "Compressed or liquefied gases push product from an aerosol can.",
+      whyFlagged: "Flammability and deliberate or heavy inhalation are the key hazards; normal skin contact is not the main concern.", healthRisk: "Use away from heat and avoid breathing concentrated spray.", studies: []
+    },
+    {
+      id: "emollient-esters", names: ["isopropyl myristate", "isopropyl palmitate", "c12-15 alkyl benzoate", "dicaprylyl ether"],
+      category: "Emollient ester", role: "emollient", risk: "ok",
+      summary: "Provides slip and a lighter skin feel.", whatIs: "Emollient esters help products spread smoothly and reduce a greasy feel.",
+      whyFlagged: "Not generally a safety concern; acne-prone users may find some esters comedogenic.", healthRisk: "Low concern; possible pore-clogging or irritation for some users.", studies: []
+    },
+    {
+      id: "bht", names: ["bht", "butylated hydroxytoluene"],
+      category: "Antioxidant stabilizer", role: "antioxidant", risk: "limit",
+      summary: "Prevents oils and fragrance from oxidizing.", whatIs: "BHT is a different antioxidant from BHA and is used in very small amounts to stabilize a formula.",
+      whyFlagged: "Evidence at cosmetic exposure is mixed; a strict screen marks it for limiting without equating it to BHA or calling the whole product unsafe.", healthRisk: "Possible irritation or sensitization; systemic concern is uncertain at normal cosmetic use.", studies: []
+    },
+    {
+      id: "declared-fragrance-allergens", names: ["limonene", "linalool", "citral", "coumarin", "citronellol", "geraniol", "eugenol", "amyl cinnamal", "hexyl cinnamal", "benzyl salicylate", "alpha-isomethyl ionone"],
+      category: "Declared fragrance allergen", role: "fragrance-or-flavor", risk: "limit",
+      riskByContext: { "leave-on-underarm": "caution", "aerosol-body-spray": "caution", "rinse-off-body": "limit", "household-rinse-off": "limit" },
+      summary: "A named scent molecule with contact-allergy potential.", whatIs: "These fragrance components are listed separately so sensitive users can identify them.",
+      whyFlagged: "They are not automatically harmful to everyone, but oxidized fragrance molecules can trigger contact allergy in susceptible people.", healthRisk: "Possible rash, itching or airway irritation in sensitive users.", studies: []
+    },
+    {
+      id: "botanical-fragrance", names: ["naturally derived fragrance", "natural fragrance", "orange peel oil", "citrus aurantium dulcis peel oil", "pine leaf oil", "pine essential oil", "pinus palustris oil", "pinus sylvestris leaf oil", "peppermint oil", "mentha piperita oil", "menthol"],
+      category: "Botanical fragrance / flavor", role: "fragrance-or-flavor", risk: "limit",
+      riskByContext: { "leave-on-underarm": "caution", "oral-care": "limit", "rinse-off-body": "limit" },
+      summary: "A natural-origin aromatic ingredient; natural does not mean allergy-free.", whatIs: "Essential oils and natural fragrance provide scent or flavor and contain multiple aromatic molecules.",
+      whyFlagged: "The concern is irritation or allergy for sensitive users, not that botanical origin makes it better or worse by itself.", healthRisk: "Possible contact allergy, mouth irritation or photosensitivity depending on the oil and exposure.", studies: []
+    },
+    {
+      id: "deodorant-absorbents", names: ["arrowroot", "arrowroot powder", "manihot esculenta powder", "manihot esculenta arrowroot powder", "charcoal powder", "activated charcoal", "kaolin clay", "kaolin", "maltodextrin"],
+      category: "Absorbent powder", role: "absorbent", risk: "ok",
+      summary: "Absorbs moisture or supports product texture.", whatIs: "Starches, clay and charcoal help manage wet feel or add color and texture.",
+      whyFlagged: "Not flagged; these do not stop sweat like an antiperspirant and natural origin does not prove superior performance.", healthRisk: "Low concern in a stick or rinse-off bar; avoid inhaling loose powders.", studies: []
+    },
+    {
+      id: "physical-exfoliants", names: ["oatmeal", "avena sativa kernel meal", "sand", "sea salt", "sodium chloride"],
+      category: "Abrasive / texture agent", role: "abrasive", risk: "ok",
+      riskByContext: { "rinse-off-body": "limit" },
+      summary: "Adds scrub, texture or viscosity.", whatIs: "Grains, salt and mineral particles can thicken or physically exfoliate.",
+      whyFlagged: "Not toxic, but coarse particles can over-exfoliate irritated skin; pressure and frequency matter.", healthRisk: "Possible mechanical irritation or dryness.", studies: []
+    },
+    {
+      id: "deodorant-active-system", names: ["magnesium hydroxide", "triethyl citrate", "zinc neodecanoate", "zinc ricinoleate"],
+      category: "Odor-control ingredient", role: "deodorant-active", risk: "ok",
+      riskByContext: { "leave-on-underarm": "limit" },
+      summary: "Controls odor without blocking sweat ducts.", whatIs: "These ingredients change odor chemistry, pH or bacterial activity in deodorant.",
+      whyFlagged: "Generally low concern, though pH-active ingredients can irritate freshly shaved or sensitive underarms.", healthRisk: "Possible local stinging or rash; not an antiperspirant.", studies: []
+    },
+    {
+      id: "ferments", names: ["lactobacillus ferment", "saccharomyces ferment", "ferment filtrate"],
+      category: "Ferment / conditioning agent", role: "conditioning-agent", risk: "ok",
+      summary: "A fermented ingredient used for conditioning or odor support.", whatIs: "Cosmetic ferments are processed ingredients or filtrates, not necessarily live probiotics.",
+      whyFlagged: "Not flagged, but marketing claims should not be mistaken for proof of a clinical benefit.", healthRisk: "Generally low concern; rare individual sensitivity.", studies: []
+    },
+    {
+      id: "oral-abrasives", names: ["hydrated silica", "calcium carbonate", "sodium bicarbonate"],
+      category: "Toothpaste abrasive / buffer", role: "oral-abrasive", risk: "ok",
+      summary: "Helps remove surface film and polish teeth.", whatIs: "Mineral abrasives and buffers clean teeth and help control formula pH.",
+      whyFlagged: "Not automatically harsh; actual abrasivity depends on particle design and the complete toothpaste formula.", healthRisk: "Low concern as directed; aggressive brushing can cause abrasion regardless of ingredient list.", studies: []
+    },
+    {
+      id: "oral-humectants", names: ["sorbitol", "xylitol"],
+      category: "Oral-care humectant / sweetener", role: "oral-humectant", risk: "ok",
+      summary: "Keeps toothpaste moist and improves taste without being an added dietary sugar.", whatIs: "Sorbitol and xylitol hold water in toothpaste and provide sweetness.",
+      whyFlagged: "Not flagged for toothpaste use; the product is spit out rather than consumed as food.", healthRisk: "Low concern as directed; swallowing large amounts may cause digestive upset.", studies: []
+    },
+    {
+      id: "oral-thickener", names: ["carrageenan", "cellulose gum", "xanthan gum"],
+      category: "Oral-care thickener", role: "texture-structurant", risk: "ok",
+      summary: "Keeps toothpaste evenly suspended.", whatIs: "Gums provide body and prevent liquid and solids from separating.",
+      whyFlagged: "Not flagged in the short-contact, spit-and-rinse use of toothpaste.", healthRisk: "Low concern as directed.", studies: []
+    },
+    {
+      id: "zinc-citrate", names: ["zinc citrate", "zinc citrate trihydrate"],
+      category: "Oral-care active", role: "oral-care-active", risk: "ok",
+      summary: "Helps control plaque, tartar or breath.", whatIs: "Zinc salts are used in toothpaste for oral-hygiene benefits.",
+      whyFlagged: "Not flagged at toothpaste levels; follow label directions and spit out.", healthRisk: "Low concern as directed; may affect taste for some users.", studies: []
+    },
+    {
+      id: "preservative-salts", names: ["sodium benzoate", "potassium sorbate"],
+      category: "Preservative", role: "preservative", risk: "ok",
+      summary: "Controls microbial spoilage in water-based products.", whatIs: "These preservative salts help keep a formula safe during normal use.",
+      whyFlagged: "Not flagged at typical permitted levels; rare sensitivity is possible.", healthRisk: "Generally low concern; occasional irritation or allergy.", studies: []
+    },
+    {
+      id: "benzyl-alcohol", names: ["benzyl alcohol"],
+      category: "Preservative / fragrance component", role: "preservative", risk: "limit",
+      summary: "A preservative and aromatic solvent with allergy potential.", whatIs: "Benzyl alcohol can preserve a formula or occur as a fragrance component.",
+      whyFlagged: "Useful at controlled levels, but it can irritate or trigger contact allergy in susceptible people.", healthRisk: "Possible local irritation or allergy; low concern for most users at formula levels.", studies: []
+    },
+    {
+      id: "volatile-alcohol", names: ["alcohol denat", "denatured alcohol", "sd alcohol", "ethanol", "isopropyl alcohol"],
+      category: "Volatile solvent", role: "carrier-solvent", risk: "limit",
+      riskByContext: { "aerosol-body-spray": "caution" },
+      summary: "A quick-drying solvent that can be drying or irritating.", whatIs: "Volatile alcohol helps a spray dry quickly and carry fragrance.",
+      whyFlagged: "High placement in a leave-on spray can dry skin and the airborne product should not be deliberately inhaled.", healthRisk: "Possible dryness, stinging and airway irritation with concentrated spray.", studies: []
+    },
+    {
+      id: "botanical-extract", names: ["olive leaf extract", "olea europaea leaf extract", "pine tar"],
+      category: "Botanical extract", role: "conditioning-agent", risk: "ok",
+      riskByContext: { "rinse-off-body": "limit" },
+      summary: "A plant-derived formula component; origin alone does not establish benefit or safety.", whatIs: "Botanical extracts can add scent, color or conditioning compounds.",
+      whyFlagged: "Usually low concern in rinse-off use, but aromatic plant mixtures can irritate sensitive skin.", healthRisk: "Possible individual irritation or allergy.", studies: []
+    },
+    {
+      id: "ph-adjusters", names: ["citric acid", "lactic acid", "sodium hydroxide", "aminomethyl propanol"],
+      category: "pH adjuster", role: "ph-adjuster", risk: "ok",
+      summary: "Sets the finished formula to its intended pH.", whatIs: "Acids and bases are added in controlled amounts to balance pH.",
+      whyFlagged: "The raw chemical may be corrosive, but its presence does not mean the finished diluted product is caustic; final concentration and pH matter.", healthRisk: "Low concern in a properly formulated product; concentrated raw material can irritate or burn.", studies: []
+    },
+    {
+      id: "simethicone", names: ["simethicone"],
+      category: "Defoamer", role: "formula-stabilizer", risk: "ok",
+      summary: "Controls unwanted foam during manufacturing or use.", whatIs: "Simethicone is a silicone-based antifoaming ingredient.",
+      whyFlagged: "Not flagged; it is generally inert at formula levels.", healthRisk: "Low direct concern.", studies: []
+    },
+    {
+      id: "declared-colorants", names: ["green 3", "ci 42053", "yellow 5", "ci 19140", "blue 1", "ci 42090", "red 40", "ci 16035"],
+      category: "Declared colorant", role: "colorant", risk: "limit",
+      summary: "Adds color but no cleaning or skin-care benefit.", whatIs: "Approved color additives identify or decorate the product.",
+      whyFlagged: "A strict screen treats optional color as unnecessary, but a declared approved color is not the same risk as PPD hair dye.", healthRisk: "Low direct concern for most users; rare sensitivity is possible.", studies: []
+    }
+  );
 
   /* ---------------------------------------------------- concern buckets
    * Keyword fallback for the long tail of INCI names not in `additives`.
@@ -472,12 +672,12 @@ window.CB_DATA_COSMETICS = (function () {
       "phenyl methicone", "cyclomethicone", "methicone"
     ],
     dye: [
-      "lead acetate", "carbon black", "ci 77266", "ci 19140", "ci 16035", "ci 42090",
+      "lead acetate", "carbon black", "ci 77266",
       "ci 15985", "ci 17200", "ci 45380", "ci 45410", "chromium oxide greens", "ferric ferrocyanide", "p-aminophenol",
       "toluene-2,5-diamine", "basic brown 17", "hc blue", "ci 12490", "4-amino-2-hydroxytoluene",
       "ci 77491", "ci 77492", "ci 77499", "ci 73360", "ci 15850", "ci 45370", "ci 47005",
       "ci 42051", "ci 75470", "ci 77742", "ci 77000", "ci 77820", "d&c red 27", "d&c red 33",
-      "fd&c yellow 5", "fd&c yellow 6", "fd&c blue 1", "fd&c red 40", "p-phenylenediamine"
+      "p-phenylenediamine"
     ],
     phthalate: [
       "diethyl phthalate", "dibutyl phthalate", "dimethyl phthalate", "diethylhexyl phthalate",
@@ -619,11 +819,108 @@ window.CB_DATA_COSMETICS = (function () {
     bha_cosmetic: "Flagged as a suspected endocrine disruptor in the EU; IARC Group 2B"
   };
 
+  const ingredientRoleMeta = {
+    "carrier-solvent": { label: "Carrier / solvent", summary: "Carries, dissolves or delivers the active formula." },
+    "cleanser-surfactant": { label: "Cleansing system", summary: "Lifts oil and soil; irritation depends on strength, concentration and rinse-off use." },
+    "texture-structurant": { label: "Texture / structure", summary: "Controls thickness, glide or product shape." },
+    "formula-stabilizer": { label: "Formula support", summary: "Keeps the product mixed, stable or at the intended pH." },
+    "emollient": { label: "Emollient", summary: "Provides glide or skin conditioning." },
+    "fragrance-or-flavor": { label: "Fragrance / flavor", summary: "Adds scent or taste; sensitivity and disclosure are assessed separately." },
+    "propellant": { label: "Aerosol propellant", summary: "Delivers a spray; flammability and inhalation behavior matter." },
+    "absorbent": { label: "Absorbent", summary: "Manages wet feel or supports texture without stopping sweat." },
+    "abrasive": { label: "Abrasive / exfoliant", summary: "Provides physical cleaning or scrub; pressure and formula design matter." },
+    "deodorant-active": { label: "Odor control", summary: "Targets odor without blocking sweat ducts." },
+    "antiperspirant-active": { label: "Antiperspirant active", summary: "Reduces sweat using an FDA-regulated active ingredient." },
+    "conditioning-agent": { label: "Conditioning agent", summary: "Supports skin feel or formula claims." },
+    "oral-care-active": { label: "Oral-care active", summary: "Provides a labeled dental benefit when used as directed." },
+    "oral-abrasive": { label: "Tooth-cleaning system", summary: "Polishes and cleans; whole-formula abrasivity matters." },
+    "oral-humectant": { label: "Oral humectant", summary: "Keeps toothpaste moist and improves taste." },
+    "ph-adjuster": { label: "pH control", summary: "Balances the finished formula; raw-material hazard is not the finished-product pH." },
+    "colorant": { label: "Colorant", summary: "Adds appearance rather than core cleaning or care performance." },
+    "preservative": { label: "Preservative", summary: "Protects a water-based formula from microbial spoilage." },
+    "antioxidant": { label: "Antioxidant", summary: "Slows oxidation and rancidity." }
+  };
+
+  const useContexts = {
+    "oral-care": { label: "Oral care", exposure: "Short contact in the mouth; brush, spit and rinse.", note: "Dental benefit and mouth sensitivity matter more than skin-care rules." },
+    "leave-on-underarm": { label: "Leave-on underarm", exposure: "Repeated leave-on contact, often on warm or freshly shaved skin.", note: "Fragrance and pH-related irritation receive more weight." },
+    "aerosol-body-spray": { label: "Aerosol body spray", exposure: "Brief skin exposure plus airborne droplets and a flammable propellant system.", note: "Ventilation, inhalation avoidance and fragrance sensitivity matter." },
+    "rinse-off-body": { label: "Rinse-off body care", exposure: "Brief skin contact followed by rinsing.", note: "Cleansing strength and irritation matter more than long-term leave-on exposure." },
+    "household-rinse-off": { label: "Dish care", exposure: "Repeated hand and eye exposure to a concentrated cleaner, followed by rinsing and down-drain release.", note: "Irritation, rinse quality, biodegradation and aquatic impact matter." },
+    "household-spray": { label: "Household spray", exposure: "Hand, eye and potential inhalation exposure from a sprayed cleaner.", note: "Spray direction, ventilation and rinsing matter." },
+    "general-beauty": { label: "Personal care", exposure: "Exposure varies by whether the product is rinsed off or left on.", note: "The package directions and exact formula determine the relevant context." },
+    "general-household": { label: "Household product", exposure: "Potential skin, eye, inhalation and environmental exposure depends on use.", note: "Follow the product directions and never mix cleaners unless the label says to." }
+  };
+
+  /* Formula references are exact product records, never brand-wide guesses.
+   * They supplement Open*Facts only for the matching name/barcode. The package
+   * remains the source of truth because manufacturers can reformulate. */
+  const referenceProducts = [
+    {
+      id: "axe-dark-temptation-antiperspirant", barcodes: ["079400061256"], aliases: ["axe dark temptation antiperspirant", "axe antiperspirant"],
+      name: "Dark Temptation Antiperspirant Deodorant Stick", brand: "AXE", category: "antiperspirant deodorant stick", productType: "beauty", useContext: "leave-on-underarm",
+      ingredientsText: "Aluminum zirconium tetrachlorohydrex gly, PPG-14 butyl ether, cyclopentasiloxane, stearyl alcohol, isopropyl palmitate, mineral oil, hydrogenated castor oil, PEG-8 distearate, fragrance (parfum), polyethylene, BHT, coumarin, limonene, linalool",
+      source: "AXE official product page + DailyMed", sourceDate: "2026-07-18", sourceUrl: "https://www.axe.com/us/en/p/dark-temptation-antiperspirant-stick.html/00079400061256"
+    },
+    {
+      id: "axe-dark-temptation-deodorant", barcodes: ["079400040404"], aliases: ["axe dark temptation deodorant stick", "axe aluminum free deodorant"],
+      name: "Dark Temptation Aluminum-Free Deodorant Stick", brand: "AXE", category: "deodorant stick", productType: "beauty", useContext: "leave-on-underarm",
+      ingredientsText: "Dipropylene glycol, aqua, propylene glycol, sodium stearate, C12-15 alkyl benzoate, parfum, disodium EDTA, BHT, simethicone, Green 3 (CI 42053)",
+      source: "AXE official product page", sourceDate: "2026-07-18", sourceUrl: "https://www.axe.com/ca/en/p/dark-temptation-deodorant-stick.html/00079400040404"
+    },
+    {
+      id: "axe-dark-temptation-body-spray", barcodes: ["079400523365"], aliases: ["axe dark temptation body spray", "axe body spray"],
+      name: "Dark Temptation Deodorant Body Spray", brand: "AXE", category: "deodorant body spray", productType: "beauty", useContext: "aerosol-body-spray",
+      ingredientsText: "Alcohol denat., butane, isobutane, propane, fragrance, zinc neodecanoate, nitrogen, isopropyl myristate, amyl cinnamal, citral, citronellol, coumarin, limonene, linalool",
+      source: "AXE official product page", sourceDate: "2026-07-18", sourceUrl: "https://www.axe.com/us/en/p/dark-temptation-deodorant-body-spray.html/00079400523365"
+    },
+    {
+      id: "dr-squatch-pine-tar-deodorant", barcodes: ["810095594663"], aliases: ["dr squatch pine tar deodorant", "pine tar deodorant"],
+      name: "Pine Tar Deodorant", brand: "Dr. Squatch", category: "aluminum-free deodorant stick", productType: "beauty", useContext: "leave-on-underarm",
+      ingredientsText: "Caprylic/Capric Triglyceride, Manihot Esculenta (Arrowroot) Powder, Stearyl Alcohol, Magnesium Hydroxide, Beeswax, Butyrospermum Parkii (Shea) Butter, Cocos Nucifera (Coconut) Oil, Triethyl Citrate, Simmondsia Chinensis (Jojoba) Seed Oil, Naturally Derived Fragrance, Jojoba Esters, Charcoal Powder, Helianthus Annuus (Sunflower) Seed Oil, Tocopherol, Lactobacillus Ferment, Maltodextrin, Citrus Aurantium Dulcis (Orange) Peel Oil, Pinus Sylvestris Leaf Oil",
+      analysisIngredientsText: "Caprylic/Capric Triglyceride, Arrowroot Powder, Stearyl Alcohol, Magnesium Hydroxide, Beeswax, Shea Butter, Coconut Oil, Triethyl Citrate, Jojoba Seed Oil, Naturally Derived Fragrance, Jojoba Esters, Charcoal Powder, Sunflower Seed Oil, Tocopherol, Lactobacillus Ferment, Maltodextrin, Orange Peel Oil, Pinus Sylvestris Leaf Oil",
+      source: "Dr. Squatch official product page", sourceDate: "2026-07-18", sourceUrl: "https://www.drsquatch.com/products/pine-tar-deodorant-1"
+    },
+    {
+      id: "dr-squatch-pine-tar-soap", barcodes: ["863765000001"], aliases: ["dr squatch pine tar soap", "pine tar bar soap"],
+      name: "Pine Tar Bar Soap", brand: "Dr. Squatch", category: "bar soap", productType: "beauty", useContext: "rinse-off-body",
+      ingredientsText: "Saponified oils of sustainable palm, coconut and olive, naturally derived fragrance, shea butter, pine tar, pine essential oil, oatmeal, sand, activated charcoal, kaolin clay, sea salt",
+      source: "Dr. Squatch official product page", sourceDate: "2026-07-18", sourceUrl: "https://www.drsquatch.com/products/pine-tar"
+    },
+    {
+      id: "dawn-ultra-original", barcodes: ["037000910640"], aliases: ["dawn ultra original", "dawn dish soap", "dawn ultra dishwashing liquid"],
+      name: "Ultra Dishwashing Liquid Original Scent", brand: "Dawn", category: "hand dishwashing liquid", productType: "household", useContext: "household-rinse-off",
+      ingredientsText: "Water, sodium lauryl sulfate, C10-16 alkyldimethylamine oxide, C9-11 Pareth-8, sodium chloride, PPG-26, PEG-8 propylheptyl ether, phenoxyethanol, methylisothiazolinone, fragrance, Yellow 5, Blue 1",
+      source: "P&G SmartLabel", sourceDate: "2026-07-18", sourceUrl: "https://smartlabel.pg.com/en-us/00037000910640.html"
+    },
+    {
+      id: "dawn-powerwash", barcodes: ["037000523642"], aliases: ["dawn powerwash", "dawn platinum powerwash", "dawn dish spray"],
+      name: "Platinum Powerwash Dish Spray Fresh Clean", brand: "Dawn", category: "dish spray", productType: "household", useContext: "household-spray",
+      ingredientsText: "Water, dipropylene glycol butyl ether, C10-16 alkyldimethylamine oxide, sodium laureth sulfate, sodium chloride, fragrance, phenoxyethanol, sodium hydroxide, sodium benzoate",
+      source: "P&G SmartLabel", sourceDate: "2026-07-18", sourceUrl: "https://smartlabel.pg.com/00037000523642.html"
+    },
+    {
+      id: "toms-whole-care-peppermint", barcodes: ["077326830833"], aliases: ["toms whole care peppermint", "tom's whole care toothpaste", "toms toothpaste"],
+      name: "Whole Care Peppermint Toothpaste", brand: "Tom's of Maine", category: "anticavity toothpaste", productType: "beauty", useContext: "oral-care",
+      ingredientsText: "Sodium monofluorophosphate 0.76%, glycerin, water, calcium carbonate, hydrated silica, xylitol, natural flavor (peppermint oil and other natural flavor), sodium lauryl sulfate, carrageenan, zinc citrate, sodium bicarbonate, benzyl alcohol",
+      source: "U.S. National Library of Medicine DailyMed", sourceDate: "2026-06-01", sourceUrl: "https://dailymed.nlm.nih.gov/dailymed/fda/fdaDrugXsl.cfm?setid=fdbadaae-eab7-4d9a-acf7-815ca93f877c&type=display"
+    },
+    {
+      id: "toms-mountain-spring-antiperspirant", barcodes: [], aliases: ["toms mountain spring antiperspirant", "tom's antiperspirant"],
+      name: "Mountain Spring Antiperspirant", brand: "Tom's of Maine", category: "antiperspirant deodorant", productType: "beauty", useContext: "leave-on-underarm",
+      ingredientsText: "Aluminum chlorohydrate 22%, palm kernel oil, stearyl alcohol, dicaprylyl ether, hydrogenated soybean oil, hydrogenated castor oil, natural fragrance, olive leaf extract, maltodextrin",
+      source: "U.S. National Library of Medicine DailyMed", sourceDate: "2026-07-18", sourceUrl: "https://dailymed.nlm.nih.gov/dailymed/fda/fdaDrugXsl.cfm?setid=b5b310d2-5a0d-47b1-8a07-a562f3faf9eb"
+    }
+  ];
+
   return {
     additives: additives,
     concernLists: concernLists,
     concernMeta: concernMeta,
     groups: groups,
-    bannedMap: bannedMap
+    bannedMap: bannedMap,
+    ingredientRoleMeta: ingredientRoleMeta,
+    useContexts: useContexts,
+    referenceProducts: referenceProducts
   };
 })();

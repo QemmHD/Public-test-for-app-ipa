@@ -20,6 +20,11 @@ require(path.join(WWW, "data-cosmetics.js"));
 
 const ENGINE_FACTORY = require(path.join(WWW, "engine.js"));
 const engine = ENGINE_FACTORY.buildEngine(global.window.CB_DATA, global.window.CB_DATA_COSMETICS);
+const cosmeticData = global.window.CB_DATA_COSMETICS;
+
+function reference(id) {
+  return cosmeticData.referenceProducts.find((item) => item.id === id);
+}
 
 /* ----------------------------------------- singleton facade (app.js path) */
 test("makeSingleton + init exposes the full engine surface", () => {
@@ -111,11 +116,12 @@ test("cosmetic ingredient classifies via the cosmetic DB", () => {
   assert.ok(c.additive, "should attach the cosmetic additive record");
 });
 
-test("cosmetic concern bucket keyword fallback works", () => {
-  // "limonene" is in the fragranceAllergen bucket, not the rich additive list.
-  const c = engine.classify(engine.norm("Limonene"), "limonene", "beauty");
-  assert.strictEqual(c.status, "caution");
-  assert.strictEqual(c.group, "fragranceAllergen");
+test("declared fragrance allergens change with exposure context", () => {
+  const rinseOff = engine.classify(engine.norm("Limonene"), "limonene", "beauty", {}, "rinse-off-body");
+  const leaveOn = engine.classify(engine.norm("Limonene"), "limonene", "beauty", {}, "leave-on-underarm");
+  assert.strictEqual(rinseOff.status, "limit");
+  assert.strictEqual(leaveOn.status, "caution");
+  assert.strictEqual(leaveOn.additive.id, "declared-fragrance-allergens");
 });
 
 test("analyze suppresses food nutrition scoring for beauty products", () => {
@@ -805,4 +811,58 @@ test("common multilingual label terms normalize without swallowing claims into i
   assert.ok(res.allergens.some((alert) => alert.key === "treenut"));
   assert.ok(res.allergens.some((alert) => alert.key === "dairy"));
   assert.ok(res.allergens.some((alert) => alert.key === "soy"));
+});
+
+/* --------------------------- non-food category and exact-formula expansion */
+test("AXE aerosol separates propellant use hazard from fragrance sensitivity", () => {
+  const ref = reference("axe-dark-temptation-body-spray");
+  const result = engine.analyze(ref, ref.ingredientsText, ref.productType);
+  assert.equal(result.useContext.id, "aerosol-body-spray");
+  assert.equal(result.coverage.percent, 100);
+  const propellants = result.classified.filter((item) => item.role === "propellant");
+  assert.ok(propellants.length >= 4);
+  assert.equal(propellants.filter((item) => item.scoreApplied).length, 1, "one shared propellant concern should be counted once");
+  assert.ok(result.classified.some((item) => item.role === "fragrance-or-flavor" && item.status === "caution"));
+});
+
+test("Dr. Squatch deodorant recognizes the full normalized formula without a natural-origin bonus", () => {
+  const ref = reference("dr-squatch-pine-tar-deodorant");
+  const result = engine.analyze(ref, ref.analysisIngredientsText, ref.productType);
+  assert.equal(result.useContext.id, "leave-on-underarm");
+  assert.equal(result.coverage.percent, 100);
+  const fragrance = result.classified.find((item) => /naturally derived fragrance/i.test(item.raw));
+  assert.equal(fragrance.status, "caution");
+  assert.equal(fragrance.role, "fragrance-or-flavor");
+  assert.ok(result.classified.some((item) => item.role === "deodorant-active"));
+});
+
+test("Dr. Squatch soap is assessed as rinse-off cleansing, fragrance and physical scrub", () => {
+  const ref = reference("dr-squatch-pine-tar-soap");
+  const result = engine.analyze(ref, ref.ingredientsText, ref.productType);
+  assert.equal(result.useContext.id, "rinse-off-body");
+  assert.equal(result.coverage.percent, 100);
+  assert.ok(result.classified.some((item) => item.role === "cleanser-surfactant"));
+  assert.ok(result.classified.some((item) => item.role === "abrasive"));
+});
+
+test("Dawn dish liquid uses household exposure and recognizes the published formula", () => {
+  const ref = reference("dawn-ultra-original");
+  const result = engine.analyze(ref, ref.ingredientsText, ref.productType);
+  assert.equal(result.useContext.id, "household-rinse-off");
+  assert.equal(result.coverage.percent, 100);
+  assert.equal(result.nutrition.hasData, false);
+  assert.ok(result.classified.some((item) => item.canonicalName.includes("alkyldimethylamine oxide") && item.role === "cleanser-surfactant"));
+  assert.ok(result.classified.some((item) => item.additive && item.additive.id === "methylisothiazolinone"));
+});
+
+test("Tom's toothpaste keeps fluoride beneficial while explaining oral SLS sensitivity", () => {
+  const ref = reference("toms-whole-care-peppermint");
+  const result = engine.analyze(ref, ref.ingredientsText, ref.productType);
+  assert.equal(result.useContext.id, "oral-care");
+  assert.equal(result.coverage.percent, 100);
+  const fluoride = result.classified.find((item) => item.role === "oral-care-active" && /monofluorophosphate/i.test(item.raw));
+  const sls = result.classified.find((item) => /sodium lauryl sulfate/i.test(item.raw));
+  assert.equal(fluoride.status, "ok");
+  assert.equal(sls.status, "caution");
+  assert.equal(sls.role, "cleanser-surfactant");
 });
