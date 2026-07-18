@@ -485,3 +485,107 @@ test("evidence-backed avoid ratings remain unchanged after calibration", () => {
       assert.strictEqual(c.status, exp, n + " should stay " + exp);
     });
 });
+
+/* ---------------------- v2 parser: nested labels and conservative OCR QA */
+test("v2 parser flattens nested sub-ingredients without losing parent context", () => {
+  const scan = engine.parseIngredientScan(
+    "INGREDIENTS: Enriched flour (wheat flour, niacin, reduced iron, folic acid), " +
+    "chocolate chips (sugar, cocoa butter, soy lecithin), salt. CONTAINS: WHEAT, MILK, SOY. Nutrition Facts"
+  );
+  const byNorm = Object.fromEntries(scan.items.map((x) => [x.norm, x]));
+  ["enriched flour", "wheat flour", "niacin", "reduced iron", "folic acid", "chocolate chips", "sugar", "cocoa butter", "soy lecithin", "salt"]
+    .forEach((name) => assert.ok(byNorm[name], "missing nested ingredient " + name));
+  assert.strictEqual(byNorm["soy lecithin"].depth, 1);
+  assert.strictEqual(byNorm["soy lecithin"].parent, "chocolate chips");
+  assert.ok(!scan.items.some((x) => /contains|nutrition facts/i.test(x.raw)), "label sections must not leak into ingredients");
+  assert.deepStrictEqual(scan.declaredAllergens, ["wheat", "milk", "soy"]);
+});
+
+test("v2 parser does not split legitimate 'and' inside an ingredient name", () => {
+  const got = engine.parseIngredients("Water, mono- and diglycerides, salt").map((x) => x.norm);
+  assert.ok(got.includes("mono- and diglycerides"));
+  assert.ok(!got.includes("mono-"));
+});
+
+test("v2 parser rejects barcode and nutrition OCR slop", () => {
+  const scan = engine.parseIngredientScan("INGREDIENTS: Water, Sugar, 012345678901, Serving Size 1 cup, Sodium 200mg");
+  assert.deepStrictEqual(scan.items.map((x) => x.norm), ["water", "sugar"]);
+  assert.ok(scan.rejected.length >= 2);
+  assert.ok(["low", "medium"].includes(scan.quality.confidence));
+});
+
+test("normalization folds accents and standardizes hyphenated E-numbers", () => {
+  assert.strictEqual(ENGINE_FACTORY.norm("Caf\u00e9 E-471"), "cafe e471");
+  const c = engine.classify(ENGINE_FACTORY.norm("E-466"), "E-466", "food");
+  assert.strictEqual(c.status, "caution");
+});
+
+/* ---------------------------- v2 matching, coverage and evidence metadata */
+test("ingredient aliases resolve to a canonical database name", () => {
+  const c = engine.classify(engine.norm("Vitamin B12"), "vitamin b12", "food");
+  assert.strictEqual(c.status, "good");
+  assert.strictEqual(c.group, "recognized");
+  assert.strictEqual(c.canonicalName, "cyanocobalamin");
+  assert.ok(c.evidence && /Screening signal/.test(c.evidence.scope));
+});
+
+test("processing markers are strict preferences, not fabricated hazard claims", () => {
+  const c = engine.classify(engine.norm("Pea Protein Isolate"), "pea protein isolate", "food");
+  assert.strictEqual(c.status, "limit");
+  assert.strictEqual(c.group, "processed");
+  assert.match(engine.ingredientDetail({ raw: "Pea Protein Isolate", name: "Pea Protein Isolate", status: c.status, group: c.group }).whyFlagged, /does not claim/i);
+});
+
+test("analysis reports recognition coverage and per-ingredient score provenance", () => {
+  const res = engine.analyze(null, "Water, Oats, Qzxyl Compound", "food");
+  assert.deepStrictEqual(res.coverage, { total: 3, recognized: 2, unknown: 1, rejected: 0, percent: 67, complete: false });
+  assert.strictEqual(res.ratingConfidence, "medium");
+  assert.ok(res.classified.every((x) => typeof x.scoreImpact === "number"));
+  assert.ok(res.classified.every((x) => x.evidence && x.matchConfidence));
+  assert.ok(res.scoreReasons.some((x) => x.code === "partial-coverage-cap"));
+});
+
+test("missing ingredient text is explicitly not rated instead of receiving 100", () => {
+  const res = engine.analyze(null, "", "food");
+  assert.strictEqual(res.badge.label, "Not rated");
+  assert.strictEqual(res.ratingConfidence, "none");
+  assert.strictEqual(res.coverage.percent, 0);
+  assert.ok(res.scoreReasons.some((x) => x.code === "missing-ingredients"));
+});
+
+/* ----------------------- v2 strict, deterministic score caps (soda case) */
+test("Nutri-Score E hard cap keeps a sugary ultra-processed soda Bad", () => {
+  const off = { nova_group: 4, nutriscore_grade: "e", nutriments: { "sugars_100g": 10.6, "energy-kcal_100g": 42 } };
+  const ingredients = "Carbonated Water, High Fructose Corn Syrup, Caramel Color, Phosphoric Acid, Natural Flavors, Caffeine";
+  const res = engine.analyze(off, ingredients, "food");
+  assert.ok(res.score <= 29, "Nutri-Score E must cap at 29, got " + res.score);
+  assert.strictEqual(res.badge.cls, "bad");
+  assert.ok(res.scoreReasons.some((x) => x.code === "nutriscore-e-cap" && x.cap === 29));
+  assert.ok(res.scoreReasons.some((x) => x.code === "sugary-upf-cap"));
+});
+
+test("Nutri-Score D and incomplete coverage cannot rate Good", () => {
+  const d = engine.analyze({ nutriscore_grade: "d", nutriments: {} }, "Water, Oats", "food");
+  assert.ok(d.score <= 49);
+  assert.notStrictEqual(d.badge.cls, "good");
+  const incomplete = engine.analyze(null, "Water, Qzxyl, Plorvane", "food");
+  assert.ok(incomplete.score <= 49);
+  assert.ok(incomplete.scoreReasons.some((x) => x.code === "low-coverage-cap"));
+});
+
+test("score output is deterministic for identical inputs", () => {
+  const off = { nova_group: 4, nutriments: { "sugars_100g": 12 } };
+  const one = engine.analyze(off, "Water, Cane Sugar, Natural Flavor", "food");
+  const two = engine.analyze(off, "Water, Cane Sugar, Natural Flavor", "food");
+  assert.deepStrictEqual(one, two);
+});
+
+/* ------------------------------------- v2 allergen declaration confidence */
+test("declared allergens are captured while plant-milk names avoid dairy false positives", () => {
+  const res = engine.analyze(null, "INGREDIENTS: Oat Milk, Peanut Butter. CONTAINS: PEANUTS.", "food");
+  assert.ok(!res.allergens.some((a) => a.key === "dairy"), "oat milk / peanut butter must not imply dairy");
+  const peanut = res.allergens.find((a) => a.key === "peanut");
+  assert.ok(peanut);
+  assert.strictEqual(peanut.confidence, "label-declared");
+  assert.ok(peanut.sources.includes("contains-statement"));
+});

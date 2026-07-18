@@ -19,8 +19,7 @@ jobs:
         with:
           node-version: '20'
 
-      # Pure engine unit tests run with zero dependencies via Node's built-in
-      # test runner. This job is independent of the IPA build and never touches
-      # the shipped www/ artifact.
-      - name: Run engine tests
-        run: node --test
+      # Syntax-check the shipped static app, then run the dependency-free Node
+      # regression suite. This stays independent from the IPA build.
+      - name: Verify JavaScript and run tests
+        run: npm run verify

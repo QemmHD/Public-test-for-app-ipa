@@ -27,6 +27,7 @@
   var WIKI = "https://en.wikipedia.org/api/rest_v1/page/summary/";
   var FETCH_TIMEOUT = 8000, FETCH_RETRIES = 1;
   var PROD_TTL = 1000 * 60 * 60 * 24 * 30; // 30-day barcode cache
+  var PROD_CACHE_VERSION = 3;
 
   var PROFILE_OPTS = [
     ["gluten", "Gluten-free"], ["dairy", "Dairy-free"], ["egg", "Egg-free"], ["soy", "Soy-free"],
@@ -43,7 +44,7 @@
     compareB: null, compareCands: [],
     insightsFilter: "all", editHealth: false, encQuery: "", ingFrom: "result",
     research: { term: "", loading: false, data: null, error: false },
-    busy: false, statusMsg: ""
+    busy: false, statusMsg: "", scanError: "", manualCode: ""
   };
   var app;
   var researchCache = {};
@@ -129,21 +130,21 @@
   function parseIngredients(text) { return ENG.parseIngredients(text); }
   function classify(n, raw, productType) { return ENG.classify(n, raw, productType); }
 
-  var STATUS_RANK = { avoid: 4, caution: 3, limit: 2, unknown: 1, good: 0 };
-  var STATUS_LABEL = { avoid: "Avoid", caution: "Caution", limit: "Limit", unknown: "Unknown", good: "Clean" };
-  var STATUS_GROUPS = ["avoid", "caution", "limit", "unknown", "good"];
-  // Human label + emoji per product family for the result-screen type badge.
+  var STATUS_RANK = { avoid: 5, caution: 4, limit: 3, unknown: 2, ok: 1, good: 0 };
+  var STATUS_LABEL = { avoid: "Avoid", caution: "Caution", limit: "Limit", unknown: "Unknown", ok: "Low concern", good: "Recognized" };
+  var STATUS_GROUPS = ["avoid", "caution", "limit", "unknown", "ok", "good"];
+  // Human label + Font Awesome icon per product family for the result-screen type badge.
   var PROD_TYPE_LABEL = {
-    food: ["🍽", "Food"], petfood: ["🐾", "Pet food"],
-    beauty: ["🧴", "Beauty / personal care"], household: ["🧽", "Household / other"]
+    food: ["food", "Food"], petfood: ["paw", "Pet food"],
+    beauty: ["bottle", "Beauty / personal care"], household: ["home", "Household / other"]
   };
   function prodTypeBadge(t) {
     var m = PROD_TYPE_LABEL[t] || PROD_TYPE_LABEL.household;
-    return '<div class="ptype-badge" data-ptype="' + esc(t || "food") + '">' + m[0] + ' ' + m[1] + '</div>';
+    return '<div class="ptype-badge" data-ptype="' + esc(t || "food") + '">' + icon(m[0]) + '<span>' + esc(m[1]) + '</span></div>';
   }
   // Certified-only kosher chip (shown only when Open*Facts carries a kosher label).
   function kosherBadge() {
-    return '<div class="kosher-badge" title="Certified kosher per product label data">\u2721 Certified Kosher</div>';
+    return '<div class="kosher-badge" title="Certified kosher per product label data">' + icon("shield") + '<span>Certified kosher</span></div>';
   }
 
   // Ingredient-detail / nutrition / scoring all live in the engine now.
@@ -152,7 +153,7 @@
   function analyze(off, ingredientsText, productType) { return ENG.analyze(off, ingredientsText, productType); }
   function bandFor(score, hasAvoid) { return ENG.bandFor(score, hasAvoid); }
 
-  function personalAlerts(classified) {
+  function personalAlerts(classified, detected) {
     var alerts = [];
     Object.keys(state.profile).forEach(function (key) {
       if (!state.profile[key]) return;
@@ -163,7 +164,91 @@
       });
       if (hits.length) alerts.push({ key: key, hits: hits.slice(0, 4) });
     });
+    // The engine also understands explicit "contains" and "may contain"
+    // statements. Prefer those label-declared alerts when they are available.
+    (detected || []).forEach(function (a) {
+      if (!state.profile[a.key]) return;
+      var current = alerts.filter(function (x) { return x.key === a.key; })[0];
+      if (current) {
+        (a.hits || []).forEach(function (hit) { if (current.hits.indexOf(hit) === -1) current.hits.push(hit); });
+        current.hits = current.hits.slice(0, 6);
+        current.note = a.note || "";
+      } else alerts.push({ key: a.key, hits: (a.hits || []).slice(0, 6), note: a.note || "" });
+    });
     return alerts;
+  }
+
+  /* --------------------------------------------- barcode validation */
+  // Consumer product barcodes are GTIN-8, UPC-A (GTIN-12), EAN-13 or GTIN-14.
+  // Decoders occasionally return a plausible-looking partial row, so digits and
+  // length alone are not enough: the GS1 modulo-10 check digit must also match.
+  function gtinChecksumValid(code) {
+    code = String(code || "");
+    if (!/^(?:\d{8}|\d{12}|\d{13}|\d{14})$/.test(code) || /^(\d)\1+$/.test(code)) return false;
+    var sum = 0, weight = 3;
+    for (var i = code.length - 2; i >= 0; i--) {
+      sum += (+code.charAt(i)) * weight;
+      weight = weight === 3 ? 1 : 3;
+    }
+    return ((10 - (sum % 10)) % 10) === +code.charAt(code.length - 1);
+  }
+  function asciiDigits(s) {
+    return String(s == null ? "" : s).replace(/[\uFF10-\uFF19]/g, function (d) {
+      return String.fromCharCode(d.charCodeAt(0) - 0xFF10 + 48);
+    });
+  }
+  function normalizeBarcode(value) {
+    var raw = asciiDigits(value).replace(/[\u0000\u200B-\u200D\uFEFF]/g, "").trim();
+    if (!raw || raw.length > 80) return null;
+    // GS1 DataMatrix / Code 128 may include an AIM prefix plus AI (01), followed
+    // by other application identifiers. Only extract a GTIN when AI 01 is clear.
+    var gs1 = raw.match(/(?:^\](?:C1|d2)\s*|^\s*)\(01\)\s*(\d{14})(?=\D|$)/i);
+    if (!gs1 && /^\](?:C1|d2)/i.test(raw)) gs1 = raw.match(/^\](?:C1|d2)\s*01(\d{14})(?=\D|$)/i);
+    if (!gs1) gs1 = raw.match(/^01(\d{14})(?=\x1D|$)/);
+    if (gs1) return gtinChecksumValid(gs1[1]) ? gs1[1] : null;
+    raw = raw.replace(/^\s*(?:barcode|gtin(?:-?(?:8|12|13|14))?|ean(?:-?(?:8|13))?|upc(?:-?[ae])?)\s*[:#]?\s*/i, "");
+    var compact = raw.replace(/[\s\u00A0\u2007\u202F-]+/g, "");
+    if (!/^\d+$/.test(compact) || !gtinChecksumValid(compact)) return null;
+    return compact;
+  }
+  function expandUpce(code) {
+    if (!/^\d{8}$/.test(code) || !gtinChecksumValid(code) || (code.charAt(0) !== "0" && code.charAt(0) !== "1")) return null;
+    var ns = code.charAt(0), d = code.slice(1, 7), check = code.charAt(7), x = d.charAt(5), body;
+    if (x === "0" || x === "1" || x === "2") body = ns + d.slice(0, 2) + x + "0000" + d.slice(2, 5);
+    else if (x === "3") body = ns + d.slice(0, 3) + "00000" + d.slice(3, 5);
+    else if (x === "4") body = ns + d.slice(0, 4) + "00000" + d.charAt(4);
+    else body = ns + d.slice(0, 5) + "0000" + x;
+    var out = body + check;
+    return gtinChecksumValid(out) ? out : null;
+  }
+  function barcodeLookupVariants(code) {
+    var out = [], seen = {};
+    function add(v) { if (v && gtinChecksumValid(v) && !seen[v]) { seen[v] = 1; out.push(v); } }
+    add(code);
+    if (code.length === 8) add(expandUpce(code));
+    if (code.length === 12) add("0" + code);
+    if (code.length === 13 && code.charAt(0) === "0") add(code.slice(1));
+    if (code.length === 14 && code.charAt(0) === "0") {
+      add(code.slice(1));
+      if (code.slice(0, 2) === "00") add(code.slice(2));
+    }
+    return out;
+  }
+  // Pure consensus helper used by both the live scanner and the test hook.
+  function selectConsensusCandidate(samples, minHits, windowMs, now) {
+    minHits = minHits || 2; windowMs = windowMs || 2200; now = now || Date.now();
+    var counts = {}, first = {}, last = {}, best = null;
+    (samples || []).forEach(function (s) {
+      var code = normalizeBarcode(s && s.code != null ? s.code : s);
+      var at = +(s && s.at) || now;
+      if (!code || now - at > windowMs || at > now + 1000) return;
+      counts[code] = (counts[code] || 0) + 1;
+      first[code] = first[code] == null ? at : Math.min(first[code], at);
+      last[code] = Math.max(last[code] || 0, at);
+      if (!best || counts[code] > counts[best] || (counts[code] === counts[best] && last[code] > last[best])) best = code;
+    });
+    if (!best || counts[best] < minHits || last[best] - first[best] < 70) return null;
+    return { code: best, hits: counts[best], firstAt: first[best], lastAt: last[best] };
   }
 
   /* ----------------------------------------- network: timeout + retry */
@@ -174,22 +259,57 @@
     var timeoutMs = opts.timeoutMs || FETCH_TIMEOUT;
     var retries = opts.retries == null ? FETCH_RETRIES : opts.retries;
     function attempt(left) {
+      var external = opts.signal || null;
+      if (external && external.aborted) { var early = new Error("Request cancelled"); early.name = "AbortError"; return Promise.reject(early); }
       var ctrl = (typeof AbortController !== "undefined") ? new AbortController() : null;
-      var timer = ctrl ? setTimeout(function () { try { ctrl.abort(); } catch (e) {} }, timeoutMs) : null;
-      return fetch(url, { headers: { "Accept": "application/json" }, signal: ctrl ? ctrl.signal : undefined })
-        .then(function (r) { if (timer) clearTimeout(timer); return r; })
-        .catch(function (err) {
-          if (timer) clearTimeout(timer);
-          if (left > 0) return new Promise(function (res) { setTimeout(res, 400); }).then(function () { return attempt(left - 1); });
-          throw err;
-        });
+      var timedOut = false, timer = null, onAbort = null;
+      var requestOpts = { method: opts.method || "GET", headers: opts.headers || { "Accept": "application/json" } };
+      if (ctrl) {
+        requestOpts.signal = ctrl.signal;
+        if (external && external.addEventListener) {
+          onAbort = function () { try { ctrl.abort(); } catch (e) {} };
+          external.addEventListener("abort", onAbort, { once: true });
+        }
+      } else if (external) requestOpts.signal = external;
+      var request = fetch(url, requestOpts);
+      var timeout = new Promise(function (resolve, reject) {
+        timer = setTimeout(function () {
+          timedOut = true; try { if (ctrl) ctrl.abort(); } catch (e) {}
+          var err = new Error("Request timed out"); err.name = "TimeoutError"; reject(err);
+        }, timeoutMs);
+      });
+      return Promise.race([request, timeout]).then(function (r) {
+        if (timer) clearTimeout(timer);
+        if (external && onAbort && external.removeEventListener) external.removeEventListener("abort", onAbort);
+        if (left > 0 && (r.status === 429 || r.status >= 500)) {
+          return new Promise(function (res) { setTimeout(res, 450); }).then(function () { return attempt(left - 1); });
+        }
+        return r;
+      }).catch(function (err) {
+        if (timer) clearTimeout(timer);
+        if (external && onAbort && external.removeEventListener) external.removeEventListener("abort", onAbort);
+        if (external && external.aborted) { err = new Error("Request cancelled"); err.name = "AbortError"; }
+        else if (timedOut && (!err || err.name === "AbortError")) { err = new Error("Request timed out"); err.name = "TimeoutError"; }
+        if (left > 0 && (!err || err.name !== "AbortError")) {
+          return new Promise(function (res) { setTimeout(res, 450); }).then(function () { return attempt(left - 1); });
+        }
+        throw err;
+      });
     }
     return attempt(retries);
   }
-  function fetchJson(url, opts) { return fetchWithTimeout(url, opts).then(function (r) { return r.ok ? r.json() : null; }); }
+  function fetchJson(url, opts) {
+    return fetchWithTimeout(url, opts).then(function (r) {
+      if (r.ok) return r.json();
+      if (r.status === 404) return null;
+      var err = new Error("Database request failed (" + r.status + ")"); err.name = "HttpError"; err.status = r.status; throw err;
+    });
+  }
 
   /* -------------------------------------------------- Open*Facts family */
-  var OFF_FIELDS = "code,product_name,brands,image_front_small_url,image_front_url,ingredients_text,ingredients_text_en,additives_tags,categories_tags,labels_tags,serving_quantity,nova_group,nutriscore_grade,nutriments";
+  var OFF_FIELDS = "code,product_type,product_name,product_name_en,brands,image_front_small_url,image_front_url,ingredients_text,ingredients_text_en,ingredients_text_with_allergens,ingredients_n,known_ingredients_n,unknown_ingredients_n,additives_tags,allergens_tags,traces_tags,categories_tags,labels_tags,serving_quantity,nova_group,nutriscore_grade,nutriments,schema_version";
+  var OFF_SCAN_FIELDS = OFF_FIELDS + ",ingredients";
+  var OFF_V3_BASE = "https://world.openfoodfacts.org/api/v3/product/";
   // Certified-only kosher detection: trust an official Open*Facts kosher label
   // (e.g. "en:kosher", "en:ou-kosher"). We never guess kosher status from
   // ingredients — only report a certification the product data actually carries.
@@ -200,16 +320,93 @@
     }
     return false;
   }
+  function stripAllergenMarkup(s) {
+    return String(s || "").replace(/<[^>]*>/g, "").replace(/_([^_]+)_/g, "$1").replace(/\s+/g, " ").trim();
+  }
+  function ingredientTextScore(text, meta) {
+    text = String(text || "").trim(); meta = meta || {};
+    if (!text) return 0;
+    var alpha = (text.match(/[A-Za-z\u00C0-\u024F]/g) || []).length;
+    var separators = (text.match(/[,;]/g) || []).length;
+    var score = Math.min(text.length, 600) + Math.min(separators, 40) * 14 + Math.min(+meta.ingredients_n || 0, 80) * 5;
+    if (alpha < 3 || alpha / Math.max(text.length, 1) < 0.25) score -= 500;
+    if (meta.known_ingredients_n != null && meta.ingredients_n && +meta.known_ingredients_n === +meta.ingredients_n) score += 60;
+    if (meta.field === "ingredients_text_en") score += 35;
+    else if (meta.field === "ingredients_text") score += 20;
+    return score;
+  }
+  function selectIngredientPayload(p) {
+    p = p || {};
+    var fields = ["ingredients_text_en", "ingredients_text", "ingredients_text_with_allergens"], best = null;
+    fields.forEach(function (field) {
+      var raw = String(p[field] || "").trim(); if (!raw) return;
+      var text = field.indexOf("with_allergens") !== -1 ? stripAllergenMarkup(raw) : raw;
+      var candidate = { text: text, raw: raw, field: field, ingredients_n: p.ingredients_n,
+        known_ingredients_n: p.known_ingredients_n, unknown_ingredients_n: p.unknown_ingredients_n };
+      candidate.score = ingredientTextScore(text, candidate);
+      if (!best || candidate.score > best.score) best = candidate;
+    });
+    return best;
+  }
+  function ingredientNodeText(node) {
+    if (!node) return "";
+    var text = String(node.text || "").trim();
+    if (!text && node.id) text = String(node.id).replace(/^[a-z]{2}:/i, "").replace(/-/g, " ");
+    return text;
+  }
+  function flattenStructuredIngredients(nodes) {
+    var out = [], seen = {};
+    function add(text) {
+      text = String(text || "").replace(/\s+/g, " ").trim();
+      var key = norm(text); if (!key || seen[key]) return;
+      seen[key] = 1; out.push(text);
+    }
+    function walk(list) {
+      (Array.isArray(list) ? list : []).forEach(function (node) {
+        add(ingredientNodeText(node));
+        if (node && node.ingredients) walk(node.ingredients);
+      });
+    }
+    walk(nodes); return out;
+  }
+  function buildAnalysisIngredients(rawText, structured, additiveTags) {
+    var base = String(rawText || "").trim(), folded = norm(base), extras = [], seen = {};
+    flattenStructuredIngredients(structured).concat((additiveTags || []).map(function (tag) {
+      return String(tag || "").replace(/^[a-z]{2}:/i, "").replace(/-/g, " ");
+    })).forEach(function (item) {
+      var key = norm(item); if (!key || seen[key]) return; seen[key] = 1;
+      // Append only database-provided nodes not already represented verbatim in
+      // the label. This adds analysis coverage without rewriting the label text.
+      if (folded.indexOf(key) === -1) extras.push(item);
+    });
+    return base + (extras.length ? (base ? ", " : "") + extras.join(", ") : "");
+  }
+  function sourceForType(type, fallback) {
+    type = type === "product" ? "household" : type;
+    for (var i = 0; i < OFF_SOURCES.length; i++) if (OFF_SOURCES[i].type === type) return OFF_SOURCES[i];
+    return fallback || OFF_SOURCES[0];
+  }
   function mapOff(p, code, src) {
     if (!p) return null;
+    src = sourceForType(p.product_type, src);
     var cats = p.categories_tags || [], catTag = "";
     for (var i = cats.length - 1; i >= 0; i--) { if (/^en:/.test(cats[i]) && cats[i].length > 5) { catTag = cats[i].slice(3); break; } }
     if (!catTag && cats.length) catTag = String(cats[cats.length - 1]).replace(/^[a-z]{2}:/, "");
-    return { barcode: code || p.code || "", name: p.product_name || "Unknown product", brand: p.brands || "",
+    var ing = selectIngredientPayload(p);
+    var rawIngredients = ing ? ing.text : "";
+    var structured = Array.isArray(p.ingredients) ? p.ingredients : [];
+    return { barcode: code || p.code || "", name: p.product_name_en || p.product_name || "Unknown product", brand: p.brands || "",
       image: p.image_front_small_url || p.image_front_url || "", category: catTag, serving_quantity: p.serving_quantity,
-      ingredientsText: p.ingredients_text_en || p.ingredients_text || "",
+      ingredientsText: rawIngredients, rawIngredientsText: ing ? ing.raw : "",
+      analysisIngredientsText: buildAnalysisIngredients(rawIngredients, structured, p.additives_tags),
+      ingredientField: ing ? ing.field : "", ingredients: structured,
+      ingredients_n: p.ingredients_n, known_ingredients_n: p.known_ingredients_n, unknown_ingredients_n: p.unknown_ingredients_n,
+      additives_tags: p.additives_tags || [], allergens_tags: p.allergens_tags || [], traces_tags: p.traces_tags || [],
       productType: (src && src.type) || "food", source: (src && src.label) || "Open Food Facts",
-      kosher: detectKosher(p),
+      ingredientSource: (src && src.label) || "Open Food Facts", ingredientConfidence: 98,
+      ingredientCoverage: p.ingredients_n && p.known_ingredients_n === p.ingredients_n ? "Database list · all parsed" : "Best available database list",
+      ingredientCoveragePct: p.ingredients_n ? Math.max(55, Math.min(100, Math.round((p.known_ingredients_n == null ? p.ingredients_n : p.known_ingredients_n) / p.ingredients_n * 100))) : (rawIngredients ? 80 : 0),
+      kosher: detectKosher(p), schema_version: p.schema_version,
       nova_group: p.nova_group, nutriscore_grade: p.nutriscore_grade, nutriments: p.nutriments || {} };
   }
   // Best-available calories per portion (engine).
@@ -221,32 +418,92 @@
     try {
       var raw = localStorage.getItem("cb_prod_" + code); if (!raw) return null;
       var rec = JSON.parse(raw);
-      if (!rec || (Date.now() - (rec.ts || 0)) > PROD_TTL) return null;
+      if (!rec || rec.v !== PROD_CACHE_VERSION || (Date.now() - (rec.ts || 0)) > PROD_TTL) return null;
       return rec.off || null;
     } catch (e) { return null; }
   }
-  function cacheProduct(code, off) {
-    try { localStorage.setItem("cb_prod_" + code, JSON.stringify({ ts: Date.now(), off: off })); } catch (e) {}
+  function cacheProduct(codes, off) {
+    (Array.isArray(codes) ? codes : [codes]).forEach(function (code) {
+      try { localStorage.setItem("cb_prod_" + code, JSON.stringify({ v: PROD_CACHE_VERSION, ts: Date.now(), off: off })); } catch (e) {}
+    });
   }
-  // Query each Open*Facts source in order; first product with data wins. The
-  // detected source sets productType (food / beauty / household / petfood).
-  function lookupBarcode(code) {
-    var cached = cachedProduct(code);
-    if (cached) return Promise.resolve(cached);
-    function tryAt(i) {
-      if (i >= OFF_SOURCES.length) return Promise.resolve(null);
-      var src = OFF_SOURCES[i];
-      var url = src.base + encodeURIComponent(code) + ".json?fields=" + OFF_FIELDS;
-      return fetchJson(url).then(function (j) {
-        if (j && j.status === 1 && j.product) {
-          var off = mapOff(j.product, code, src);
-          cacheProduct(code, off);
-          return off;
-        }
-        return tryAt(i + 1);
-      }).catch(function () { return tryAt(i + 1); });
+  function mergeOffRecords(records, code) {
+    records = (records || []).filter(Boolean); if (!records.length) return null;
+    function recordScore(o) {
+      return ingredientTextScore(o.ingredientsText, o) * 3 + (o.name && o.name !== "Unknown product" ? 120 : 0) +
+        (o.image ? 50 : 0) + (o.brand ? 20 : 0) + (o.nutriments && Object.keys(o.nutriments).length ? 80 : 0) + (o.schema_version ? 40 : 0);
     }
-    return tryAt(0);
+    var primary = records.slice().sort(function (a, b) { return recordScore(b) - recordScore(a); })[0];
+    function ingredientRecordScore(o) {
+      return ingredientTextScore(o.ingredientsText, o) + Math.max(0, Math.min(String(o.analysisIngredientsText || "").length - String(o.ingredientsText || "").length, 300)) * 2 +
+        Math.min(flattenStructuredIngredients(o.ingredients).length, 80) * 8 + (o.schema_version ? 30 : 0);
+    }
+    var ingredient = records.slice().sort(function (a, b) { return ingredientRecordScore(b) - ingredientRecordScore(a); })[0];
+    var out = {}, fields = ["barcode", "name", "brand", "image", "category", "serving_quantity", "productType", "source", "kosher",
+      "nova_group", "nutriscore_grade", "nutriments", "schema_version", "additives_tags", "allergens_tags", "traces_tags"];
+    fields.forEach(function (field) { out[field] = primary[field]; });
+    records.forEach(function (o) {
+      fields.forEach(function (field) {
+        if ((out[field] == null || out[field] === "" || (Array.isArray(out[field]) && !out[field].length)) && o[field] != null) out[field] = o[field];
+      });
+      out.kosher = out.kosher || o.kosher;
+    });
+    out.barcode = code || primary.barcode;
+    if (ingredient && ingredient.ingredientsText) {
+      ["ingredientsText", "rawIngredientsText", "analysisIngredientsText", "ingredientField", "ingredients", "ingredients_n", "known_ingredients_n",
+        "unknown_ingredients_n", "ingredientSource", "ingredientConfidence", "ingredientCoverage", "ingredientCoveragePct"].forEach(function (field) { out[field] = ingredient[field]; });
+      out.productType = ingredient.productType || out.productType;
+    } else {
+      out.ingredientsText = out.rawIngredientsText = out.analysisIngredientsText = "";
+      out.ingredientConfidence = 0; out.ingredientCoverage = "No database ingredient list"; out.ingredientCoveragePct = 0;
+    }
+    var sourceList = [];
+    records.forEach(function (o) { if (o.source && sourceList.indexOf(o.source) === -1) sourceList.push(o.source); });
+    out.sourceList = sourceList;
+    if (ingredient && ingredient.source !== primary.source) out.source = primary.source + "; ingredients: " + ingredient.source;
+    return out;
+  }
+  function productFromResponse(j) {
+    if (!j || !j.product) return null;
+    if (j.status === 1 || j.status === "success" || (j.result && j.result.id === "product_found")) return j.product;
+    return null;
+  }
+  // Read the current v3 all-product endpoint for its rich nested ingredient tree,
+  // plus the family v2 endpoints as compatibility/fallback records. We select one
+  // complete ingredient payload; lists from different products are never spliced.
+  function lookupBarcode(code, opts) {
+    opts = opts || {};
+    var variants = barcodeLookupVariants(code), cached = null;
+    for (var c = 0; c < variants.length && !cached; c++) cached = cachedProduct(variants[c]);
+    if (cached) return Promise.resolve(cached);
+    function querySource(src, v3) {
+      var responded = false, i = 0;
+      function next() {
+        if (i >= variants.length) return Promise.resolve({ record: null, responded: responded });
+        var candidate = variants[i++];
+        var url = v3
+          ? OFF_V3_BASE + encodeURIComponent(candidate) + "?product_type=all&fields=" + encodeURIComponent(OFF_SCAN_FIELDS)
+          : src.base + encodeURIComponent(candidate) + ".json?fields=" + encodeURIComponent(OFF_SCAN_FIELDS);
+        return fetchJson(url, { signal: opts.signal }).then(function (j) {
+          responded = true;
+          var p = productFromResponse(j);
+          return p ? { record: mapOff(p, code, src), responded: true } : next();
+        });
+      }
+      return next().catch(function (err) {
+        if (err && err.name === "AbortError") throw err;
+        return { record: null, responded: responded, error: err };
+      });
+    }
+    var jobs = [querySource(OFF_SOURCES[0], true)].concat(OFF_SOURCES.map(function (src) { return querySource(src, false); }));
+    return Promise.all(jobs).then(function (results) {
+      var records = results.map(function (r) { return r.record; }).filter(Boolean);
+      var anyResponse = results.some(function (r) { return r.responded; });
+      var merged = mergeOffRecords(records, code);
+      if (merged) { cacheProduct(variants, merged); return merged; }
+      if (!anyResponse) { var err = new Error("Product databases unavailable"); err.name = "NetworkError"; throw err; }
+      return null;
+    });
   }
   function searchProducts(query) {
     // Search every Open*Facts database (food, beauty, household, pet food) in
@@ -278,20 +535,34 @@
   function buildProduct(off, ingredientsText, opts) {
     opts = opts || {};
     var text = ingredientsText || (off && off.ingredientsText) || "";
+    var analysisText = opts.analysisIngredientsText || (off && off.analysisIngredientsText) || text;
     var ptype = opts.productType || (off && off.productType) || "food";
     var food = ENG.isFoodType(ptype);
-    var r = analyze(off, text, ptype);
+    var r = analyze(off, analysisText, ptype);
     return {
       id: (off && off.barcode) || ("p" + Date.now()), barcode: (off && off.barcode) || "",
       name: (off && off.name) || opts.name || "Scanned product", brand: (off && off.brand) || "",
       image: (off && off.image) || "", category: (off && off.category) || "", photoKey: opts.photoKey || "", ingredientsText: text,
+      rawIngredientsText: opts.rawIngredientsText || (off && off.rawIngredientsText) || text,
+      analysisIngredientsText: analysisText, ocrRawText: opts.ocrRawText || "",
       source: opts.source || (off && off.source) || (off ? "Open Food Facts" : "Photo / OCR"),
+      sourceList: (off && off.sourceList) || [],
+      ingredientSource: opts.ingredientSource || (off && off.ingredientSource) || (opts.source || "Label photo / OCR"),
+      ingredientConfidence: opts.ingredientConfidence != null ? opts.ingredientConfidence : ((off && off.ingredientConfidence) || 0),
+      ingredientCoverage: opts.ingredientCoverage || (off && off.ingredientCoverage) || (text ? "Ingredient list available" : "No ingredient list"),
+      ingredientCoveragePct: opts.ingredientCoveragePct != null ? opts.ingredientCoveragePct : ((off && off.ingredientCoveragePct) || 0),
       productType: ptype, isFood: food, kosher: !!(off && off.kosher),
+      ingredients_n: off && off.ingredients_n, known_ingredients_n: off && off.known_ingredients_n,
+      unknown_ingredients_n: off && off.unknown_ingredients_n,
+      additives_tags: (off && off.additives_tags) || [], allergens_tags: (off && off.allergens_tags) || [], traces_tags: (off && off.traces_tags) || [],
       nutriments: food ? ((off && off.nutriments) || null) : null,
       kcal: food ? computeKcal(off) : null,
       macros: food ? ENG.computeMacros(off) : null,
       score: r.score, badge: r.badge, classified: r.classified, nutrition: r.nutrition,
-      flaggedCount: r.flaggedCount, scoreReasons: r.scoreReasons, logged: "checked", ateAt: 0, portion: 1, ts: Date.now()
+      flaggedCount: r.flaggedCount, scoreReasons: r.scoreReasons,
+      coverage: r.coverage, ratingConfidence: r.ratingConfidence, scanQuality: r.scanQuality,
+      rejectedFragments: r.rejectedFragments || [], allergens: r.allergens || [], methodology: r.methodology || null,
+      logged: "checked", ateAt: 0, portion: 1, ts: Date.now()
     };
   }
   // Adjust the serving multiplier on the current product (food only), keep
@@ -465,8 +736,20 @@
   // fallback for when the vendored ZBar module failed to load.
   var zxingReader = null;
   var camStream = null, scanRAF = null, scanBusy = false, scanCanvas = null, scanCtx = null;
+  var scanSamples = [], lastScanAttemptAt = 0, scanHelpTimer = null;
   function zbarReady() { return !!(window.zbarWasm && window.zbarWasm.scanImageData); }
-  // Decode any barcode ZBar finds in a canvas; return the first decoded text.
+  function resetScanConsensus() { scanSamples = []; lastScanAttemptAt = 0; }
+  function registerLiveCandidate(raw) {
+    var code = normalizeBarcode(raw), now = Date.now();
+    if (!code) return null;
+    scanSamples.push({ code: code, at: now });
+    scanSamples = scanSamples.filter(function (s) { return now - s.at <= 2200; }).slice(-12);
+    var winner = selectConsensusCandidate(scanSamples, 2, 2200, now);
+    if (!winner) setStatus("Barcode seen — hold steady…");
+    return winner ? winner.code : null;
+  }
+  // Decode any barcode ZBar finds in a canvas; reject non-GTIN symbols and bad
+  // check digits before they can enter consensus.
   function zbarDecodeCanvas(canvas) {
     if (!zbarReady()) return Promise.resolve(null);
     var imgData;
@@ -479,6 +762,7 @@
       for (var i = 0; i < syms.length; i++) {
         var t = "";
         try { t = syms[i].decode(); } catch (e2) {}
+        t = normalizeBarcode(t);
         if (t) return t;
       }
       return null;
@@ -487,7 +771,12 @@
   function startScanner() {
     if (state.view !== "scanner") return;
     if (camStream || scanRAF) stopScanner(); // never open a second camera on a double entry
+    resetScanConsensus(); state.scanError = "";
     setStatus("Starting camera…");
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      state.scanError = "Live camera scanning is not available here. Enter the printed digits, or open NutriCheck on a camera-enabled device.";
+      go("manual"); return;
+    }
     // facingMode:{ideal} is only a soft hint — iOS may hand back the FRONT
     // camera, so try an exact environment lock first and fall back progressively.
     var tries = [
@@ -510,19 +799,29 @@
       camStream = stream;
       video.srcObject = stream;
       video.setAttribute("playsinline", "");
+      try {
+        var track = stream.getVideoTracks && stream.getVideoTracks()[0];
+        var caps = track && track.getCapabilities ? track.getCapabilities() : null;
+        if (track && caps && caps.focusMode && caps.focusMode.indexOf("continuous") !== -1) {
+          track.applyConstraints({ advanced: [{ focusMode: "continuous" }] }).catch(function () {});
+        }
+      } catch (focusErr) {}
       var pl = video.play();
       if (pl && pl.catch) pl.catch(function () {});
       scanCanvas = document.createElement("canvas");
       scanCtx = scanCanvas.getContext("2d", { willReadFrequently: true });
       if (!zbarReady()) return startScannerZXing(video);
       setStatus("Point the back camera at the barcode");
+      scanHelpTimer = setTimeout(function () {
+        if (state.view === "scanner" && camStream && !scanSamples.length) setStatus("Still looking — move closer, reduce glare, or take a photo");
+      }, 12000);
       loopScan(video);
     }).catch(function (e) {
       setStatus("");
       var msg = "Camera unavailable. Enter the barcode manually.";
       if (e && e.name === "NotAllowedError") msg = "Camera access is blocked. Allow camera for this site in Settings, then retry — or enter the barcode manually.";
       else if (e && e.name === "NotFoundError") msg = "No camera was found. Enter the barcode manually.";
-      alert(msg);
+      state.scanError = msg;
       go("manual");
     });
   }
@@ -532,7 +831,9 @@
   // ZBar can clear them.
   function loopScan(video) {
     if (state.view !== "scanner" || !camStream) return;
-    if (!scanBusy && video.readyState >= 2 && video.videoWidth) {
+    var now = Date.now();
+    if (!scanBusy && now - lastScanAttemptAt >= 120 && video.readyState >= 2 && video.videoWidth) {
+      lastScanAttemptAt = now;
       scanBusy = true;
       var vw = video.videoWidth, vh = video.videoHeight;
       var cropH = Math.round(vh * 0.6), sy = Math.round((vh - cropH) / 2);
@@ -543,10 +844,10 @@
       zbarDecodeCanvas(scanCanvas).then(function (code) {
         scanBusy = false;
         if (!code || state.view !== "scanner") return;
-        // Ignore noise / partial reads — a real EAN/UPC is 8+ digits.
-        if (String(code).replace(/\D/g, "").length < 8) return;
+        code = registerLiveCandidate(code);
+        if (!code) return;
         stopScanner();
-        handleBarcode(code);
+        handleBarcode(code, { origin: "live" });
       });
     }
     scanRAF = requestAnimationFrame(function () { loopScan(video); });
@@ -560,15 +861,23 @@
       if (!video || !window.ZXing) throw new Error("scanner unavailable");
       var hints = new Map(), F = ZXing.BarcodeFormat;
       hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,
-        [F.UPC_A, F.UPC_E, F.EAN_13, F.EAN_8, F.CODE_128, F.CODE_39, F.ITF]);
+        [F.UPC_A, F.UPC_E, F.EAN_13, F.EAN_8, F.CODE_128, F.ITF]);
       hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
       zxingReader = new ZXing.BrowserMultiFormatReader(hints, 120);
       setStatus("Point the back camera at the barcode");
-      var onDecode = function (res) { if (res && state.view === "scanner") { stopScanner(); handleBarcode(res.getText()); } };
+      scanHelpTimer = setTimeout(function () {
+        if (state.view === "scanner" && camStream && !scanSamples.length) setStatus("Still looking — move closer, reduce glare, or take a photo");
+      }, 12000);
+      var onDecode = function (res) {
+        if (!res || state.view !== "scanner") return;
+        var code = registerLiveCandidate(res.getText());
+        if (code) { stopScanner(); handleBarcode(code, { origin: "live" }); }
+      };
       return zxingReader.decodeFromStream(camStream, video, onDecode);
     });
   }
   function stopScanner() {
+    if (scanHelpTimer) { clearTimeout(scanHelpTimer); scanHelpTimer = null; }
     if (scanRAF) { try { cancelAnimationFrame(scanRAF); } catch (e) {} scanRAF = null; }
     scanBusy = false;
     try { if (zxingReader) zxingReader.reset(); } catch (e) {}
@@ -576,6 +885,7 @@
     if (camStream) { try { camStream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {} camStream = null; }
     var v = document.getElementById("cam");
     if (v) { try { v.srcObject = null; } catch (e) {} }
+    resetScanConsensus();
   }
   function loadImage(src) {
     return new Promise(function (res, rej) {
@@ -619,9 +929,9 @@
   function decodeBarcodeFromImage(dataUrl) {
     if (!zbarReady()) return decodeBarcodeFromImageZXing(dataUrl);
     return loadImage(dataUrl).then(function (img) {
-      var crops = [1, 0.7, 0.5, 0.35], i = 0;
+      var crops = [1, 0.78, 0.58, 0.4], i = 0, candidates = [];
       function next() {
-        if (i >= crops.length) return null;
+        if (i >= crops.length) return candidates;
         var url = renderVariant(img, 1600, 0, crops[i++]);
         if (!url) return next();
         return loadImage(url).then(function (vimg) {
@@ -630,12 +940,19 @@
           c.height = vimg.naturalHeight || vimg.height;
           c.getContext("2d", { willReadFrequently: true }).drawImage(vimg, 0, 0);
           return zbarDecodeCanvas(c);
-        }).then(function (code) { return code || next(); }).catch(function () { return next(); });
+        }).then(function (code) { if (code) candidates.push(code); return next(); }).catch(function () { return next(); });
       }
       return next();
-    }).then(function (code) {
-      // If ZBar found nothing, give the slower ZXing rotate/zoom pass a chance.
-      return code || decodeBarcodeFromImageZXing(dataUrl);
+    }).then(function (candidates) {
+      var counts = {}, winner = null;
+      (candidates || []).forEach(function (code) {
+        counts[code] = (counts[code] || 0) + 1;
+        if (!winner || counts[code] > counts[winner]) winner = code;
+      });
+      // Conflicting valid codes are safer to reject than to guess. A lone result
+      // is acceptable for a still image because it has already passed checksum.
+      if (winner && Object.keys(counts).every(function (k) { return k === winner || counts[winner] >= 2; })) return winner;
+      return decodeBarcodeFromImageZXing(dataUrl);
     });
   }
   function decodeBarcodeFromImageZXing(dataUrl) {
@@ -646,7 +963,7 @@
       function makeReader() {
         var hints = new Map();
         hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,
-          [F.UPC_A, F.UPC_E, F.EAN_13, F.EAN_8, F.CODE_128, F.CODE_39, F.ITF]);
+          [F.UPC_A, F.UPC_E, F.EAN_13, F.EAN_8, F.CODE_128, F.ITF]);
         hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
         return new ZXing.BrowserMultiFormatReader(hints);
       }
@@ -658,18 +975,25 @@
         [0, 90].forEach(function (rot) { attempts.push({ crop: crop, rot: rot }); });
       });
       return loadImage(dataUrl).then(function (img) {
-        var i = 0;
+        var i = 0, candidates = [];
         function next() {
-          if (i >= attempts.length) return null;
+          if (i >= attempts.length) {
+            var counts = {}, winner = null;
+            candidates.forEach(function (code) { counts[code] = (counts[code] || 0) + 1; if (!winner || counts[code] > counts[winner]) winner = code; });
+            if (!winner) return null;
+            if (Object.keys(counts).length > 1 && counts[winner] < 2) return null;
+            return winner;
+          }
           var a = attempts[i++];
           var url = renderVariant(img, 1600, a.rot, a.crop);
           if (!url) return next();
           return loadImage(url).then(function (variantImg) {
             return makeReader().decodeFromImageElement(variantImg).then(function (res) {
-              return res ? res.getText() : null;
+              return res ? normalizeBarcode(res.getText()) : null;
             }).catch(function () { return null; });
           }).catch(function () { return null; }).then(function (code) {
-            return code || next();
+            if (code) candidates.push(code);
+            return next();
           });
         }
         return next();
@@ -689,19 +1013,47 @@
   }
   function openOff(off) {
     if (!off) return;
-    if (!off.ingredientsText) { state.pending = { barcode: off.barcode, off: off }; go("addPhoto"); return; }
+    if (!off.ingredientsText) { state.pending = { barcode: off.barcode, off: off, reason: "missingIngredients" }; go("addPhoto"); return; }
     showProduct(buildProduct(off));
   }
 
-  function handleBarcode(code) {
-    code = String(code || "").replace(/\D/g, "");
-    if (!code) return;
+  var activeLookup = null, lookupSequence = 0, lastLookupCode = "", lastLookupAt = 0;
+  function handleBarcode(rawCode, opts) {
+    opts = opts || {};
+    var code = normalizeBarcode(rawCode);
+    if (!code) {
+      var msg = "That is not a valid UPC/EAN/GTIN. Check every digit, including the final check digit.";
+      if (opts.origin === "live") { setStatus("Could not verify that read — hold the barcode steady"); return Promise.resolve(null); }
+      state.scanError = msg; state.manualCode = String(rawCode || "").replace(/[^0-9]/g, "").slice(0, 18);
+      if (state.view !== "manual") go("manual"); else render();
+      return Promise.resolve(null);
+    }
+    var now = Date.now();
+    if (!opts.force && activeLookup && activeLookup.code === code) return activeLookup.promise;
+    if (!opts.force && code === lastLookupCode && now - lastLookupAt < 3000) return Promise.resolve(null);
+    if (activeLookup && activeLookup.controller) { try { activeLookup.controller.abort(); } catch (e) {} }
+    if (opts.origin === "live" || opts.origin === "photo") stopScanner();
+    state.scanError = ""; state.manualCode = code; lastLookupCode = code; lastLookupAt = now;
+    var controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+    var seq = ++lookupSequence;
     busy(true, "Looking up product…");
-    lookupBarcode(code).then(function (off) {
-      busy(false, "");
-      if (!off || !off.ingredientsText) { state.pending = { barcode: code, off: off }; go("addPhoto"); return; }
+    var task = lookupBarcode(code, { signal: controller ? controller.signal : null }).then(function (off) {
+      if (seq !== lookupSequence) return null;
+      activeLookup = null; state.busy = false; setStatus("");
+      if (!off) { state.pending = { barcode: code, off: null, reason: "notFound" }; go("addPhoto"); return null; }
+      if (!off.ingredientsText) { state.pending = { barcode: code, off: off, reason: "missingIngredients" }; go("addPhoto"); return null; }
+      state.pending = null;
       showProduct(buildProduct(off));
-    }).catch(function () { busy(false, ""); alert("Network error reaching the food database. Check your connection."); });
+      return off;
+    }).catch(function (err) {
+      if (seq !== lookupSequence) return null;
+      activeLookup = null; state.busy = false; setStatus("");
+      if (err && err.name === "AbortError") { render(); return null; }
+      state.pending = { barcode: code, off: null, reason: "network", error: err && err.message };
+      go("addPhoto"); return null;
+    });
+    activeLookup = { code: code, controller: controller, promise: task, seq: seq };
+    return task;
   }
 
   /* ------------------------------------------------------------ OCR */
@@ -727,16 +1079,22 @@
           var ctx = cv.getContext("2d");
           if (!ctx) { resolve(dataUrl); return; }
           ctx.drawImage(img, 0, 0, cw, ch);
-          var id = ctx.getImageData(0, 0, cw, ch), d = id.data, i, lum, min = 255, max = 0;
+          var id = ctx.getImageData(0, 0, cw, ch), d = id.data, i, lum, hist = [], px = d.length / 4;
+          for (i = 0; i < 256; i++) hist[i] = 0;
           for (i = 0; i < d.length; i += 4) {
             lum = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) | 0;
             d[i] = d[i + 1] = d[i + 2] = lum;
-            if (lum < min) min = lum;
-            if (lum > max) max = lum;
+            hist[lum]++;
           }
-          var range = (max - min) || 1;
+          // Percentiles ignore a handful of specular highlights / black package
+          // edges that otherwise flatten all of the useful letter contrast.
+          var low = 0, high = 255, seen = 0, lowCut = px * 0.02, highCut = px * 0.98;
+          for (i = 0; i < 256; i++) { seen += hist[i]; if (seen >= lowCut) { low = i; break; } }
+          seen = 0;
+          for (i = 0; i < 256; i++) { seen += hist[i]; if (seen >= highCut) { high = i; break; } }
+          var range = (high - low) || 1;
           for (i = 0; i < d.length; i += 4) {
-            var v = (d[i] - min) * 255 / range;
+            var v = (d[i] - low) * 255 / range;
             v = v < 0 ? 0 : v > 255 ? 255 : v;
             d[i] = d[i + 1] = d[i + 2] = v;
           }
@@ -748,13 +1106,65 @@
       } catch (e) { resolve(dataUrl); }
     });
   }
+  function sanitizeOcrRaw(raw) {
+    raw = String(raw || "");
+    try { if (raw.normalize) raw = raw.normalize("NFKC"); } catch (e) {}
+    return raw.replace(/\r\n?/g, "\n").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, " ")
+      .replace(/[\u200B-\u200D\uFEFF]/g, "").replace(/[“”]/g, '"').replace(/[‘’]/g, "'")
+      .split("\n").map(function (line) { return line.replace(/[ \t]+/g, " ").trim(); }).join("\n")
+      .replace(/\n{3,}/g, "\n\n").trim();
+  }
+  function extractIngredientText(raw, ocrConfidence) {
+    var full = sanitizeOcrRaw(raw), marker = /(?:^|\n)\s*(?:ingredients?|lngredients|ingredlents)\s*(?:list)?\s*[:\-]?\s*/i.exec(full);
+    if (!marker) marker = /\b(?:ingredients?|lngredients|ingredlents)\s*(?:list)?\s*[:\-]\s*/i.exec(full);
+    var section = marker ? full.slice(marker.index + marker[0].length) : full;
+    var boundaryRe = /(?:\n|[.;]\s+)(?:nutrition(?:al)? facts|supplement facts|drug facts|allergen information|allergy advice|may contain|contains\s*:(?!\s*(?:2\s*%|less than))|directions|warning|storage|distributed by|manufactured (?:by|for)|packed (?:by|for)|net (?:wt|weight|contents)|best (?:before|by)|use by|questions|www\.)\b/i;
+    var boundary = boundaryRe.exec(section);
+    var rawIngredient = (boundary ? section.slice(0, boundary.index) : section).trim();
+    var text = rawIngredient
+      .replace(/([A-Za-z])-[ \t]*\n[ \t]*(?=[a-z])/g, "$1")
+      .replace(/[\u2022\u2023\u25E6\u2043]/g, ",")
+      .replace(/\s+\|\s+/g, ", ")
+      .replace(/\b(?:https?:\/\/|www\.)\S+/gi, " ")
+      .replace(/\S+@\S+\.\S+/g, " ")
+      .replace(/\n+/g, " ").replace(/\s+/g, " ").trim()
+      .replace(/^[,;:.\-\s]+|[,;:\-\s]+$/g, "");
+    var letters = (text.match(/[A-Za-z\u00C0-\u024F]/g) || []).length;
+    var noise = (text.match(/[^A-Za-z\u00C0-\u024F0-9\s,;:.%()\[\]{}'"&+\/\-]/g) || []).length;
+    var separators = (text.match(/[,;]/g) || []).length;
+    var opens = (text.match(/\(/g) || []).length, closes = (text.match(/\)/g) || []).length;
+    var pct = 10;
+    if (marker) pct += 30;
+    if (text.length >= 24) pct += 15;
+    if (text.length >= 70) pct += 10;
+    if (separators >= 1) pct += 15;
+    if (separators >= 3) pct += 5;
+    if (boundary) pct += 10;
+    if (opens === closes) pct += 5;
+    if (!marker) pct = Math.min(pct, 70);
+    if (noise > Math.max(4, text.length * 0.08)) pct -= 20;
+    pct = Math.max(0, Math.min(100, pct));
+    var rawConf = Math.max(0, Math.min(100, +ocrConfidence || 0));
+    var conf = Math.round(rawConf * Math.max(0.35, Math.min(1, letters / Math.max(text.length * 0.55, 1))));
+    var low = letters < 3 || text.length < 4 || letters / Math.max(text.length, 1) < 0.35 || noise > Math.max(5, text.length * 0.1) || /\b\d{8,14}\b/.test(text) || conf < 55;
+    return { text: text, rawText: full, rawIngredientText: rawIngredient, confidence: conf, rawConfidence: rawConf,
+      coveragePct: pct, coverage: pct >= 85 ? "Likely complete label section" : pct >= 60 ? "Partial · review recommended" : "Low coverage · check carefully",
+      markerFound: !!marker, boundaryFound: !!boundary, low: low };
+  }
+  function plausibleReviewedIngredients(text) {
+    var r = extractIngredientText(text, 100), letters = (r.text.match(/[A-Za-z\u00C0-\u024F]/g) || []).length;
+    return letters >= 3 && r.text.length >= 4 && !/\b\d{8,14}\b/.test(r.text) ? r : null;
+  }
   // Editable OCR result so the user can fix misreads before scoring.
-  function ocrReviewBlock(text, conf, low) {
+  function ocrReviewBlock(result) {
+    result = result || {};
     return '<div class="panel glass ocr-review"><div class="panel-h">Check the scanned text' +
-      '<span class="cnt">' + Math.round(conf || 0) + '% read</span></div>' +
-      (low ? '<div class="ocr-warn">Hard to read — fix any wrong or missing words below, or retake a closer, well-lit photo of just the ingredients.</div>'
-           : '<div class="ocr-tip">Tap to fix anything the scan got wrong, then analyze.</div>') +
-      '<textarea id="ocrText" class="text-input ocr-text" rows="7" placeholder="Ingredients…">' + esc(text || "") + '</textarea>' +
+      '<span class="cnt">' + Math.round(result.confidence || 0) + '% confidence</span></div>' +
+      '<div class="ocr-meta">' + esc(result.coverage || "Review required") + ' · Label photo / OCR</div>' +
+      (result.low ? '<div class="ocr-warn">Hard to read — fix wrong or missing words below, or retake a closer, well-lit photo of only the ingredients panel.</div>'
+           : '<div class="ocr-tip">We isolated the ingredient section. Compare it with the package and fix anything missing before analysis.</div>') +
+      (!result.markerFound ? '<div class="ocr-warn">No clear “Ingredients” heading was found, so extra package text may be included.</div>' : '') +
+      '<textarea id="ocrText" class="text-input ocr-text" rows="7" placeholder="Ingredients…">' + esc(result.text || "") + '</textarea>' +
       '<button class="big-btn" data-act="analyzeOcr">Analyze ingredients</button></div>';
   }
   function runOCR(dataUrl) {
@@ -765,8 +1175,12 @@
       // they're vendored, so OCR runs fully offline. If the local files are
       // absent Tesseract falls back to its own CDN defaults.
       var opts = { langPath: "vendor/tesseract/lang", workerPath: "vendor/tesseract/worker.min.js", corePath: "vendor/tesseract" };
-      return Tesseract.recognize(dataUrl, "eng", hasLocalTess() ? opts : undefined);
-    }).then(function (r) { return { text: (r.data && r.data.text) || "", confidence: (r.data && r.data.confidence) || 0 }; });
+      var work = Tesseract.recognize(dataUrl, "eng", hasLocalTess() ? opts : undefined);
+      var limit = new Promise(function (resolve, reject) {
+        setTimeout(function () { var err = new Error("OCR timed out"); err.name = "TimeoutError"; reject(err); }, 45000);
+      });
+      return Promise.race([work, limit]);
+    }).then(function (r) { return extractIngredientText((r.data && r.data.text) || "", (r.data && r.data.confidence) || 0); });
   }
   // True when Tesseract was served from our vendor folder (so local asset paths apply).
   function hasLocalTess() {
@@ -827,8 +1241,8 @@
     var r = state.research;
     if (!r || r.term !== d.title) return "";
     if (r.loading) return '<div class="research glass"><div class="spinner small"></div><div class="rh">Researching “' + esc(d.title) + '” online…</div></div>';
-    if (r.error || !r.data) return '<div class="research glass"><div class="rh">🔎 No public summary found for “' + esc(d.title) + '” yet.</div></div>';
-    return '<div class="research glass"><div class="rh">🔎 Researched · Wikipedia</div>' +
+    if (r.error || !r.data) return '<div class="research glass"><div class="rh">' + icon("research") + ' No public summary found for “' + esc(d.title) + '” yet.</div></div>';
+    return '<div class="research glass"><div class="rh">' + icon("research") + ' Researched · Wikipedia</div>' +
       (r.data.description ? '<div class="rdesc">' + esc(r.data.description) + '</div>' : "") +
       '<p>' + esc(r.data.extract) + '</p>' +
       (r.data.url ? '<a class="rlink" href="' + esc(r.data.url) + '" target="_blank" rel="noopener">Read more on Wikipedia ›</a>' : "") +
@@ -840,49 +1254,86 @@
   function busy(on, msg) { state.busy = on; setStatus(msg || ""); render(); }
   function sevColor(s) { return s === "good" ? "var(--good)" : s === "mid" ? "var(--mid)" : s === "bad" ? "var(--bad)" : "var(--mut)"; }
   function scoreColor(cls) { return cls === "exc" ? "#1fae54" : cls === "good" ? "#7ac943" : cls === "mid" ? "#ff9f1c" : "#ff3b30"; }
-  function statusColor(st) { return st === "avoid" ? "#ff3b30" : st === "caution" ? "#ff7a45" : st === "limit" ? "#ff9f1c" : st === "good" ? "#2fd07a" : "#8a8a99"; }
+  function statusColor(st) { return st === "avoid" ? "#ff3b30" : st === "caution" ? "#ff7a45" : st === "limit" ? "#ff9f1c" : (st === "good" || st === "ok") ? "#2fd07a" : "#8a8a99"; }
   function dot(color) { return '<span class="dot" style="background:' + color + '"></span>'; }
   var ICONS = {
-    scan: '<path d="M4 8V6a2 2 0 0 1 2-2h2"/><path d="M16 4h2a2 2 0 0 1 2 2v2"/><path d="M20 16v2a2 2 0 0 1-2 2h-2"/><path d="M8 20H6a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/>',
-    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
-    chart: '<path d="M5 21V10"/><path d="M12 21V4"/><path d="M19 21v-7"/><path d="M3 21h18"/>',
-    user: '<circle cx="12" cy="8" r="4"/><path d="M4.5 21a7.5 7.5 0 0 1 15 0"/>',
-    search: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',
-    camera: '<path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.5"/>',
-    keypad: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h.01M12 7h.01M16 7h.01M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01"/>',
-    tag: '<path d="M3 12l9-9 9 9-9 9z"/><circle cx="8.5" cy="8.5" r="1.4"/>',
-    fork: '<path d="M7 3v7a2 2 0 0 0 2 2v9M5 3v4M9 3v4M17 3c-1.5 0-2.5 2-2.5 5s1 4 2.5 4 2.5-1 2.5-4-1-5-2.5-5zM17 16v5"/>'
+    scan: "fa-barcode", clock: "fa-clock", chart: "fa-chart-column", user: "fa-user",
+    search: "fa-magnifying-glass", research: "fa-magnifying-glass", camera: "fa-camera",
+    keypad: "fa-keyboard", tag: "fa-tags", fork: "fa-utensils", book: "fa-book-open",
+    warning: "fa-triangle-exclamation", check: "fa-circle-check", compare: "fa-code-compare",
+    up: "fa-arrow-trend-up", food: "fa-bowl-food", paw: "fa-paw", bottle: "fa-pump-soap",
+    home: "fa-house", shield: "fa-shield-halved", box: "fa-box-open", heart: "fa-heart-pulse",
+    sparkle: "fa-wand-magic-sparkles", favorite: "fa-star", globe: "fa-globe",
+    leaf: "fa-leaf", info: "fa-circle-info"
   };
-  function icon(n, cls) { return '<svg class="ic' + (cls ? " " + cls : "") + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + (ICONS[n] || "") + '</svg>'; }
+  function icon(n, cls, style) {
+    var weight = style === "regular" ? "fa-regular" : "fa-solid";
+    return '<i aria-hidden="true" class="ic ' + weight + ' ' + (ICONS[n] || "fa-circle") + (cls ? " " + cls : "") + '"></i>';
+  }
 
   function brandLogo(px) {
-    return '<svg class="brandlogo" width="' + px + '" height="' + px + '" viewBox="0 0 48 48" fill="none">' +
-      '<defs><linearGradient id="ncg" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">' +
-      '<stop stop-color="#4f8bff"/><stop offset="1" stop-color="#8a5bff"/></linearGradient></defs>' +
-      '<rect width="48" height="48" rx="13" fill="url(#ncg)"/>' +
-      '<circle cx="24" cy="24" r="15" stroke="#fff" stroke-opacity="0.28" stroke-width="2.2"/>' +
-      '<path d="M15.5 24.5l5.5 6 12-14" stroke="#fff" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    return '<span class="brandlogo" style="width:' + px + 'px;height:' + px + 'px;font-size:' + Math.round(px * 0.44) + 'px">' + icon("leaf") + '</span>';
   }
-  var ILLUS = {
-    scan: '<rect x="14" y="22" width="72" height="56" rx="10"/><path d="M30 38v24M40 38v24M50 38v24M60 38v24M70 38v24"/>',
-    chart: '<path d="M20 80V52M40 80V30M60 80V44M80 80V22"/><path d="M14 82h72"/>',
-    box: '<path d="M50 16l30 16v36L50 84 20 68V32z"/><path d="M20 32l30 16 30-16M50 48v36"/>',
-    heart: '<path d="M50 80S22 62 22 40a15 15 0 0 1 28-6 15 15 0 0 1 28 6c0 22-28 40-28 40z"/>'
-  };
-  function illus(name) { return '<div class="illuswrap"><svg class="illus" viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">' + (ILLUS[name] || "") + '</svg></div>'; }
+  var ILLUS = { scan: "scan", chart: "chart", box: "box", heart: "heart" };
+  function illus(name) { return '<div class="illuswrap">' + icon(ILLUS[name] || "info") + '</div>'; }
 
   var lastAnimatedId = null;
   var lastRenderedView = null;
   // One-line plain-language verdict so the result is clear at a glance.
   function verdictLine(p) {
     var m = {
-      exc: "A clean, well-rated product.",
-      good: "A solid choice — little to worry about.",
-      mid: "Mixed — a few ingredients worth watching.",
-      bad: "Best avoided, or kept occasional."
+      exc: "Few concerns were found in the available label data.",
+      good: "A stronger option under NutriCheck's strict screen.",
+      mid: "Mixed — review the flagged ingredients before choosing.",
+      bad: "Multiple strict-screen concerns were found."
     };
     var txt = m[p.badge.cls];
     return txt ? '<div class="verdict">' + txt + '</div>' : "";
+  }
+  function confidenceLabel(value) {
+    return value === "high" ? "High confidence" : value === "medium" ? "Medium confidence" : value === "low" ? "Low confidence" : "Not enough data";
+  }
+  function scoreSummary(p) {
+    var label = p.badge && p.badge.label === "Not rated" ? "No reliable rating" : "Strict ingredient + nutrition rating";
+    var note = p.methodology && p.methodology.note ? p.methodology.note : "Ingredient flags, nutrition and database coverage are screened separately; this is not medical advice.";
+    return '<div class="score-summary"><strong>' + esc(label) + '</strong><p>' + esc(note) + '</p></div>';
+  }
+  function dataQualityBlock(p) {
+    var cov = p.coverage || {};
+    var pct = cov.percent != null ? cov.percent : (p.ingredientCoveragePct || 0);
+    pct = Math.max(0, Math.min(100, Math.round(pct)));
+    var total = cov.total != null ? cov.total : (p.classified || []).length;
+    var recognized = cov.recognized != null ? cov.recognized : Math.max(0, total - (cov.unknown || 0));
+    var level = pct >= 90 && p.ratingConfidence === "high" ? "is-complete" : pct >= 60 ? "is-partial" : "is-limited";
+    var headline = total ? recognized + " of " + total + " ingredients explained" : "No usable ingredient list";
+    var source = p.ingredientSource || p.source || "Unknown source";
+    var rejected = (p.rejectedFragments || []).length;
+    var detail = confidenceLabel(p.ratingConfidence) + " · " + (p.ingredientCoverage || "Best available label data");
+    if (rejected) detail += " · " + rejected + " label fragment" + (rejected === 1 ? "" : "s") + " ignored as noise";
+    return '<section class="data-quality ' + level + '" aria-label="Ingredient data quality">' +
+      '<span class="source-chip">' + icon("info") + ' ' + esc(source) + '</span>' +
+      '<strong>' + esc(headline) + '</strong>' +
+      '<div class="coverage-meter" role="meter" aria-label="Recognized ingredient coverage" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pct + '"><div class="coverage-fill" style="--coverage:' + pct + '%"></div></div>' +
+      '<p>' + esc(detail) + '</p></section>';
+  }
+  function ingredientCountsBlock(p) {
+    var counts = { avoid: 0, caution: 0, limit: 0, unknown: 0, clean: 0 };
+    (p.classified || []).forEach(function (c) {
+      if (counts[c.status] != null) counts[c.status]++;
+      else if (c.status === "good" || c.status === "ok") counts.clean++;
+    });
+    if (!p.classified || !p.classified.length) return "";
+    return '<div class="ingredient-counts" aria-label="Ingredient classification summary">' +
+      (counts.avoid ? '<span class="avoid">' + counts.avoid + ' avoid</span>' : '') +
+      (counts.caution ? '<span class="caution">' + counts.caution + ' caution</span>' : '') +
+      (counts.limit ? '<span class="limit">' + counts.limit + ' limit</span>' : '') +
+      (counts.unknown ? '<span>' + counts.unknown + ' unknown</span>' : '') +
+      (counts.clean ? '<span class="clean">' + counts.clean + ' recognized</span>' : '') + '</div>';
+  }
+  function exactIngredientBlock(p) {
+    var raw = p.rawIngredientsText || p.ingredientsText || "";
+    if (!raw) return "";
+    return '<details class="ingredient-raw"><summary>Exact ingredient label</summary><div>' + esc(raw) + '</div></details>';
   }
   function animateScore() {
     var ring = document.querySelector(".score-ring"), numEl = document.querySelector(".score-num");
@@ -914,7 +1365,7 @@
       '<button class="big-btn" data-act="scan">' + icon("scan") + ' Scan a barcode</button>' +
       '<div class="dual"><button class="ghost-btn" data-act="addPhoto">' + icon("tag") + ' Add by photo</button>' +
       '<button class="ghost-btn" data-act="manual">' + icon("keypad") + ' Enter code</button></div>' +
-      '<button class="ghost-btn" data-act="encyclopedia">📚 Ingredient encyclopedia</button>' +
+      '<button class="ghost-btn" data-act="encyclopedia">' + icon("book") + ' Ingredient encyclopedia</button>' +
       (recent.length ? ('<div class="section-title">Recent scans</div>' + recent.map(historyRow).join("")) :
         '<div class="empty">' + illus("scan") + 'No scans yet.<br>Scan or search your first product above.</div>') +
       '</div>';
@@ -928,13 +1379,15 @@
   }
 
   function viewScanner() {
-    return '<div class="screen scanner">' +
+    var feedback = state.statusMsg || "Looking for a valid UPC, EAN, or GTIN barcode";
+    return '<div class="screen scanner is-detecting" data-scan-state="detecting">' +
       '<video id="cam" playsinline autoplay muted></video>' +
+      '<div class="scan-guide-copy">Center the entire barcode inside the frame. Hold steady and avoid glare.</div>' +
       '<div class="scan-frame"></div>' +
-      '<div class="scan-status" id="status">' + esc(state.statusMsg) + '</div>' +
+      '<div class="scan-status scan-feedback is-detecting" id="status" role="status" aria-live="polite">' + icon("scan") + '<span>' + esc(feedback) + '</span></div>' +
       '<div class="scan-hint">Trouble scanning? Tap below to snap a photo of the barcode — sharper and more reliable.</div>' +
       '<div class="scan-actions">' +
-        '<label class="big-btn photo-cap"><input id="bcphoto" type="file" accept="image/*" capture="environment" hidden> 📷 Take a photo of the barcode</label>' +
+        '<label class="big-btn photo-cap"><input id="bcphoto" type="file" accept="image/*" capture="environment" hidden>' + icon("camera") + ' Take a photo of the barcode</label>' +
         '<button class="link-btn" data-act="manual">Enter code manually</button>' +
         '<button class="cancel-btn" data-act="home">Cancel</button>' +
       '</div>' +
@@ -963,10 +1416,10 @@
       // Results can now be any product type (food / beauty / household / pet
       // food); show a small type tag on non-food rows so mixed results read clearly.
       var tl = o.productType && o.productType !== "food" && PROD_TYPE_LABEL[o.productType];
-      var typeTag = tl ? '<span class="srch-type">' + tl[0] + ' ' + esc(tl[1]) + '</span>' : "";
+      var typeTag = tl ? '<span class="srch-type">' + icon(tl[0]) + ' ' + esc(tl[1]) + '</span>' : "";
       var sub = esc(o.brand || (o.ingredientsText ? "" : "No ingredient data"));
       return '<div class="row card tappable" data-search-idx="' + i + '">' +
-        (o.image ? '<img class="srch-img" src="' + esc(o.image) + '" alt="">' : '<div class="srch-img ph">🥫</div>') +
+        (o.image ? '<img class="srch-img" src="' + esc(o.image) + '" alt="">' : '<div class="srch-img ph" aria-hidden="true">' + icon("food") + '</div>') +
         '<div class="row-main"><div class="row-title">' + esc(o.name) + '</div>' +
         '<div class="row-sub">' + typeTag + (typeTag && sub ? " · " : "") + sub + '</div></div>' +
         '<div class="chev">›</div></div>';
@@ -978,14 +1431,16 @@
 
   function viewManual() {
     return '<div class="screen">' + backBar("Enter barcode") +
-      '<input id="bc" class="text-input" inputmode="numeric" placeholder="e.g. 049000028911" />' +
+      '<input id="bc" class="text-input" inputmode="numeric" autocomplete="off" maxlength="18" value="' + esc(state.manualCode || "") + '" placeholder="e.g. 049000028911" aria-describedby="bcHelp" />' +
+      (state.scanError ? '<div class="scan-error" role="alert">' + esc(state.scanError) + '</div>' : '') +
       '<button class="big-btn" data-act="manualGo">Look up</button>' +
-      '<div class="hint">The UPC/EAN number printed under the barcode.</div></div>';
+      '<div class="hint" id="bcHelp">Enter all 8, 12, 13, or 14 digits printed under the barcode. We verify the check digit before searching.</div>' +
+      '<button class="ghost-btn" data-act="scan">Use the camera instead</button></div>';
   }
 
   function viewResult() {
     var p = state.product; if (!p) return viewHome();
-    var alerts = personalAlerts(p.classified);
+    var alerts = personalAlerts(p.classified, p.allergens);
     var n = p.nutrition || { negatives: [], positives: [] };
 
     var groupsHtml = "";
@@ -999,14 +1454,19 @@
 
     var c = scoreColor(p.badge.cls);
     var fav = isFav(p.id);
+    var provenance = [];
+    if (p.ingredientSource) provenance.push(p.ingredientSource);
+    if (p.ingredientConfidence) provenance.push(Math.round(p.ingredientConfidence) + "% confidence");
+    if (p.ingredientCoverage) provenance.push(p.ingredientCoverage);
     return '<div class="screen result">' + backBar("") +
       '<div class="hero glass" style="--c:' + c + '">' +
-        '<button class="fav-btn' + (fav ? " on" : "") + '" data-fav="1" aria-label="Favorite">' + (fav ? "★" : "☆") + '</button>' +
+        '<button class="fav-btn' + (fav ? " on" : "") + '" data-fav="1" aria-label="' + (fav ? "Remove from favorites" : "Add to favorites") + '">' + icon("favorite", "", fav ? "solid" : "regular") + '</button>' +
         '<div class="product-head">' +
-          (p.image ? '<img class="phead-img" src="' + esc(p.image) + '" alt="">' : '<div class="phead-img ph">🥫</div>') +
+          (p.image ? '<img class="phead-img" src="' + esc(p.image) + '" alt="">' : '<div class="phead-img ph" aria-hidden="true">' + icon("food") + '</div>') +
           '<div class="phead-txt"><div class="phead-name">' + esc(p.name) + '</div>' +
           '<div class="phead-brand">' + esc(p.brand || "") + '</div>' +
           '<div class="phead-src">via ' + esc(p.source) + '</div>' +
+          (provenance.length ? '<div class="phead-src ingredient-provenance">Ingredients: ' + esc(provenance.join(" · ")) + '</div>' : '') +
           prodTypeBadge(p.productType) + (p.kosher ? kosherBadge() : "") + '</div>' +
         '</div>' +
         '<div class="score-wrap">' +
@@ -1015,9 +1475,11 @@
           '<div class="score-num">' + p.score + '</div><div class="score-of">out of 100</div></div>' +
           '<div class="badge ' + p.badge.cls + '">' + esc(p.badge.label) + '</div>' +
           verdictLine(p) +
+          scoreSummary(p) +
           '<button class="why-btn" data-act="toggleScore">' + (state.scoreOpen ? "Hide score details" : "How is this scored?") + '</button>' +
         '</div>' +
       '</div>' +
+      dataQualityBlock(p) +
       whyBlock(p) +
       // Yuka-style: the verdict detail (what's bad / what's good) comes FIRST,
       // right under the score — that's the core of the result screen.
@@ -1027,11 +1489,11 @@
       (function () {
         var negHtml = concernRows(p) +
           (n.negatives || []).filter(function (r) { return r.label !== "Additives"; }).map(brkRow).join("");
-        return negHtml ? '<div class="panel glass"><div class="panel-h neg"><span>⚠</span> Negatives</div>' + negHtml + '</div>' : "";
+        return negHtml ? '<div class="panel glass"><div class="panel-h neg">' + icon("warning") + ' Negatives</div>' + negHtml + '</div>' : "";
       })() +
-      (n.positives && n.positives.length ? '<div class="panel glass"><div class="panel-h pos"><span>✓</span> Positives</div>' + n.positives.map(brkRow).join("") + '</div>' : "") +
+      (n.positives && n.positives.length ? '<div class="panel glass"><div class="panel-h pos">' + icon("check") + ' Positives</div>' + n.positives.map(brkRow).join("") + '</div>' : "") +
       (alerts.length ? ('<div class="alerts">' + alerts.map(function (a) {
-        return '<div class="alert">⚠️ <b>' + esc(cap(a.key)) + '</b>: contains ' + esc(a.hits.join(", ")) + '</div>';
+        return '<div class="alert">' + icon("warning") + ' <b>' + esc(cap(a.key)) + '</b>: contains ' + esc(a.hits.join(", ")) + (a.note ? '<div class="row-sub">' + esc(a.note) + '</div>' : '') + '</div>';
       }).join("") + '</div>') : "") +
       (p.isFood ?
         '<div class="logseg">' +
@@ -1039,12 +1501,14 @@
           '<button class="seg-btn' + (p.logged !== "eaten" ? " on" : "") + '" data-log="checked">' + icon("search") + ' Just checking</button>' +
         '</div>' : "") +
       (p.isFood ? portionBlock(p) : "") +
-      '<button class="ghost-btn cmp-btn" data-act="comparePick">⇄ Compare with another product</button>' +
+      '<button class="ghost-btn cmp-btn" data-act="comparePick">' + icon("compare") + ' Compare with another product</button>' +
       altsBlock(p) +
       nutritionTable(p) +
       '<div class="panel glass"><div class="panel-h">Ingredients <span class="cnt">' + p.classified.length + '</span></div>' +
       '<div class="legend">Tap any ingredient for details</div>' +
+      ingredientCountsBlock(p) +
       (p.classified.length ? groupsHtml : '<div class="empty small">No ingredient list available for this product.</div>') +
+      exactIngredientBlock(p) +
       '</div></div>';
   }
   // Serving stepper + per-portion kcal/macros. Only meaningful for food where
@@ -1082,16 +1546,16 @@
   function altsBlock(p) {
     var a = state.alts;
     if (!a || a.forId !== p.id) return "";
-    if (a.loading) return '<div class="panel glass"><div class="panel-h pos"><span>↑</span> Better choices</div>' +
+    if (a.loading) return '<div class="panel glass"><div class="panel-h pos">' + icon("up") + ' Better choices</div>' +
       '<div class="lrow"><div class="spinner small"></div><div class="row-main"><div class="row-sub">Finding healthier options in this category…</div></div></div></div>';
     if (!a.list || !a.list.length) return "";
     var rows = a.list.map(function (prod, i) {
       return '<div class="lrow tappable" data-alt="' + i + '">' +
-        (prod.image ? '<img class="srch-img" src="' + esc(prod.image) + '" alt="">' : '<div class="srch-img ph">🥫</div>') +
+        (prod.image ? '<img class="srch-img" src="' + esc(prod.image) + '" alt="">' : '<div class="srch-img ph" aria-hidden="true">' + icon("food") + '</div>') +
         '<div class="row-main"><div class="row-title">' + esc(prod.name) + '</div><div class="row-sub">' + esc(prod.brand || "") + '</div></div>' +
         '<div class="mini-score" style="background:' + scoreColor(prod.badge.cls) + '">' + prod.score + '</div></div>';
     }).join("");
-    return '<div class="panel glass"><div class="panel-h pos"><span>↑</span> Better choices in this category</div>' + rows + '</div>';
+    return '<div class="panel glass"><div class="panel-h pos">' + icon("up") + ' Better choices in this category</div>' + rows + '</div>';
   }
   // Candidates to compare the current product against: everything the user has
   // seen (history + favorites) plus any loaded alternatives, minus the product
@@ -1114,7 +1578,7 @@
     var cands = compareCandidates(p); state.compareCands = cands;
     var rows = cands.length ? cands.map(function (o, i) {
       return '<div class="lrow tappable" data-cmp="' + i + '">' +
-        (o.image ? '<img class="srch-img" src="' + esc(o.image) + '" alt="">' : '<div class="srch-img ph">🥫</div>') +
+        (o.image ? '<img class="srch-img" src="' + esc(o.image) + '" alt="">' : '<div class="srch-img ph" aria-hidden="true">' + icon("food") + '</div>') +
         '<div class="row-main"><div class="row-title">' + esc(o.name) + '</div><div class="row-sub">' + esc(o.brand || "") + '</div></div>' +
         '<div class="mini-score" style="background:' + scoreColor(o.badge.cls) + '">' + o.score + '</div></div>';
     }).join("") : '<div class="empty small">Scan or save another product first, then come back to compare it here.</div>';
@@ -1125,7 +1589,7 @@
     var c = scoreColor(p.badge.cls);
     return '<div class="cmp-col' + (mark ? " win" : "") + '">' +
       (mark ? '<div class="cmp-crown">' + mark + '</div>' : '') +
-      (p.image ? '<img class="cmp-img" src="' + esc(p.image) + '" alt="">' : '<div class="cmp-img ph">🥫</div>') +
+      (p.image ? '<img class="cmp-img" src="' + esc(p.image) + '" alt="">' : '<div class="cmp-img ph" aria-hidden="true">' + icon("food") + '</div>') +
       '<div class="cmp-name">' + esc(p.name) + '</div>' +
       '<div class="score-ring cmp-ring" style="--c:' + c + ';--p:' + p.score + '"><div class="score-num">' + p.score + '</div></div>' +
       '<div class="badge ' + p.badge.cls + '">' + esc(p.badge.label) + '</div>' +
@@ -1158,9 +1622,9 @@
 
     return '<div class="screen result">' + backBar("Comparison") +
       '<div class="cmp-cols">' +
-        compareCol(a, d.better === "a" ? "♔" : "") +
+        compareCol(a, d.better === "a" ? icon("sparkle") : "") +
         '<div class="cmp-vs-badge">VS</div>' +
-        compareCol(b, d.better === "b" ? "♔" : "") +
+        compareCol(b, d.better === "b" ? icon("sparkle") : "") +
       '</div>' +
       '<div class="panel glass"><div class="panel-h">Verdict</div>' +
         '<div class="cmp-verdict">' + verdict + '</div>' +
@@ -1168,7 +1632,7 @@
         '<div class="cmp-vals"><span class="' + (d.additiveCount.a < d.additiveCount.b ? "cmp-good" : "") + '">' + d.additiveCount.a + '</span>' +
         '<span class="cmp-vs">vs</span><span class="' + (d.additiveCount.b < d.additiveCount.a ? "cmp-good" : "") + '">' + d.additiveCount.b + '</span></div></div>' +
       '</div>' +
-      '<div class="panel glass"><div class="panel-h neg"><span>⚠</span> Negatives</div>' +
+      '<div class="panel glass"><div class="panel-h neg">' + icon("warning") + ' Negatives</div>' +
         '<div class="lrow"><div class="row-main"><div class="row-title">Only ' + esc(a.name) + '</div></div><div class="cmp-chips">' + chipList(d.negatives.aOnly, "neg") + '</div></div>' +
         '<div class="lrow"><div class="row-main"><div class="row-title">Only ' + esc(b.name) + '</div></div><div class="cmp-chips">' + chipList(d.negatives.bOnly, "neg") + '</div></div>' +
         '<div class="lrow"><div class="row-main"><div class="row-title">In both</div></div><div class="cmp-chips">' + chipList(d.negatives.shared, "neg") + '</div></div>' +
@@ -1236,12 +1700,12 @@
         '<div class="row-main"><div class="ing-cat">' + esc(d.category) + (d.enumber ? " · " + esc(d.enumber) : "") + '</div>' +
         '<div class="ing-summary">' + esc(d.summary) + '</div></div>' +
         '<div class="status-tag ' + d.status + '">' + STATUS_LABEL[d.status] + '</div></div>' +
-      (d.banned ? '<div class="banned-note">🌍 <b>Banned / restricted:</b> ' + esc(d.banned) + '</div>' : "") +
+      (d.banned ? '<div class="banned-note">' + icon("globe") + ' <b>Banned / restricted:</b> ' + esc(d.banned) + '</div>' : "") +
       '<div class="tabs">' + tabs.map(function (t) {
         return '<button class="tab' + (state.ingTab === t[0] ? " on" : "") + '" data-tab="' + t[0] + '">' + t[1] + '</button>';
       }).join("") + '</div>' +
       '<div class="tab-body">' + body + '</div>' +
-      '<button class="ghost-btn research-btn" data-research="' + esc(d.title) + '">🔎 Research this ingredient online</button>' +
+      '<button class="ghost-btn research-btn" data-research="' + esc(d.title) + '">' + icon("research") + ' Research this ingredient online</button>' +
       researchBlock(d) +
       '<div class="disclaimer">Educational summary, not medical advice.</div></div>';
   }
@@ -1251,10 +1715,10 @@
     var list = fav ? state.favorites : state.history;
     var chips = '<div class="chips">' +
       '<button class="chip' + (!fav ? " on" : "") + '" data-hist="all">Recent</button>' +
-      '<button class="chip' + (fav ? " on" : "") + '" data-hist="fav">★ Favorites</button></div>';
+      '<button class="chip' + (fav ? " on" : "") + '" data-hist="fav">' + icon("favorite") + ' Favorites</button></div>';
     var body = list.length ? list.map(historyRow).join("") +
       (!fav ? '<button class="ghost-btn danger" data-act="clearHist">Clear history</button>' : "") :
-      '<div class="empty">' + illus("box") + (fav ? "No favorites yet.<br>Tap ☆ on a product to save it." : "Nothing scanned yet.") + '</div>';
+      '<div class="empty">' + illus("box") + (fav ? "No favorites yet.<br>Use the star button on a product to save it." : "Nothing scanned yet.") + '</div>';
     return '<div class="screen"><header class="hd"><div class="logo">History</div></header>' + chips + body + '</div>';
   }
 
@@ -1264,7 +1728,7 @@
     var source = eatenMode ? state.history.filter(function (p) { return p.logged === "eaten"; }) : state.history;
     var chips = '<div class="chips">' +
       '<button class="chip' + (!eatenMode ? " on" : "") + '" data-ins="all">All scans</button>' +
-      '<button class="chip' + (eatenMode ? " on" : "") + '" data-ins="eaten">🍽 Eaten (' + eatenCount + ')</button></div>';
+      '<button class="chip' + (eatenMode ? " on" : "") + '" data-ins="eaten">' + icon("fork") + ' Eaten (' + eatenCount + ')</button></div>';
     var s = computeInsights(source);
     var today = todayCard();
     var trends = trendsCard();
@@ -1275,7 +1739,7 @@
     var bar = '<div class="distbar">' + seg("exc", s.dist.exc) + seg("good", s.dist.good) + seg("mid", s.dist.mid) + seg("bad", s.dist.bad) + '</div>';
     var topHtml = s.top.length ? s.top.map(function (f) {
       return '<div class="lrow"><div class="row-main"><div class="row-title">' + esc(f.name) + '</div></div><div class="status-tag caution">' + f.count + '×</div></div>';
-    }).join("") : '<div class="lrow"><div class="row-main"><div class="row-sub">No flagged additives yet 🎉</div></div></div>';
+    }).join("") : '<div class="lrow"><div class="row-main"><div class="row-sub">No flagged additives yet.</div></div></div>';
     return '<div class="screen">' +
       '<header class="hd"><div class="logo">Insights</div><div class="sub">Your diet & scanning habits</div></header>' + today + trends + chips +
       '<div class="stat-grid">' +
@@ -1298,15 +1762,15 @@
     }).join("");
     return '<div class="screen onboard">' +
       '<div class="ob-hero"><div class="ob-logo">' + brandLogo(88) + '</div><div class="logo">NutriCheck</div>' +
-      '<div class="sub">Scan any food and instantly see what\'s really inside — every additive rated, explained and researched.</div></div>' +
+      '<div class="sub">Scan a product, verify the label data, and see every recognized ingredient with a strict, transparent rating.</div></div>' +
       '<div class="ob-feats">' +
-        '<div class="ob-feat">📷 <span>Scan or search any product</span></div>' +
-        '<div class="ob-feat">🚦 <span>0–100 score with a clear verdict</span></div>' +
-        '<div class="ob-feat">🧪 <span>Every ingredient explained, with studies</span></div>' +
-        '<div class="ob-feat">↑ <span>Better choices when a product scores low</span></div>' +
+        '<div class="ob-feat">' + icon("camera") + '<span>Scan or search any product</span></div>' +
+        '<div class="ob-feat">' + icon("chart") + '<span>0–100 score with a clear verdict</span></div>' +
+        '<div class="ob-feat">' + icon("book") + '<span>Every recognized ingredient explained; gaps shown clearly</span></div>' +
+        '<div class="ob-feat">' + icon("up") + '<span>Better choices when a product scores low</span></div>' +
       '</div>' +
-      '<div class="section-title">Any diet needs? (optional)</div>' + toggles +
-      '<button class="big-btn" data-act="finishOnboard">Start scanning →</button></div>';
+      '<button class="big-btn" data-act="finishOnboard">Start scanning</button>' +
+      '<div class="section-title">Any diet needs? (optional)</div>' + toggles + '</div>';
   }
 
   function macroChip(label, val, unit) {
@@ -1391,13 +1855,17 @@
 
   function viewAddPhoto() {
     var pend = state.pending || {};
-    var note = pend.barcode ?
-      "We couldn't read the ingredients for this barcode. Take a clear photo of the <b>ingredients list</b> and we'll read it." :
-      "Take a clear, well-lit photo of the <b>ingredients list</b> on the package.";
+    var note;
+    if (pend.reason === "network") note = "The product databases did not respond. You can retry, or photograph the <b>ingredients list</b> and continue offline.";
+    else if (pend.reason === "notFound") note = "No database match was found for <b>" + esc(pend.barcode) + "</b>. Photograph the <b>ingredients list</b> so nothing is guessed.";
+    else if (pend.reason === "missingIngredients") note = "We found the product, but its database record has no ingredient list. Photograph the <b>ingredients panel</b> and review the text before analysis.";
+    else note = "Take a clear, well-lit photo of the <b>ingredients list</b> on the package.";
     return '<div class="screen">' + backBar("Add by photo") +
-      '<div class="photo-card glass"><div class="photo-illu">🏷️</div><p>' + note + '</p>' +
-      '<label class="big-btn"><input id="photo" type="file" accept="image/*" capture="environment" hidden> 📸 Take / choose photo</label>' +
-      '<div class="hint">Fill the frame with just the ingredients text for the best read.</div></div>' +
+      '<div class="photo-card glass"><div class="photo-illu">' + icon("tag") + '</div><p>' + note + '</p>' +
+      '<label class="big-btn"><input id="photo" type="file" accept="image/*" capture="environment" hidden>' + icon("camera") + ' Take / choose photo</label>' +
+      '<div class="hint">Fill the frame with only the full ingredients panel, in focus and without glare.</div>' +
+      (pend.barcode ? '<div class="fallback-actions"><button class="ghost-btn" data-act="retryLookup">Retry database lookup</button>' +
+        '<button class="link-btn" data-act="manual">Enter a different barcode</button></div>' : '') + '</div>' +
       '<div id="ocrPreview"></div></div>';
   }
 
@@ -1493,20 +1961,27 @@
     var act = t.dataset.act;
     if (act === "scan") go("scanner");
     else if (act === "home") go("home");
-    else if (act === "addPhoto") go("addPhoto");
+    else if (act === "addPhoto") { state.pending = null; go("addPhoto"); }
     else if (act === "analyzeOcr") {
       var ta = document.getElementById("ocrText");
       var txt = ta ? ta.value.trim() : "";
-      if (txt.replace(/\s/g, "").length < 6) { alert("Please enter or fix the ingredients text first."); return; }
+      var reviewed = plausibleReviewedIngredients(txt);
+      if (!reviewed) { alert("That text does not look like a usable ingredient list. Retake the photo or enter the label text carefully."); return; }
       var ctx = state.ocrPending || {};
-      var product = buildProduct(ctx.off || null, txt, { photoKey: ctx.photoKey, source: "Photo / OCR", name: ctx.name || "Scanned product" });
+      var product = buildProduct(ctx.off || null, reviewed.text, { photoKey: ctx.photoKey,
+        source: ctx.off && ctx.off.source ? ctx.off.source : "Label photo / OCR", name: ctx.name || "Scanned product",
+        rawIngredientsText: reviewed.rawIngredientText || reviewed.text, analysisIngredientsText: reviewed.text,
+        ocrRawText: ctx.rawText || "", ingredientSource: "Label photo · reviewed OCR",
+        ingredientConfidence: ctx.confidence || 0, ingredientCoverage: ctx.coverage || reviewed.coverage,
+        ingredientCoveragePct: ctx.coveragePct != null ? ctx.coveragePct : reviewed.coveragePct });
       if (ctx.barcode) product.barcode = ctx.barcode;
       state.ocrPending = null; state.pending = null; showProduct(product);
     }
     else if (act === "manual") go("manual");
     else if (act === "comparePick") go("comparePick");
     else if (act === "back") go(state.view === "ingredient" ? state.ingFrom : (state.view === "compare" ? "comparePick" : (state.view === "comparePick" ? "result" : "home")));
-    else if (act === "manualGo") { var el = document.getElementById("bc"); if (el && el.value.trim()) handleBarcode(el.value.trim()); }
+    else if (act === "manualGo") { var el = document.getElementById("bc"); if (el && el.value.trim()) handleBarcode(el.value.trim(), { origin: "manual" }); }
+    else if (act === "retryLookup") { var pendingCode = state.pending && state.pending.barcode; if (pendingCode) handleBarcode(pendingCode, { origin: "retry", force: true }); }
     else if (act === "searchGo") { var qe = document.getElementById("q"); if (qe && qe.value.trim()) runSearch(qe.value.trim()); }
     else if (act === "toggleScore") { state.scoreOpen = !state.scoreOpen; render(); }
     else if (act === "encyclopedia") { state.encQuery = ""; go("encyclopedia"); }
@@ -1544,16 +2019,21 @@
     }
     if (e.target && e.target.id === "bcphoto" && e.target.files && e.target.files[0]) {
       var bfile = e.target.files[0];
+      stopScanner();
       busy(true, "Reading barcode…");
       fileToDataUrl(bfile).then(function (durl) {
         return decodeBarcodeFromImage(durl);
       }).then(function (code) {
-        busy(false, "");
-        if (code) { stopScanner(); handleBarcode(code); }
-        else alert("Couldn't read a barcode in that photo. Fill the frame with the barcode, hold steady so it's sharp, and try again — or enter the code manually.");
+        if (code) { state.busy = false; setStatus(""); handleBarcode(code, { origin: "photo" }); }
+        else {
+          busy(false, "");
+          alert("No valid UPC/EAN/GTIN was found in that photo. Fill the frame with the whole barcode, avoid glare, and try again — or enter the printed digits.");
+          if (state.view === "scanner") setTimeout(startScanner, 60);
+        }
       }).catch(function () {
         busy(false, "");
-        alert("Couldn't read a barcode in that photo. Try again or enter the code manually.");
+        alert("Couldn't process that barcode photo. Try another photo or enter the printed digits.");
+        if (state.view === "scanner") setTimeout(startScanner, 60);
       });
       return;
     }
@@ -1573,24 +2053,44 @@
           state.ocrPending = {
             off: off, photoKey: key,
             barcode: state.pending && state.pending.barcode ? state.pending.barcode : null,
-            name: off && off.name ? off.name : "Scanned product"
+            name: off && off.name ? off.name : "Scanned product",
+            rawText: ocr.rawText || "", confidence: ocr.confidence || 0,
+            coverage: ocr.coverage, coveragePct: ocr.coveragePct
           };
-          var text = (ocr.text || "").trim();
-          var low = ocr.confidence < 60 || text.replace(/\s/g, "").length < 12;
-          if (prev) prev.innerHTML = ocrReviewBlock(text, ocr.confidence, low);
+          if (prev) prev.innerHTML = ocrReviewBlock(ocr);
           var ta = document.getElementById("ocrText");
           if (ta) { try { ta.focus(); } catch (e) {} }
         });
-      }).catch(function () { busy(false, ""); alert("Couldn't process that image. Try again."); });
+      }).catch(function (err) {
+        busy(false, "");
+        alert(err && err.name === "TimeoutError" ? "Reading that image took too long. Crop closer to the ingredients and try again." : "Couldn't process that image. Try a closer, sharper photo.");
+      });
     }
   }
 
   function onKey(e) {
     if (e.key !== "Enter" || !e.target) return;
     if (e.target.id === "q" && e.target.value.trim()) { e.preventDefault(); runSearch(e.target.value.trim()); }
-    else if (e.target.id === "bc" && e.target.value.trim()) { e.preventDefault(); handleBarcode(e.target.value.trim()); }
+    else if (e.target.id === "bc" && e.target.value.trim()) { e.preventDefault(); handleBarcode(e.target.value.trim(), { origin: "manual" }); }
     else if (e.target.id === "encq") { e.preventDefault(); state.encQuery = e.target.value.trim(); render(); }
   }
+  // Read-only pure-helper seam for scanner regression tests. The production app
+  // does not read this object; exposing it avoids duplicating validation logic in
+  // a separate test-only implementation.
+  window.NUTRICHECK_SCANNER_TEST = {
+    gtinChecksumValid: gtinChecksumValid,
+    normalizeBarcode: normalizeBarcode,
+    barcodeLookupVariants: barcodeLookupVariants,
+    selectConsensusCandidate: selectConsensusCandidate,
+    ingredientTextScore: ingredientTextScore,
+    selectIngredientPayload: selectIngredientPayload,
+    flattenStructuredIngredients: flattenStructuredIngredients,
+    buildAnalysisIngredients: buildAnalysisIngredients,
+    mergeOffRecords: mergeOffRecords,
+    sanitizeOcrRaw: sanitizeOcrRaw,
+    extractIngredientText: extractIngredientText,
+    plausibleReviewedIngredients: plausibleReviewedIngredients
+  };
   function init() {
     app = document.getElementById("app");
     loadLocal();
